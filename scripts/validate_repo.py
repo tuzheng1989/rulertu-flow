@@ -37,9 +37,10 @@ def validate() -> list[str]:
         if front:
             require("name:" in front.group(1) and "description:" in front.group(1), f"incomplete frontmatter: {skill}", errors)
 
-    for role in ("executor", "auditor", "advisor"):
+    role_models = {"executor": "sonnet", "auditor": "opus", "advisor": "opus"}
+    for role, model in role_models.items():
         wrapper = (PLUGIN / "agents" / f"{role}.md").read_text(encoding="utf-8")
-        require("model: inherit" in wrapper, f"{role} wrapper model must inherit", errors)
+        require(f"model: {model}" in wrapper, f"{role} wrapper model must be {model}", errors)
         require(f"references/roles/{role}.md" in wrapper, f"{role} wrapper lacks role pointer", errors)
         require(len(wrapper.splitlines()) <= 10, f"{role} wrapper is not thin", errors)
         require((PLUGIN / "references" / "roles" / f"{role}.md").is_file(), f"{role} body missing", errors)

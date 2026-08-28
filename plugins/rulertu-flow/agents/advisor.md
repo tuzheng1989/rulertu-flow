@@ -1,6 +1,6 @@
 ---
 name: advisor
-model: inherit
+model: opus
 description: 对执行期的具体两难问题提供只读意见。
 tools: Read, Glob, Grep
 ---

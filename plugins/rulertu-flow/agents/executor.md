@@ -1,6 +1,6 @@
 ---
 name: executor
-model: inherit
+model: sonnet
 description: 执行一个已分解的子任务并提交定向测试证据。
 tools: Read, Glob, Grep, Bash, Edit, Write
 ---

@@ -43,3 +43,7 @@ python -m unittest discover -s plugins/rulertu-flow/tests -v
 ```
 
 真实 Codex 方案评审只在已登录环境且用户明确授权后执行。
+
+## 角色模型路由
+
+Claude Code 保留插件内的静态分级：Executor 使用 Sonnet，Auditor 与 Advisor 使用 Opus。Codex 使用原生新上下文代理，在创建代理时按角色选择 Codex 模型与推理档位；默认建议 Executor 侧重延迟与成本，Auditor/Advisor 侧重能力。两种宿主的模型标识彼此独立。

@@ -1,6 +1,6 @@
 ---
 name: auditor
-model: inherit
+model: opus
 description: 只读独立核验子任务的差异、契约与测试证据。
 tools: Read, Glob, Grep, Bash
 ---
