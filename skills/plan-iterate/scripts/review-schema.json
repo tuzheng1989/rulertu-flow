@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["overall_quality", "score", "issues", "suggestions"],
+  "properties": {
+    "overall_quality": {
+      "type": "string",
+      "description": "整体质量评述：结构完整性、逻辑自洽性、可执行性，200字以内"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "最终评分，10分制，可含一位小数"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "title", "detail", "suggestion"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2"],
+            "description": "P0=致命(方案不可行/锚点造假/逻辑矛盾) P1=严重(关键缺口/验证缺失) P2=改进(表述/次要优化)"
+          },
+          "title": {
+            "type": "string",
+            "description": "问题一句话标题"
+          },
+          "detail": {
+            "type": "string",
+            "description": "问题详情，必须引用文档章节标题或 文件:行号 锚点位置"
+          },
+          "suggestion": {
+            "type": "string",
+            "description": "具体可执行的修复建议"
+          }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "非问题类的额外改进建议，可为空数组"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "rulertu-flow",
+  "owner": { "name": "rulertu" },
+  "description": "面向 Claude Code 与 Codex 的分级规划、执行和验证工作流。",
+  "plugins": [
+    {
+      "name": "rulertu-flow",
+      "source": "./",
+      "description": "分级验证工作流插件（本仓库自身即插件）"
+    }
+  ]
+}

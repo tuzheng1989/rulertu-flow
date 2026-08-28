@@ -1,0 +1,6 @@
+{
+  "name": "rulertu-flow",
+  "description": "分级验证工作流：optimization-plan（分批方案与 T0-T3 定级）、implement-plan（分批执行）、plan-iterate（Codex 方案评审循环），以及 executor、auditor、advisor 三类子代理。TDD、代码库设计和代理文档写作作为内部参考按需加载。",
+  "version": "1.2.0",
+  "author": { "name": "rulertu" }
+}
