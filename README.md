@@ -46,4 +46,4 @@ python -m unittest discover -s plugins/rulertu-flow/tests -v
 
 ## 角色模型路由
 
-Claude Code 保留插件内的静态分级：Executor 使用 Sonnet，Auditor 与 Advisor 使用 Opus。Codex 使用原生新上下文代理，在创建代理时按角色选择 Codex 模型与推理档位；默认建议 Executor 侧重延迟与成本，Auditor/Advisor 侧重能力。两种宿主的模型标识彼此独立。
+Claude Code 保留插件内的静态分级：Executor 使用 Sonnet，Auditor 与 Advisor 使用 Opus。Codex 使用固定路由：Executor=`gpt-5.6-terra`/`medium`，Auditor=`gpt-5.6-sol`/`high`，Advisor=`gpt-5.6-sol`/`xhigh`。Executor 只继承最近三轮上下文，Auditor/Advisor 使用独立上下文；固定模型不可用时阻断，不静默继承或替换。两种宿主的模型标识彼此独立。

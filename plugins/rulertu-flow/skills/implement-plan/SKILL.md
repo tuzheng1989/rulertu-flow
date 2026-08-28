@@ -13,7 +13,15 @@ description: 执行含 T0-T3 定级的分批实施计划。当用户要求执行
 
 ## 宿主与角色
 
-- Codex：为每个角色创建通用的新上下文代理，把对应 `references/roles/<role>.md` 全文与任务包一起注入；同一任务的后续修订使用同一代理。创建时可按角色单独指定当前宿主可用的模型与推理档位：Executor 优先平衡延迟与成本，Auditor/Advisor 优先最高能力；未提供逐代理覆盖时才继承主控。Codex 侧使用 Codex 模型标识，不传入其他宿主的模型别名。
+- Codex：为每个角色创建通用的新上下文代理，把对应 `references/roles/<role>.md` 全文与任务包一起注入；同一任务的后续修订使用同一代理。创建参数固定如下，模型或档位不可用时阻断并报告，不继承主控或替换为其他模型：
+
+  | 角色 | `model` | `reasoning_effort` | `fork_turns` |
+  |---|---|---|---|
+  | Executor | `gpt-5.6-terra` | `medium` | `"3"` |
+  | Auditor | `gpt-5.6-sol` | `high` | `"none"` |
+  | Advisor | `gpt-5.6-sol` | `xhigh` | `"none"` |
+
+  `fork_turns="all"` 会强制继承主控模型，不用于这三个角色。Auditor/Advisor 的独立上下文所需事实全部由证据包注入。
 - Claude Code：调用 `rulertu-flow:executor`、`rulertu-flow:auditor`、`rulertu-flow:advisor` 薄封装。模型路由由 wrapper frontmatter 固定：Executor 使用 `sonnet`，Auditor 与 Advisor 使用 `opus`。
 - Advisor 只由主控派发。Executor 只上报角色文档列出的咨询触发条件。
 

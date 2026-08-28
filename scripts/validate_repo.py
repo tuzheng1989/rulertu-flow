@@ -47,6 +47,18 @@ def validate() -> list[str]:
 
     executor = (PLUGIN / "references" / "roles" / "executor.md").read_text(encoding="utf-8")
     implement = (PLUGIN / "skills" / "implement-plan" / "SKILL.md").read_text(encoding="utf-8")
+    codex_routes = (
+        ("Executor", "gpt-5.6-terra", "medium", '"3"'),
+        ("Auditor", "gpt-5.6-sol", "high", '"none"'),
+        ("Advisor", "gpt-5.6-sol", "xhigh", '"none"'),
+    )
+    for role, model, effort, fork in codex_routes:
+        require(
+            f"| {role} | `{model}` | `{effort}` | `{fork}` |" in implement,
+            f"Codex route differs for {role}",
+            errors,
+        )
+    require('fork_turns="all"' in implement and "强制继承主控模型" in implement, "Codex full-fork guard missing", errors)
     require("普通子任务不扩大为全仓测试" in executor, "Executor directed-test policy missing", errors)
     require("收尾时跑一次全量测试" not in executor + implement, "legacy full-suite rule remains", errors)
     require(implement.count("仅有以下情况运行全量测试") == 1, "full-suite exceptions must have one policy source", errors)
