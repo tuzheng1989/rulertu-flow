@@ -22,6 +22,7 @@ def validate() -> list[str]:
     codex_market = load(ROOT / ".agents" / "plugins" / "marketplace.json")
     claude_market = load(ROOT / ".claude-plugin" / "marketplace.json")
     review_schema = load(PLUGIN / "skills" / "plan-iterate" / "scripts" / "review-schema.json")
+    plan_iterate = (PLUGIN / "skills" / "plan-iterate" / "SKILL.md").read_text(encoding="utf-8")
     require(codex_manifest["name"] == claude_manifest["name"] == "rulertu-flow", "manifest names differ", errors)
     require(codex_manifest["version"] == claude_manifest["version"] == "2.0.0", "manifest versions differ", errors)
     require(codex_market["plugins"][0]["source"]["path"] == "./plugins/rulertu-flow", "Codex marketplace path differs", errors)
@@ -29,6 +30,16 @@ def validate() -> list[str]:
     require(codex_market["plugins"][0]["name"] == claude_market["plugins"][0]["name"] == "rulertu-flow", "marketplace names differ", errors)
     require((PLUGIN / codex_manifest["skills"].removeprefix("./")).is_dir(), "skills path is missing", errors)
     require(set(review_schema["required"]) == {"overall_quality", "score", "issues", "suggestions"}, "review schema fields differ", errors)
+    review_scripts = PLUGIN / "skills" / "plan-iterate" / "scripts"
+    for script in ("review_common.py", "codex_review.py", "claude_review.py", "codex-review.sh", "claude-review.sh"):
+        require((review_scripts / script).is_file(), f"review backend file missing: {script}", errors)
+    claude_backend = (review_scripts / "claude_review.py").read_text(encoding="utf-8")
+    for fragment in ('"--model",\n        "opus"', '"--effort",\n        "high"', '"--permission-mode",\n        "plan"', '"Read,Glob,Grep"'):
+        require(fragment in claude_backend, f"Claude read-only route differs: {fragment}", errors)
+    require("shell=True" not in claude_backend, "Claude backend must not use a shell", errors)
+    require("Codex 宿主：运行 `scripts/claude_review.py" in plan_iterate, "Codex host must route to Claude", errors)
+    require("Claude Code 宿主：运行 `scripts/codex_review.py" in plan_iterate, "Claude host must route to Codex", errors)
+    require("不回退为同宿主自评" in plan_iterate, "cross-model fallback guard missing", errors)
 
     for skill in (PLUGIN / "skills").glob("*/SKILL.md"):
         text = skill.read_text(encoding="utf-8")

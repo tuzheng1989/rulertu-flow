@@ -9,8 +9,10 @@ description: 独立评审并迭代方案文档。当用户要求方案迭代、�
 
 ## 后端选择
 
-- Codex 宿主：创建一个 plan-iterate 专用的新上下文只读评审代理，注入方案路径、schema 和评审口径；同一线程的后续轮次对同一代理 follow-up。新线程无法恢复时创建新代理并注入上一轮 JSON。
-- Claude Code：运行跨平台 `scripts/codex_review.py <plan> <output> [session-id]`。Windows 直接使用 Python；POSIX 可使用 `codex-review.sh` 转发。真实外部调用只在用户已明确授权且 CLI 已登录时执行。
+- Codex 宿主：运行 `scripts/claude_review.py <plan> <output> [session-id]`，外调 Claude Code `opus/high` 做只读跨模型评审。Windows 直接使用 Python；POSIX 可使用 `claude-review.sh` 转发。
+- Claude Code 宿主：运行 `scripts/codex_review.py <plan> <output> [session-id]`，外调 Codex CLI 的只读沙箱。Windows 直接使用 Python；POSIX 可使用 `codex-review.sh` 转发。
+
+两个外部后端都只在用户明确授权且目标 CLI 已安装、已登录时运行；缺少任一前提时停止并报告，不回退为同宿主自评。后端切换或原会话无法恢复时，新建目标评审会话并注入上一轮 JSON。
 
 两种后端都核验锚点和代码事实。规范性基线只用于检查变更是否显式、穿透是否完整，不因方案面向未来而否决。每轮将 `backend`、`round`、`plan_path`、`plan_sha256` 和 reviewer/session 标识原子写入 `state.json`。
 
@@ -21,4 +23,4 @@ description: 独立评审并迭代方案文档。当用户要求方案迭代、�
 3. 未达标时派 Executor 只修改该方案文档，逐条实质响应 P0/P1，P2 可说明不采纳理由。
 4. 使用同一 reviewer/session 复审当前磁盘内容。最多三轮，无论是否达标都输出逐轮评分、遗留问题和产物路径。
 
-外部脚本退出码：`0` 成功、`2` 输入或 schema 错误、`3` Codex 进程失败、`4` 协议事件或 session ID 缺失。进程失败可重试一次；再次失败停止并保留产物。脚本兼容读取旧 `session.txt`，成功后迁移为 `state.json`。损坏 JSON、布尔型分数或字段不完整均拒绝。
+外部脚本退出码：`0` 成功、`2` 输入或 schema 错误、`3` 外部进程失败、`4` 协议输出或 session ID 缺失。进程失败可重试一次；再次失败停止并保留产物。Codex 后端兼容读取旧 `session.txt`，任一后端成功后迁移为 `state.json`。损坏 JSON、布尔型分数或字段不完整均拒绝。

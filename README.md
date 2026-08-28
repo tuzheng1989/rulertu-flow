@@ -25,6 +25,8 @@ Claude Code：
 - `implement-plan`：执行一份已有 T0–T3 定级的分批方案。
 - `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
 
+`plan-iterate` 使用对称的跨模型后端：Claude Code 宿主外调 Codex CLI，Codex 宿主外调 Claude Code `opus/high`。两个方向都使用相同 schema、8.5 分门槛、最多三轮状态机和可续接 session；真实外部调用需要用户明确授权且目标 CLI 已登录。
+
 ## 测试职责
 
 Executor 在红绿循环运行锚点测试，子任务收尾运行受影响模块、必要集成测试以及类型和静态检查。Auditor 默认采信主控已抽查的证据，只对一至两条高风险或可疑测试复跑。所有写入任务停止后，波次收口统一运行一次全量测试、构建和项目红线。
@@ -42,7 +44,7 @@ python scripts/validate_repo.py
 python -m unittest discover -s plugins/rulertu-flow/tests -v
 ```
 
-真实 Codex 方案评审只在已登录环境且用户明确授权后执行。
+真实外部方案评审只在目标 CLI 已登录且用户明确授权后执行。
 
 ## 角色模型路由
 
