@@ -1,0 +1,12 @@
+{
+  "name": "rulertu-flow",
+  "interface": { "displayName": "Rulertu Flow" },
+  "plugins": [
+    {
+      "name": "rulertu-flow",
+      "source": { "source": "local", "path": "./plugins/rulertu-flow" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

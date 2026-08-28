@@ -1,0 +1,25 @@
+{
+  "name": "rulertu-flow",
+  "version": "2.0.0",
+  "description": "分级规划、执行与验证工作流",
+  "author": {
+    "name": "rulertu",
+    "url": "https://github.com/tuzheng1989"
+  },
+  "homepage": "https://github.com/tuzheng1989/rulertu-flow",
+  "repository": "https://github.com/tuzheng1989/rulertu-flow",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Rulertu Flow",
+    "shortDescription": "分级规划、执行与验证工作流",
+    "longDescription": "以 T0-T3 风险分级组织多批次计划、任务执行、独立审计和方案迭代。",
+    "developerName": "rulertu",
+    "category": "Developer Tools",
+    "capabilities": ["Planning", "Delegation", "Review"],
+    "defaultPrompt": [
+      "为这个仓库制定分批优化方案。",
+      "按既定方案实施下一批次。",
+      "独立评审并迭代当前方案。"
+    ]
+  }
+}

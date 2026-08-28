@@ -1,0 +1,43 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --global @openai/codex@0.150.1
+      - run: python scripts/validate_repo.py
+      - run: python -m unittest discover -s plugins/rulertu-flow/tests -v
+      - name: Codex marketplace install smoke test (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          export CODEX_HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$CODEX_HOME"
+          codex plugin marketplace add "$GITHUB_WORKSPACE"
+          codex plugin add rulertu-flow@rulertu-flow
+          codex plugin list
+      - name: Codex marketplace install smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:CODEX_HOME = Join-Path $env:RUNNER_TEMP 'codex-home'
+          New-Item -ItemType Directory -Force -Path $env:CODEX_HOME | Out-Null
+          codex plugin marketplace add $env:GITHUB_WORKSPACE
+          codex plugin add rulertu-flow@rulertu-flow
+          codex plugin list
