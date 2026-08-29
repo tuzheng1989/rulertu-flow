@@ -1,0 +1,12 @@
+{
+  "source_repo": "slavakurilyak/awesome-ai-agents",
+  "source_url": "https://github.com/slavakurilyak/awesome-ai-agents",
+  "source_branch": "master",
+  "source_commit": "0da290a403c216507422576b2752c2ab81b97e7c",
+  "snapshot_date": "2026-07-27",
+  "stars_last_updated": "2025-07-30",
+  "agents_count": 239,
+  "categories_count": 35,
+  "license": "上游仓库 LICENSE（见 source_url）",
+  "note": "静态快照，非实时；如需更新请重新拉取 awesome-agents.json 后重跑 gen_gallery.py。"
+}

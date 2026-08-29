@@ -1,0 +1,15 @@
+# skill-up 原生评测配置（参照 strategic-analysis 模板，见方案 §11.4）
+schema_version: v1alpha1
+
+environment:
+  type: none
+
+engine:
+  name: claude_code
+
+cases:
+  files:
+    - evals/cases/smoke.yaml
+  defaults:
+    timeout_seconds: 300
+    max_turns: 10

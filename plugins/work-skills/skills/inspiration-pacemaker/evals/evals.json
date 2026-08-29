@@ -1,0 +1,40 @@
+{
+  "skill_name": "inspiration-pacemaker",
+  "evals": [
+    {
+      "id": 1,
+      "name": "research-direction-expansion",
+      "prompt": "我正在研究【大模型在医疗诊断中的应用】，帮我拓展一下研究方向",
+      "expected_output": "应该输出5-8个研究方向，按技术、应用、伦理、产业等维度分类，每个方向包含具体说明和可行性评估",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "title-creation",
+      "prompt": "我写了一篇关于【远程办公效率提升】的文章，核心观点是【通过时间块管理和异步协作提升50%效率】，给我10个不同角度的标题",
+      "expected_output": "应该输出10个不同风格的标题，包括数字量化型、悬念好奇型、情感共鸣型等多种类型",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "product-differentiation",
+      "prompt": "我的产品是【一个任务管理工具】，市面上已经有100个类似的产品了，竞品都在强调【简洁易用、多平台同步】，请帮我找到差异化方向",
+      "expected_output": "应该输出5-8个差异化方向，分析红海区域后找到蓝海机会，每个方向有具体说明",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "marketing-ideas",
+      "prompt": "我有一个【面向大学生的在线编程学习平台】，帮我brainstorm一些营销创意",
+      "expected_output": "应该输出5-8个营销创意，涵盖内容营销、社交媒体、用户运营等不同类型",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "feature-design",
+      "prompt": "我有一款【笔记软件】，用户反映【笔记太多找不到】，请帮我设计一些新功能方向来解决这个问题",
+      "expected_output": "应该输出5-8个功能创新方向，从用户痛点、使用场景、AI能力等角度思考",
+      "files": []
+    }
+  ]
+}

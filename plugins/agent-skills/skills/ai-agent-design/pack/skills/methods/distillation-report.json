@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "book_slug": "ai-agent-design",
+  "mode": "methods",
+  "source": "bojieli/ai-agent-book",
+  "candidates_total": 8,
+  "delivered_count": 7,
+  "delivered_skills": [
+    "ai-agent-design-react-loop",
+    "ai-agent-design-proposer-reviewer",
+    "ai-agent-design-context-engineering",
+    "ai-agent-design-eval-driven-iteration",
+    "ai-agent-design-tool-design",
+    "ai-agent-design-sft-vs-rl-selection",
+    "ai-agent-design-coding-as-meta-tool"
+  ],
+  "demoted_or_dropped": [
+    {
+      "candidate": "agentic-rag",
+      "decision": "demoted_to_knowledge",
+      "reason": "仅 ch3 单一章节证据，不满足多语境证据（≥2 独立章节）；作为 knowledge 层条目保留更合适。"
+    }
+  ],
+  "validation": {
+    "multi_evidence": true,
+    "transfer": true,
+    "incremental_value": true,
+    "executable": true,
+    "distinguishable": true,
+    "note": "sft-vs-rl-selection 证据集中于 ch7 多节 + 作者自有论文（RLVP），已在 SKILL 与 evidence 中注明。"
+  },
+  "stress_test": {
+    "per_skill": "3 should_trigger + 2 should_not_trigger + 1 edge_case + 1 decoy（见各 skill 的 test-prompts.json）",
+    "blind_test_status": "未执行完整盲测（交付说明：测试提示已生成，盲测留作部署后校验）"
+  }
+}

@@ -1,0 +1,530 @@
+/* 自定义样式示例 - MD to PDF */
+
+/* ============================================
+   页面设置
+   ============================================ */
+@page {
+    size: A4 portrait;
+    margin: 20mm;
+}
+
+@page :first {
+    margin-top: 30mm;
+}
+
+/* ============================================
+   全局样式
+   ============================================ */
+* {
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+}
+
+body {
+    font-family: "Microsoft YaHei", "SimSun", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.8;
+    color: #2c3e50;
+    background-color: #ffffff;
+    max-width: 850px;
+    margin: 0 auto;
+    padding: 40px 30px;
+}
+
+/* ============================================
+   排版
+   ============================================ */
+
+/* 段落 */
+p {
+    margin: 0.8em 0;
+    text-align: justify;
+    text-indent: 2em;
+}
+
+p:first-of-type {
+    text-indent: 0;
+}
+
+/* 链接 */
+a {
+    color: #3498db;
+    text-decoration: none;
+    border-bottom: 1px dotted #3498db;
+    transition: all 0.2s ease;
+}
+
+a:hover {
+    color: #2980b9;
+    border-bottom-style: solid;
+}
+
+/* ============================================
+   标题
+   ============================================ */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    color: #2c3e50;
+    line-height: 1.4;
+    page-break-after: avoid;
+}
+
+h1 {
+    font-size: 2.2em;
+    text-align: center;
+    border-bottom: 3px solid #3498db;
+    padding-bottom: 0.3em;
+    margin-top: 1.5em;
+    margin-bottom: 1em;
+}
+
+h2 {
+    font-size: 1.8em;
+    border-bottom: 2px solid #bdc3c7;
+    padding-bottom: 0.2em;
+    margin-top: 1.8em;
+    margin-bottom: 0.8em;
+}
+
+h3 {
+    font-size: 1.4em;
+    margin-top: 1.5em;
+    margin-bottom: 0.6em;
+    padding-left: 10px;
+    border-left: 4px solid #3498db;
+}
+
+h4 {
+    font-size: 1.2em;
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+}
+
+h5, h6 {
+    font-size: 1em;
+    margin-top: 1em;
+    margin-bottom: 0.4em;
+}
+
+/* ============================================
+   列表
+   ============================================ */
+ul, ol {
+    margin: 0.8em 0;
+    padding-left: 2.5em;
+}
+
+li {
+    margin: 0.4em 0;
+    line-height: 1.8;
+}
+
+li > p {
+    text-indent: 0;
+}
+
+/* 嵌套列表 */
+ul ul, ol ol, ul ol, ol ul {
+    margin: 0.4em 0;
+}
+
+/* ============================================
+   引用块
+   ============================================ */
+blockquote {
+    margin: 1.5em 0;
+    padding: 1em 1.5em;
+    border-left: 5px solid #3498db;
+    background: linear-gradient(to right, #f8f9fa, #ffffff);
+    color: #7f8c8d;
+}
+
+blockquote p {
+    text-indent: 0;
+}
+
+blockquote p:first-child::before {
+    content: "\201C";
+    font-size: 3em;
+    color: #3498db;
+    line-height: 0;
+    margin-right: 0.2em;
+    vertical-align: -0.4em;
+}
+
+/* ============================================
+   表格
+   ============================================ */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5em 0;
+    font-size: 0.95em;
+    page-break-inside: avoid;
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border: 1px solid #e0e0e0;
+}
+
+th {
+    background-color: #3498db;
+    color: #ffffff;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9em;
+    letter-spacing: 0.5px;
+}
+
+/* 斑马纹 */
+tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+tbody tr:hover {
+    background-color: #e8f4fc;
+}
+
+/* 表头不换行 */
+th {
+    white-space: nowrap;
+}
+
+/* ============================================
+   代码块
+   ============================================ */
+pre {
+    background-color: #282c34;
+    color: #abb2bf;
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 1.5em 0;
+    page-break-inside: avoid;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+
+/* 行内代码 */
+code {
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+}
+
+p > code, li > code, td > code {
+    background-color: #f1f1f1;
+    color: #e74c3c;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+/* ============================================
+   语法高亮
+   ============================================ */
+.highlight {
+    background-color: #282c34;
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 1.5em 0;
+}
+
+/* One Dark 主题配色 */
+.highlight .hll { background-color: #404852 }
+.highlight .c { color: #5c6370; font-style: italic }
+.highlight .err { color: #f44747 }
+.highlight .k { color: #c678dd; font-weight: bold }
+.highlight .l { color: #d19a66 }
+.highlight .n { color: #abb2bf }
+.highlight .o { color: #56b6c2 }
+.highlight .p { color: #abb2bf }
+.highlight .cm { color: #5c6370; font-style: italic }
+.highlight .cp { color: #5c6370; font-weight: bold }
+.highlight .c1 { color: #5c6370; font-style: italic }
+.highlight .cs { color: #5c6370; font-weight: bold; font-style: italic }
+.highlight .gd { color: #f44747; background-color: #3e4451 }
+.highlight .ge { color: #abb2bf; font-style: italic }
+.highlight .gh { color: #e06c75; font-weight: bold }
+.highlight .gi { color: #98c379; background-color: #3e4451 }
+.highlight .go { color: #abb2bf }
+.highlight .gp { color: #e06c75; font-weight: bold }
+.highlight .gs { color: #abb2bf; font-weight: bold }
+.highlight .gu { color: #75715e; font-weight: bold }
+.highlight .gt { color: #e06c75 }
+.highlight .kc { color: #c678dd; font-weight: bold }
+.highlight .kd { color: #c678dd; font-weight: bold }
+.highlight .kn { color: #c678dd; font-weight: bold }
+.highlight .kp { color: #c678dd; font-weight: bold }
+.highlight .kr { color: #c678dd; font-weight: bold }
+.highlight .kt { color: #e5c07b }
+.highlight .ld { color: #98c379 }
+.highlight .m { color: #d19a66 }
+.highlight .s { color: #98c379 }
+.highlight .na { color: #61afef }
+.highlight .nb { color: #e5c07b }
+.highlight .nc { color: #e5c07b; font-weight: bold }
+.highlight .no { color: #e06c75 }
+.highlight .nd { color: #61afef; font-weight: bold }
+.highlight .ni { color: #e06c75 }
+.highlight .ne { color: #e06c75; font-weight: bold }
+.highlight .nf { color: #61afef }
+.highlight .nl { color: #e06c75; font-weight: bold }
+.highlight .nn { color: #abb2bf }
+.highlight .nx { color: #abb2bf }
+.highlight .py { color: #e06c75 }
+.highlight .nt { color: #e06c75 }
+.highlight .nv { color: #e06c75 }
+.highlight .ow { color: #56b6c2; font-weight: bold }
+.highlight .w { color: #abb2bf }
+.highlight .mf { color: #d19a66 }
+.highlight .mh { color: #d19a66 }
+.highlight .mi { color: #d19a66 }
+.highlight .mo { color: #d19a66 }
+.highlight .sb { color: #98c379 }
+.highlight .sc { color: #98c379 }
+.highlight .sd { color: #5c6370; font-style: italic }
+.highlight .s2 { color: #98c379 }
+.highlight .se { color: #56b6c2 }
+.highlight .sh { color: #98c379 }
+.highlight .si { color: #e5c07b }
+.highlight .sx { color: #98c379 }
+.highlight .sr { color: #d19a66 }
+.highlight .s1 { color: #98c379 }
+.highlight .ss { color: #98c379 }
+.highlight .bp { color: #e5c07b }
+.highlight .vc { color: #e06c75 }
+.highlight .vg { color: #e06c75 }
+.highlight .vi { color: #e06c75 }
+.highlight .il { color: #d19a66 }
+
+/* ============================================
+   Mermaid 图表
+   ============================================ */
+.mermaid {
+    text-align: center;
+    margin: 25px 0;
+    padding: 15px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    page-break-inside: avoid;
+}
+
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ============================================
+   目录
+   ============================================ */
+.toc {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 20px 25px;
+    margin: 2em 0;
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.toc-title {
+    font-size: 1.4em;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #ffffff;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    padding-bottom: 10px;
+}
+
+.toc ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.toc li {
+    margin: 8px 0;
+}
+
+.toc a {
+    color: #ffffff;
+    text-decoration: none;
+    border-bottom: none;
+    display: block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.toc a:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.toc-level-2 { padding-left: 20px; }
+.toc-level-3 { padding-left: 40px; }
+.toc-level-4 { padding-left: 60px; }
+
+/* ============================================
+   水平分隔线
+   ============================================ */
+hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(to right, transparent, #bdc3c7, transparent);
+    margin: 3em 0;
+}
+
+/* ============================================
+   图片
+   ============================================ */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1.5em auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   分页控制
+   ============================================ */
+.page-break {
+    page-break-after: always;
+}
+
+.no-break {
+    page-break-inside: avoid;
+}
+
+/* 标题后不分页 */
+h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+}
+
+/* 表格不跨页 */
+table, pre, blockquote, .mermaid {
+    page-break-inside: avoid;
+}
+
+/* 列表不跨页 */
+ul, ol {
+    page-break-inside: avoid;
+}
+
+/* ============================================
+   打印优化
+   ============================================ */
+@media print {
+    body {
+        max-width: none;
+        padding: 0;
+    }
+
+    a {
+        color: #2c3e50;
+        text-decoration: none;
+        border-bottom: none;
+    }
+
+    a[href^="http"]::after {
+        content: " (" attr(href) ")";
+        font-size: 0.8em;
+        color: #7f8c8d;
+    }
+}
+
+/* ============================================
+   页眉页脚
+   ============================================ */
+@page {
+    @top-center {
+        content: "文档标题";
+        font-size: 10pt;
+        color: #7f8c8d;
+    }
+
+    @bottom-center {
+        content: "第 " counter(page) " 页";
+        font-size: 10pt;
+        color: #7f8c8d;
+    }
+}
+
+/* ============================================
+   特殊元素
+   ============================================ */
+
+/* 徽章/标签 */
+.badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin: 0 4px;
+}
+
+.badge-info {
+    background-color: #3498db;
+    color: #ffffff;
+}
+
+.badge-success {
+    background-color: #2ecc71;
+    color: #ffffff;
+}
+
+.badge-warning {
+    background-color: #f39c12;
+    color: #ffffff;
+}
+
+.badge-danger {
+    background-color: #e74c3c;
+    color: #ffffff;
+}
+
+/* 提示框 */
+.alert {
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin: 1.5em 0;
+    border-left: 4px solid;
+}
+
+.alert-info {
+    background-color: #d5f4ff;
+    border-color: #3498db;
+    color: #2c3e50;
+}
+
+.alert-success {
+    background-color: #d5fdd5;
+    border-color: #2ecc71;
+    color: #2c3e50;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    border-color: #f39c12;
+    color: #2c3e50;
+}
+
+.alert-danger {
+    background-color: #fdd5d5;
+    border-color: #e74c3c;
+    color: #2c3e50;
+}

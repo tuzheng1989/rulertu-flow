@@ -1,0 +1,8 @@
+id: strategic-analysis-smoke
+title: 国产美妆品牌进入东南亚市场可行性分析
+input:
+  prompt: "我要做一个国产美妆品牌进入东南亚市场的分析，帮我看看可行性"
+expect:
+  must_contain:
+    - "东南亚"
+    - "美妆"

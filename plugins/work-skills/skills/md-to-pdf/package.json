@@ -1,0 +1,25 @@
+{
+  "name": "md-to-pdf-skill",
+  "version": "1.0.0",
+  "description": "Markdown to PDF converter with perfect Mermaid flowchart support",
+  "main": "scripts/md_to_pdf.py",
+  "scripts": {
+    "install": "python scripts/install.py",
+    "convert": "python scripts/md_to_pdf.py",
+    "test": "python scripts/md_to_pdf.py assets/example.md -o assets/test_output/example.pdf",
+    "test:batch": "python scripts/md_to_pdf.py ./tests --batch --output-dir assets/test_output"
+  },
+  "keywords": [
+    "markdown",
+    "pdf",
+    "mermaid",
+    "flowchart",
+    "diagram",
+    "converter"
+  ],
+  "author": "Claude Code",
+  "license": "MIT",
+  "engines": {
+    "python": ">=3.8"
+  }
+}

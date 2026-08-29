@@ -31,6 +31,8 @@ jobs:
           mkdir -p "$CODEX_HOME"
           codex plugin marketplace add "$GITHUB_WORKSPACE"
           codex plugin add rulertu-flow@rulertu-flow
+          codex plugin add work-skills@rulertu-flow
+          codex plugin add agent-skills@rulertu-flow
           codex plugin list
       - name: Codex marketplace install smoke test (Windows)
         if: runner.os == 'Windows'
@@ -40,4 +42,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:CODEX_HOME | Out-Null
           codex plugin marketplace add $env:GITHUB_WORKSPACE
           codex plugin add rulertu-flow@rulertu-flow
+          codex plugin add work-skills@rulertu-flow
+          codex plugin add agent-skills@rulertu-flow
           codex plugin list

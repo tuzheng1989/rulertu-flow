@@ -1,0 +1,28 @@
+{
+  "test_cases": [
+    {
+      "type": "should_trigger",
+      "prompt": "让 Agent 用代码做精确计算而不是凭感觉"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "怎么让 Agent 自己写新工具"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "不可逆操作怎么用代码做确定性约束"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "Python 装饰器怎么写（须与兄弟 skill ai-agent-design-context-engineering 区分）"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "怎么给 Agent 设计现成的感知工具"
+    },
+    {
+      "type": "edge_case",
+      "prompt": "Agent 写出的代码有安全风险怎么办"
+    }
+  ]
+}

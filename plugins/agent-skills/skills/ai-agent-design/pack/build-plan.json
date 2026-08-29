@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "book_slug": "ai-agent-design",
+  "selected_mode": "hybrid",
+  "confidence": "high",
+  "scores": {
+    "faithful": 3,
+    "knowledge": 5,
+    "methods": 5
+  },
+  "evidence": {
+    "faithful": [
+      "MCP 协议、API 消息结构、SFT/RL 算法细节等需精确依据",
+      "原书已是分章 markdown，faithful 层机械整理即可，token 成本极低",
+      "为 knowledge/methods 的结论提供逐字核对来源"
+    ],
+    "knowledge": [
+      "10 章大量解释、案例、论证，核心诉求是快速查询与主题检索（百科）",
+      "作者独特术语体系：reasoning=思考 / inference=推理，需 glossary 固化",
+      "全书被 Agent = LLM + 上下文 + 工具 公式串接，适合知识地图"
+    ],
+    "methods": [
+      "反复出现的可迁移框架：ReAct 循环、proposer-reviewer、上下文工程、评估闭环",
+      "明确的决策程序：SFT vs RL 选型、何时用 RAG、工具五分类",
+      "有失败模式与反例：幻觉、过早放弃、假成功、提示词膨胀"
+    ]
+  },
+  "components": ["faithful", "knowledge", "methods"],
+  "excluded_components": {},
+  "scopes": {
+    "faithful": {
+      "chapters": "all",
+      "chapter_list": ["引言", "ch1 AI Agent 入门", "ch2 上下文工程", "ch3 用户记忆和知识库", "ch4 工具", "ch5 Coding Agent 与代码生成", "ch6 Agent 的评估", "ch7 模型后训练", "ch8 Agent 的自我进化", "ch9 多模态与实时交互", "ch10 多 Agent 协作", "后记"],
+      "purpose": "保留原书完整文本作为可检索权威来源；knowledge/methods 结论需核对时回到此层。按章 + ## 子节语义切分（原书无编号，脚本无法套用，由 Agent 切分）。",
+      "generation": "自写脚本按 ## 拆分每章为子节文件 + index.md + 生成标记，机械操作，token 成本≈0"
+    },
+    "knowledge": {
+      "chapters": "all",
+      "purpose": "压缩为高密度可检索百科：overview（全书骨架）+ 12 章知识压缩 + glossary（术语，含 reasoning/inference 区分）+ patterns（对比框架：三种学习范式、协作分类、SFT vs RL）+ cheatsheet（决策规则与权衡矩阵）",
+      "budget": "technical + study 深度，每章 2-3K token"
+    },
+    "methods": {
+      "chapters": ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8", "ch10"],
+      "purpose": "蒸馏独立、可执行、可触发的方法 skill；每方法须过 5 项验证（多语境证据/迁移/增量/执行/区分）+ 压力测试",
+      "candidate_methods": [
+        "react-loop (思考→行动→观察循环) — 证据: ch1/ch2/ch4",
+        "proposer-reviewer (提议者-审核者闭环，防过早放弃/假成功) — 证据: 引言/ch6/ch8",
+        "context-engineering (KV Cache+压缩+Skills按需加载+状态栏) — 证据: ch2/ch3",
+        "eval-driven-iteration (评估环境+指标+显著性+选型闭环) — 证据: 引言/ch6",
+        "tool-design (感知/执行/协作/事件/沟通五类+MCP+安全+异步) — 证据: ch4/ch5",
+        "sft-vs-rl-selection (SFT记忆/RL泛化+数据环境>算法+奖励结果约束过程) — 证据: ch7",
+        "coding-as-meta-tool (代码+文件系统范式/Agent自举) — 证据: ch5/ch8"
+      ],
+      "note": "最终交付方法 skill 数量以蒸馏验证为准，未通过 5 项验证的候选降级或淘汰（如 agentic-rag 仅 ch3 单一证据，可能降级为 knowledge 条目）"
+    }
+  },
+  "planned_skills": [
+    "ai-agent-design-source (faithful，1 个)",
+    "ai-agent-design-knowledge (knowledge，1 个)",
+    "ai-agent-design-{method} (methods，预计 6-7 个叶子 skill)"
+  ],
+  "cost_estimate": {
+    "model_ref": "Claude Sonnet 定价仅作参考",
+    "faithful": "约 $0（脚本化拆分，非模型生成）",
+    "knowledge": "input ~400K + output ~40K 约 $1.8",
+    "methods": "input ~300K + output ~30K + 压力测试 约 $1.5",
+    "total": "约 $3-5，耗时约 30-50 分钟"
+  },
+  "user_confirmed": true
+}

@@ -1,0 +1,28 @@
+{
+  "test_cases": [
+    {
+      "type": "should_trigger",
+      "prompt": "怎么防止 Agent 假装完成任务"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "Agent 执行不可逆操作前怎么设计安全审查"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "如何判断 Agent 真的做完了而不是过早放弃"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "proposer-reviewer 这个词怎么翻译（须与兄弟 skill ai-agent-design-coding-as-meta-tool 区分）"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "帮我评估 Agent 系统的整体准确率"
+    },
+    {
+      "type": "edge_case",
+      "prompt": "验证器本身也只是模型再想一遍，有效吗"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "test_cases": [
+    {
+      "type": "should_trigger",
+      "prompt": "怎么给 Agent 设计一个安全的执行工具"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "接入第三方 MCP 服务器要注意什么风险"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "Agent 怎么异步响应邮件事件"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "MCP 协议的报文格式是什么（须与兄弟 skill ai-agent-design-coding-as-meta-tool 区分）"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "怎么判断 Agent 任务完成了"
+    },
+    {
+      "type": "edge_case",
+      "prompt": "工具描述被投毒导致 Agent 调错工具怎么办"
+    }
+  ]
+}

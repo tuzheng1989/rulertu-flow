@@ -1,0 +1,28 @@
+{
+  "test_cases": [
+    {
+      "type": "should_trigger",
+      "prompt": "帮我实现一个 Agent 的主循环"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "ReAct 循环的代码怎么写"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "Agent 如何通过工具调用一步步推进任务"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "ReAct 这个词是什么意思（须与兄弟 skill ai-agent-design-coding-as-meta-tool 区分）"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "帮我写一个固定步骤的数据 ETL 流水线"
+    },
+    {
+      "type": "edge_case",
+      "prompt": "Agent 陷入重复调用同一个工具死循环怎么办"
+    }
+  ]
+}

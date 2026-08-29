@@ -19,6 +19,29 @@ Claude Code：
 /plugin install rulertu-flow@rulertu-flow
 ```
 
+## 选择性与安装范围
+
+marketplace 内三个插件（`rulertu-flow` / `work-skills` / `agent-skills`）互相独立，按需单独安装，同时支持用户全局与项目级两种范围。
+
+Claude Code：安装时用 `--scope` 指定范围——`user`（写入 `~/.claude/settings.json`，所有项目可用，默认）、`project`（写入项目 `.claude/settings.json`，随仓库共享给团队）、`local`（写入 `.claude/settings.local.json`，仅本机本项目）：
+
+```sh
+claude plugin install work-skills@rulertu-flow --scope user    # 全局
+claude plugin install agent-skills@rulertu-flow --scope project # 项目级共享
+```
+
+Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/marketplace.json` 随仓库分发（项目级，克隆即得）；把本仓库加到 `~/.agents/plugins/` 则为个人全局。所有条目均为 `policy.installation: "AVAILABLE"` 按需选装，装后可在 `~/.codex/config.toml` 逐插件启停。
+
+## work-skills
+
+17 个工作型技能：深度研究（`deep-research`，多源搜索通道）、战略分析、头脑风暴、费曼教学、灵感节拍器、长文写作、去 AI 味改写（`humanizer`）、书籍转技能（`book-to-skill`）、文档转换（`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`）、公司调研，以及 deep-research 依赖的搜索通道（`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`）。
+
+依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。
+
+## agent-skills
+
+5 个 Agent 工程技能：`ai-agent-design`（《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件，原书插图不随插件分发）、`agent-evaluator`（Agent 评测 Harness 构建）、`deepagents`（LangChain DeepAgents 使用指南）、`deepagents-update`（技能文档与 Python 包同步）、`model-info`（模型参数查询）。
+
 ## 三个 Skill
 
 - `optimization-plan`：需求需要至少两个有依赖关系的批次时，编写并定级方案。

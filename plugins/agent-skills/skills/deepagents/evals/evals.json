@@ -1,0 +1,61 @@
+{
+  "skill_name": "deepagents",
+  "evals": [
+    {
+      "id": 1,
+      "name": "basic-agent-creation",
+      "prompt": "我想使用 DeepAgents 创建一个简单的 AI 助手，应该怎么做？",
+      "expected_output": "应提供使用 create_deep_agent 的基础代码示例，包括模型配置和 Agent 创建步骤",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "multiturn-dialogue",
+      "prompt": "如何使用 DeepAgents 实现多轮对话，让 Agent 能记住之前的对话内容？",
+      "expected_output": "应说明使用 MemorySaver 和 thread_id 实现多轮对话，包含代码示例",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "filesystem-operations",
+      "prompt": "我需要 Agent 能读取和写入文件，应该配置什么后端？",
+      "expected_output": "应推荐使用 FilesystemBackend，说明配置方法和自动获得的文件系统工具",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "shell-execution",
+      "prompt": "我想让 Agent 能执行 Shell 命令，应该怎么配置？有什么安全注意事项？",
+      "expected_output": "应说明使用 LocalShellBackend，强调安全警告（仅用于可信环境），建议使用 interrupt_on",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "custom-tools",
+      "prompt": "如何为 DeepAgents 添加自定义工具？比如一个计算器工具。",
+      "expected_output": "应提供使用 @tool 装饰器定义工具的示例，说明如何集成到 create_deep_agent",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "windows-support",
+      "prompt": "在 Windows 上使用 DeepAgents FilesystemBackend 时，路径应该怎么写？",
+      "expected_output": "应推荐使用正斜杠或原始字符串，提供多种 Windows 路径配置示例",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "backend-comparison",
+      "prompt": "DeepAgents 有哪些后端类型？它们之间有什么区别？",
+      "expected_output": "应对比 StateBackend、FilesystemBackend、LocalShellBackend 等后端的功能和安全性",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "production-security",
+      "prompt": "在生产环境中使用 DeepAgents 应该注意什么安全配置？",
+      "expected_output": "应建议使用 FilesystemBackend + virtual_mode，避免 LocalShellBackend，考虑人工干预",
+      "files": []
+    }
+  ]
+}

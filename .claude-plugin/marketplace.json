@@ -7,6 +7,16 @@
       "name": "rulertu-flow",
       "source": "./plugins/rulertu-flow",
       "description": "分级规划、执行与验证工作流"
+    },
+    {
+      "name": "work-skills",
+      "source": "./plugins/work-skills",
+      "description": "工作型技能合集：深度研究、战略分析、文档转换与思维工具"
+    },
+    {
+      "name": "agent-skills",
+      "source": "./plugins/agent-skills",
+      "description": "Agent 设计与评测技能：AI Agent 设计知识包、Agent 评测、DeepAgents 文档与模型查询"
     }
   ]
 }

@@ -1,0 +1,23 @@
+{
+  "skill_name": "html-to-pdf",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "将 workspace/drafting/智能蓝军PPT 目录中的所有HTML文件转换并合并为一个PDF文档，输出到 output/exports/ 目录",
+      "expected_output": "成功将智能蓝军PPT的所有幻灯片HTML文件转换并合并为一个PDF文档，保存到 output/exports/ 目录，文件大小合理（几MB），包含所有11个幻灯片内容",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "把 slides 目录下的HTML文件转换为PDF，要求保持1920x1080的页面尺寸",
+      "expected_output": "检测到slides目录下的HTML文件，使用1920x1080尺寸转换为PDF，输出文件包含所有幻灯片内容",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "将单个HTML文件 index.html 转换为PDF文档",
+      "expected_output": "成功将index.html转换为PDF文档，保持原有的样式和布局",
+      "files": []
+    }
+  ]
+}

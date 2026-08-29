@@ -1,0 +1,28 @@
+{
+  "test_cases": [
+    {
+      "type": "should_trigger",
+      "prompt": "Agent 提示词越加越多怎么办"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "怎么设计上下文让 KV Cache 命中率最高"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "长程任务上下文不断膨胀如何压缩"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "KV Cache 的数学原理是什么（须与兄弟 skill ai-agent-design-coding-as-meta-tool 区分）"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "怎么让 Agent 跨会话记住用户偏好"
+    },
+    {
+      "type": "edge_case",
+      "prompt": "状态栏用 user 角色会不会污染对话"
+    }
+  ]
+}

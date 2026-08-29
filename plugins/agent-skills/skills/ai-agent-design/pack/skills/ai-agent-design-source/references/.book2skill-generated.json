@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "generator": "book2skill-adapted",
+  "source": "bojieli/ai-agent-book",
+  "note": "原书无章节编号，按章+##子节语义切分"
+}

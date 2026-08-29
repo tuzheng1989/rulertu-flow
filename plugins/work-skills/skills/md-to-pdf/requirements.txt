@@ -1,0 +1,11 @@
+# MD to PDF - Python Dependencies
+
+# Core dependencies
+playwright>=1.40.0
+markdown2>=2.4.12
+pygments>=2.17.2
+
+# Optional dependencies for advanced features
+# jinja2>=3.1.2  # For custom templates
+# pillow>=10.0.0  # For image processing
+# cssutils>=2.8.0  # For CSS validation

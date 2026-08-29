@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "book_slug": "{{book-slug}}",
+  "selected_mode": "{{faithful|knowledge|methods|hybrid}}",
+  "confidence": "{{high|medium|low}}",
+  "scores": {
+    "faithful": 0,
+    "knowledge": 0,
+    "methods": 0
+  },
+  "evidence": {
+    "faithful": [],
+    "knowledge": [],
+    "methods": []
+  },
+  "components": [],
+  "excluded_components": {},
+  "scopes": {},
+  "planned_skills": [],
+  "user_confirmed": false
+}

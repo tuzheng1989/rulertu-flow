@@ -1,0 +1,90 @@
+{
+  "version": "0.5.0",
+  "name": "deep-research",
+  "description": "深度研究助手，通过迭代式'搜索-总结-反思'循环生成带引用的综合性研究报告",
+  "context": "fork",
+
+  "default_config": {
+    "max_loops": 3,
+    "search_location": "us",
+    "content_size": "high",
+    "search_recency_filter": "noLimit",
+    "deep_read_per_loop": 3,
+    "compress_threshold_chars": 3000
+  },
+
+  "mcp_tools": {
+    "search": {
+      "name": "mcp__web-search-prime__web_search_prime",
+      "purpose": "网络搜索（严禁内置 WebSearch）",
+      "params": {
+        "search_query": "<query>",
+        "content_size": "high | medium",
+        "location": "us | cn",
+        "search_recency_filter": "noLimit | oneYear | oneMonth | oneWeek | oneDay"
+      },
+      "returns": ["title", "link", "content", "refer"]
+    },
+    "reader": {
+      "name": "mcp__web-reader__webReader",
+      "purpose": "网页全文抓取（严禁内置 WebFetch）",
+      "params": {
+        "url": "<url>",
+        "return_format": "markdown | text"
+      }
+    }
+  },
+
+  "search_channels": {
+    "web": {
+      "type": "mcp",
+      "entry": "mcp__web-search-prime__web_search_prime",
+      "fallback": null,
+      "note": "通用网页搜索，也是其他通道的降级目标"
+    },
+    "academic": {
+      "type": "cli",
+      "entry": "PYTHONIOENCODING=utf-8 deepxiv search \"{query}\" --limit {N} --format json",
+      "reader": "PYTHONIOENCODING=utf-8 deepxiv paper {arxiv_id} --section \"{section}\"",
+      "fallback": "web",
+      "note": "学术论文搜索 + 渐进式精读，走自有后端，10k/天额度"
+    },
+    "code": {
+      "type": "script",
+      "entry": ".claude/skills/sn-search-code/scripts/{github|stackoverflow|hackernews|huggingface}_search.py",
+      "fallback": "web"
+    },
+    "social_cn": {
+      "type": "script",
+      "entry": ".claude/skills/sn-search-social-cn/scripts/{zhihu|bilibili|douyin}_search.py",
+      "fallback": "web"
+    },
+    "social_en": {
+      "type": "script",
+      "entry": ".claude/skills/sn-search-social-en/scripts/{twitter|youtube}_search.py",
+      "fallback": "web",
+      "note": "reddit_search.py 已禁用"
+    }
+  },
+
+  "paths": {
+    "checkpoints": "~/.claude/deep-research/checkpoints",
+    "reports": "~/.claude/deep-research/reports",
+    "logs": "~/.claude/deep-research/logs"
+  },
+
+  "prompts": {
+    "clarify": "agents/research-node-clarify.md",
+    "brief_writer": "agents/research-node-brief.md",
+    "query_generator": "agents/research-node-query.md",
+    "source_summarizer": "agents/research-node-summary.md",
+    "compressor": "agents/research-node-compress.md",
+    "reflection": "agents/research-node-reflect.md",
+    "report_finalizer": "agents/research-node-finalize.md"
+  },
+
+  "scripts": {
+    "orchestrator": "scripts/orchestrator.py",
+    "state_manager": "scripts/state_manager.py"
+  }
+}

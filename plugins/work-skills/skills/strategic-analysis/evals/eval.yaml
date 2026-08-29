@@ -1,0 +1,16 @@
+# skill-up 原生评测配置（手写，避开 0.4.0 --auto 转 agent_judge 缺 criteria 的问题）
+# 与 evals.json 并存：evals.json 是 Anthropic 兼容备份，eval.yaml 是 skill-up 原生格式
+schema_version: v1alpha1
+
+environment:
+  type: none
+
+engine:
+  name: claude_code
+
+cases:
+  files:
+    - evals/cases/smoke.yaml
+  defaults:
+    timeout_seconds: 300
+    max_turns: 10

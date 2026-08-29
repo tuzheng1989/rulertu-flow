@@ -11,6 +11,12 @@ PLUGIN = ROOT / "plugins" / "rulertu-flow"
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
+def market_entry(market: dict, name: str):
+    for entry in market["plugins"]:
+        if entry["name"] == name:
+            return entry
+    return None
+
 def require(condition: bool, message: str, errors: list[str]) -> None:
     if not condition:
         errors.append(message)
@@ -25,9 +31,13 @@ def validate() -> list[str]:
     plan_iterate = (PLUGIN / "skills" / "plan-iterate" / "SKILL.md").read_text(encoding="utf-8")
     require(codex_manifest["name"] == claude_manifest["name"] == "rulertu-flow", "manifest names differ", errors)
     require(codex_manifest["version"] == claude_manifest["version"] == "2.0.0", "manifest versions differ", errors)
-    require(codex_market["plugins"][0]["source"]["path"] == "./plugins/rulertu-flow", "Codex marketplace path differs", errors)
-    require(claude_market["plugins"][0]["source"] == "./plugins/rulertu-flow", "Claude marketplace path differs", errors)
-    require(codex_market["plugins"][0]["name"] == claude_market["plugins"][0]["name"] == "rulertu-flow", "marketplace names differ", errors)
+    codex_flow = market_entry(codex_market, "rulertu-flow")
+    claude_flow = market_entry(claude_market, "rulertu-flow")
+    require(codex_flow is not None and claude_flow is not None, "rulertu-flow marketplace entry missing", errors)
+    if codex_flow is not None and claude_flow is not None:
+        require(codex_flow["source"]["path"] == "./plugins/rulertu-flow", "Codex marketplace path differs", errors)
+        require(claude_flow["source"] == "./plugins/rulertu-flow", "Claude marketplace path differs", errors)
+        require(codex_flow["name"] == claude_flow["name"] == "rulertu-flow", "marketplace names differ", errors)
     require((PLUGIN / codex_manifest["skills"].removeprefix("./")).is_dir(), "skills path is missing", errors)
     require(set(review_schema["required"]) == {"overall_quality", "score", "issues", "suggestions"}, "review schema fields differ", errors)
     review_scripts = PLUGIN / "skills" / "plan-iterate" / "scripts"
@@ -47,6 +57,27 @@ def validate() -> list[str]:
         require(bool(front), f"missing frontmatter: {skill}", errors)
         if front:
             require("name:" in front.group(1) and "description:" in front.group(1), f"incomplete frontmatter: {skill}", errors)
+
+    plugin_dirs = sorted(d for d in (ROOT / "plugins").iterdir() if d.is_dir())
+    require({d.name for d in plugin_dirs} == {e["name"] for e in claude_market["plugins"]}, "Claude marketplace entries and plugin dirs differ", errors)
+    require({d.name for d in plugin_dirs} == {e["name"] for e in codex_market["plugins"]}, "Codex marketplace entries and plugin dirs differ", errors)
+    for plugin_dir in plugin_dirs:
+        claude_manifest_path = plugin_dir / ".claude-plugin" / "plugin.json"
+        codex_manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+        require(claude_manifest_path.is_file() and codex_manifest_path.is_file(), f"manifest missing: {plugin_dir.name}", errors)
+        if not (claude_manifest_path.is_file() and codex_manifest_path.is_file()):
+            continue
+        plugin_claude = load(claude_manifest_path)
+        plugin_codex = load(codex_manifest_path)
+        require(plugin_claude["name"] == plugin_codex["name"] == plugin_dir.name, f"manifest names differ: {plugin_dir.name}", errors)
+        require(plugin_claude["version"] == plugin_codex["version"], f"manifest versions differ: {plugin_dir.name}", errors)
+        require((plugin_dir / "skills").is_dir(), f"skills path is missing: {plugin_dir.name}", errors)
+        for skill in (plugin_dir / "skills").glob("*/SKILL.md"):
+            text = skill.read_text(encoding="utf-8")
+            front = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+            require(bool(front), f"missing frontmatter: {skill}", errors)
+            if front:
+                require("name:" in front.group(1) and "description:" in front.group(1), f"incomplete frontmatter: {skill}", errors)
 
     role_models = {"executor": "sonnet", "auditor": "opus", "advisor": "opus"}
     for role, model in role_models.items():

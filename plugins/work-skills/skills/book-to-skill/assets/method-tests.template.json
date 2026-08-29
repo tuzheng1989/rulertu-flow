@@ -1,0 +1,50 @@
+{
+  "skill": "{{skill-name}}",
+  "version": "0.1.0",
+  "test_cases": [
+    {
+      "id": "should-trigger-01",
+      "type": "should_trigger",
+      "prompt": "{{典型正面场景}}",
+      "expected_behavior": "调用 {{skill-name}} 并执行明确动作",
+      "notes": "正面触发"
+    },
+    {
+      "id": "should-trigger-02",
+      "type": "should_trigger",
+      "prompt": "{{第二个正面场景}}",
+      "expected_behavior": "调用 {{skill-name}}",
+      "notes": "不同语言信号"
+    },
+    {
+      "id": "should-trigger-03",
+      "type": "should_trigger",
+      "prompt": "{{第三个正面场景}}",
+      "expected_behavior": "调用 {{skill-name}}",
+      "notes": "迁移场景"
+    },
+    {
+      "id": "should-not-trigger-01",
+      "type": "should_not_trigger",
+      "prompt": "{{无关或表面相关的诱饵}}",
+      "expected_behavior": "不调用本 Skill",
+      "notes": "无关诱饵"
+    },
+    {
+      "id": "should-not-trigger-02",
+      "type": "should_not_trigger",
+      "prompt": "{{应触发兄弟 Skill 的场景}}",
+      "expected_behavior": "不调用本 Skill，应调用 {{sibling-skill-name}}",
+      "notes": "兄弟 Skill 混淆测试"
+    },
+    {
+      "id": "edge-01",
+      "type": "edge_case",
+      "prompt": "{{边界模糊场景}}",
+      "expected_behavior": "{{调用或拒绝，并解释边界}}",
+      "notes": "边界测试"
+    }
+  ],
+  "minimum_pass_rate": 0.8
+}
+

@@ -1,0 +1,28 @@
+{
+  "test_cases": [
+    {
+      "type": "should_trigger",
+      "prompt": "怎么判断我的 Agent 改动是真的变好了"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "如何用 LLM 自动评估 Agent 表现"
+    },
+    {
+      "type": "should_trigger",
+      "prompt": "Agent 模型选型怎么做"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "统计学里显著性是什么意思（须与兄弟 skill ai-agent-design-coding-as-meta-tool 区分）"
+    },
+    {
+      "type": "should_not_trigger",
+      "prompt": "怎么判断单次任务 Agent 做完了"
+    },
+    {
+      "type": "edge_case",
+      "prompt": "评估数据集不小心被训练泄漏了怎么办"
+    }
+  ]
+}

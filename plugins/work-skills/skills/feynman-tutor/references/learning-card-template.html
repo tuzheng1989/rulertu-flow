@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>费曼学习卡 - {{概念名称}}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f0ebe3;
+    padding: 24px;
+    color: #2d2d2d;
+    line-height: 1.7;
+  }
+  .card {
+    max-width: 680px;
+    margin: 0 auto;
+    background: #fffdf9;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  .card-header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: #fff;
+    padding: 28px 32px;
+  }
+  .card-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+  .card-meta {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .tag-level { background: rgba(255,255,255,0.2); }
+  .tag-date  { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+  .tag-grade { background: #e8b931; color: #1a1a2e; }
+
+  .card-body { padding: 28px 32px; }
+
+  .section {
+    margin-bottom: 24px;
+  }
+  .section:last-child { margin-bottom: 0; }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #888;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title .icon { font-size: 15px; }
+
+  .definition {
+    background: #f6f1eb;
+    border-left: 4px solid #1a1a2e;
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .explanation {
+    font-size: 15px;
+    color: #3a3a3a;
+    padding: 12px 0;
+    white-space: pre-wrap;
+  }
+
+  .blindspot-list {
+    list-style: none;
+  }
+  .blindspot-item {
+    background: #fff8f0;
+    border: 1px solid #f5d5b0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+  }
+  .blindspot-item:last-child { margin-bottom: 0; }
+  .blindspot-phase {
+    font-size: 11px;
+    color: #c47a2a;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .blindspot-desc {
+    font-size: 14px;
+    color: #5a4a3a;
+  }
+
+  .simple-version {
+    background: #f0f9f0;
+    border-left: 4px solid #4caf50;
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    font-size: 15px;
+    color: #2e5e2e;
+  }
+
+  .action-list {
+    list-style: none;
+  }
+  .action-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0ebe3;
+    font-size: 14px;
+  }
+  .action-item:last-child { border-bottom: none; }
+  .action-checkbox {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #bbb;
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .card-footer {
+    background: #f6f1eb;
+    padding: 16px 32px;
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    letter-spacing: 0.5px;
+  }
+  .card-footer .feynman-mark {
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <h1>费曼学习卡：{{概念名称}}</h1>
+    <div class="card-meta">
+      <span class="tag tag-level">📖 认知水平：{{小学/中学/大学}}</span>
+      <span class="tag tag-date">📅 {{日期}}</span>
+      <span class="tag tag-grade">评级：{{A/B/C}}</span>
+    </div>
+  </div>
+
+  <div class="card-body">
+
+    <div class="section">
+      <div class="section-title"><span class="icon">🎯</span> 概念</div>
+      <div class="definition">{{一行精准定义}}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title"><span class="icon">✍️</span> 我的解释（最终版）</div>
+      <div class="explanation">{{用户精炼后的最终解释，经 AI 验证通过的版本}}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title"><span class="icon">⚠️</span> 发现的认知盲点</div>
+      <ul class="blindspot-list">
+        <li class="blindspot-item">
+          <div class="blindspot-phase">Phase {{轮次}}</div>
+          <div class="blindspot-desc">{{盲点描述：为什么没发现、为什么重要}}</div>
+        </li>
+        <!-- 更多盲点... -->
+      </ul>
+    </div>
+
+    <div class="section">
+      <div class="section-title"><span class="icon">💡</span> 极简版（讲给外行听）</div>
+      <div class="simple-version">{{Phase 5 中的最终简化解释}}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title"><span class="icon">✅</span> 行动项</div>
+      <ul class="action-list">
+        <li class="action-item">
+          <div class="action-checkbox"></div>
+          <span>今天找一个人，用极简版解释给他听</span>
+        </li>
+        <li class="action-item">
+          <div class="action-checkbox"></div>
+          <span>回顾盲点，查阅：{{相关资料/关键词}}</span>
+        </li>
+        <li class="action-item">
+          <div class="action-checkbox"></div>
+          <span>一周后回来，重新费曼一次这个概念</span>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="card-footer">
+    <span class="feynman-mark">费曼学习法</span> · 如果你不能简单地解释它，你就还没有真正理解它
+  </div>
+</div>
+</body>
+</html>

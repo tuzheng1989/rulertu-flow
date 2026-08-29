@@ -1,0 +1,20 @@
+{
+  "outputDir": "./pdfs",
+  "style": "./assets/custom.css",
+  "toc": true,
+  "tocDepth": 3,
+  "pageSize": "A4",
+  "orientation": "portrait",
+  "margin": {
+    "top": "20mm",
+    "bottom": "20mm",
+    "left": "15mm",
+    "right": "15mm"
+  },
+  "contentWidth": "800px",
+  "timeout": 60000,
+  "mermaid": {
+    "theme": "default",
+    "startOnLoad": false
+  }
+}
