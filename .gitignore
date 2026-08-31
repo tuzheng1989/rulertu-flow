@@ -2,3 +2,4 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 plugins/work-skills/skills/url-to-md/scripts/node_modules/
+plugins/rulertu-flow/skills/update/proxy.env
