@@ -17,6 +17,11 @@
       "name": "agent-skills",
       "source": "./plugins/agent-skills",
       "description": "Agent 设计与评测技能：AI Agent 设计知识包、Agent 评测、DeepAgents 文档与模型查询"
+    },
+    {
+      "name": "copyright-skills",
+      "source": "./plugins/copyright-skills",
+      "description": "知识产权申报技能：软著申报文稿与材料、源代码合规预审修复、专利分析与交底书撰写"
     }
   ]
 }

@@ -1,0 +1,27 @@
+{
+  "name": "copyright-skills",
+  "version": "1.0.0",
+  "description": "软著申报技能：申报文稿去 AI 味改写、申报材料生成与源代码合规预审修复",
+  "author": {
+    "name": "rulertu",
+    "url": "https://github.com/tuzheng1989"
+  },
+  "homepage": "https://github.com/tuzheng1989/rulertu-flow",
+  "repository": "https://github.com/tuzheng1989/rulertu-flow",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Copyright Skills",
+    "shortDescription": "知识产权申报：软著材料、代码合规、专利分析与交底书撰写",
+    "longDescription": "5 个知识产权申报技能：申报文稿去 AI 味（copy-polisher）、软著材料生成（software-copyright-cn）、源代码合规预审与修复（copyright-code-review）、专利点分析（patent-analysis）、专利交底书撰写（patent-drafting）。",
+    "developerName": "rulertu",
+    "category": "Productivity",
+    "capabilities": ["Writing", "Documents"],
+    "defaultPrompt": [
+      "把这段申报文稿里的 AI 味去掉。",
+      "根据这个仓库生成软著申报材料。",
+      "软著提交前帮我预审一下源代码合规性，问题确认后直接修复。",
+      "分析一下这个仓库有哪些可以申报发明专利的点。",
+      "按模板给这个专利项写技术交底书。"
+    ]
+  }
+}

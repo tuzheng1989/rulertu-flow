@@ -1,0 +1,5 @@
+interface:
+  display_name: "中国软件著作权材料"
+  short_description: "从代码仓库生成登记表、操作手册和源码 Word"
+  default_prompt: "使用 $software-copyright-cn 根据当前代码仓库生成一套可复核的软件著作权申请材料。"
+
