@@ -1,7 +1,7 @@
 ---
 name: url-to-md
-description: EvoCenter 项目专用的 URL 转 Markdown 技能。抓取网页内容并转换为干净的 Markdown，保存到 inbox/ 目录。使用 Chrome CDP 渲染页面，支持 Defuddle 和 Legacy 双管道转换，支持 YouTube 字幕提取。当用户提供链接（无其他指令）时自动触发，将链接内容转化为 Markdown 放入 inbox。
-version: 1.0.0
+description: URL 转 Markdown 技能。抓取网页内容并转换为干净的 Markdown，使用 Chrome CDP 渲染页面，支持 Defuddle 和 Legacy 双管道转换，支持 YouTube 字幕提取。工具型技能，输出位置由调用方（项目指令）决定。当用户提供链接并要求转为 Markdown / 保存网页内容时使用。
+version: 1.1.0
 metadata:
   openclaw:
     requires:
@@ -10,16 +10,14 @@ metadata:
         - npx
 ---
 
-# URL to Markdown（EvoCenter 专用）
+# URL to Markdown
 
-抓取网页内容，转换为 Markdown，保存到 `inbox/` 目录。
+抓取网页内容，转换为 Markdown。工具型技能：输出路径通过 `-o` / `--output-dir` 传入，由调用方（项目指令）决定保存位置。
 
 ## 用法
 
-本技能输出固定到 `inbox/` 目录，无需配置。
-
 ```
-${BUN_X} {baseDir}/scripts/main.ts <url> -o inbox/<filename>.md
+${BUN_X} {baseDir}/scripts/main.ts <url> -o <输出路径>.md
 ```
 
 ### Agent 执行步骤
