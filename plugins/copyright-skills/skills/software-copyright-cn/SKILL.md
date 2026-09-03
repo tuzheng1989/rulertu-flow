@@ -1,6 +1,6 @@
 ---
 name: software-copyright-cn
-description: "Generate Chinese computer-software copyright application materials from a code repository: an evidence-backed registration workbook, a 10+ page illustrated Word manual, and a Word source-code excerpt containing the first and last 1,500 lines (or all code when the total is at most 3,000 lines). Use for 软著、软件著作权、登记表、操作手册或源代码文档 requests."
+description: "Generate Chinese computer-software copyright application materials from a code repository: an evidence-backed registration workbook, an illustrated Word manual (documents under 60 pages are submitted in full, with at least 30 lines per page; the internal page floor lives in manual.md), and a Word source-code excerpt containing the first and last 1,500 lines (or all code when the total is at most 3,000 lines). Use for 软著、软件著作权、登记表、操作手册或源代码文档 requests."
 ---
 
 # 中国软件著作权材料
@@ -12,12 +12,13 @@ description: "Generate Chinese computer-software copyright application materials
 1. 读取仓库内的 `AGENTS.md`、入口文档、包清单、主要运行入口、用户界面和相关测试。先运行 `scripts/inventory_repo.py`，生成代码清单和物理行数统计。完成标准：每个纳入或排除的代码文件都有理由，且秘密、依赖、生成物、测试夹具和压缩 vendor 文件未进入申报代码。
 2. 建立一份事实表，逐项记录 `value`、`source` 和 `status`（`verified`、`user_confirmed`、`unknown`）。软件名称、版本、完成日期、发表状态、开发方式、权利范围、著作权人证件信息等无法由仓库可靠证明的字段保持 `unknown`，集中向用户确认。不要用“看起来合理”的值填空。
    - 事实表同时收集设计要点：核心模块的架构决策、业务规则来源、特殊输入与失败模式，由用户口述，记为 `user_confirmed`。这些要点供登记表“开发目的/技术特点”、说明书技术实现段和流程图使用，是申报材料中人类创造性投入的直接证据；用户讲不清的模块如实记录，不代拟。
+   - 开发方式与权属情形必须经用户确认；确认后按 [references/ownership.md](references/ownership.md) 建立权属文件清单。情形无法确认时，不进入材料构建。完成标准：清单中每一项都有 `provided`、`pending` 或 `na` 状态，`pending` 项不补齐就不提交。
    - 仓库由 `README.md` 中的 Verita 标题和 `poc/prototype/server.py` 共同识别为 Verita 项目时，读取 [references/verita-profile.md](references/verita-profile.md)。先刷新其中的 Git 状态和代码清单；profile 中的建议在用户确认前仍按 `unknown` 记入事实表。
 3. **代码合规前置。** 构建材料前，用同插件 `copyright-code-review` 的 `scripts/scan_source.py` 对纳入申报的代码跑静态扫描（占位符、乱码、连续空行、第三方版权头、空桩行）；用户能提供疑似来源（所用脚手架、模板、教程仓库的本地 clone）时，另跑同目录 `similarity_check.py` 做本地查重比对。命中项整理成修复建议清单，经用户逐条审批后由 AI 实施、重跑扫描确认消除，再进入材料生成；阻断级问题未处理完不构建 Word。完整预审（链路完整性、开源权属、材料联动）需要人工读代码，建议用户直接运行该 skill。
-4. 生成用户要求的产物。登记表读 [references/registration-form.md](references/registration-form.md)；操作手册读 [references/manual.md](references/manual.md)；源代码文档读 [references/source-code.md](references/source-code.md)。只加载当前产物需要的参考文件。
+4. 生成用户要求的产物。在线填报工作底稿读 [references/registration-form.md](references/registration-form.md)；操作手册读 [references/manual.md](references/manual.md)；源代码文档读 [references/source-code.md](references/source-code.md)。说明书与源代码 `.docx` 构建后用 `scripts/render_check.py` 渲染实测每页行数，产出 render-report；交付前用 `scripts/check_submission.py` 做提交前校验，产出 submission-check；权属文件清单随产物一并交付。只加载当前产物需要的参考文件。
 5. 对登记表中的“开发目的、面向行业、主要功能、技术特点”和操作手册正文调用 `$humanizer` 的改稿模式，做最小有效编辑。它来自 `work-skills` 插件，实际名称是 `humanizer`。代码、命令、路径、字段值、日期、版本、计量结果和截图文字不进入改稿。若当前会话未暴露 `$humanizer`，按 [references/human-writing-fallback.md](references/human-writing-fallback.md) 完成同等审校，并在交付说明中记录降级。
 6. Humanizer 后逐句回查事实表：专名、数字、状态、功能边界和限制必须与证据一致；被 humanizer 新增而无来源的事实全部撤回。完成标准：每段申报文字均能指向仓库文件、界面截图或用户确认。
-7. 在独立输出目录交付原模板副本、说明书 `.docx`、源代码 `.docx`、代码清单 JSON、事实表和 `review-needed.md`。保留原模板和原截图，不覆盖用户文件。
+7. 在独立输出目录交付原模板副本、说明书 `.docx`、源代码 `.docx`、代码清单 JSON、事实表、权属文件清单、render-report（说明书/源代码渲染实测）、submission-check（提交前校验）和 `review-needed.md`。官网申请须知的核对 URL 为待人工补齐项，交付时列入 `review-needed.md` 防遗忘。保留原模板和原截图，不覆盖用户文件。
 
 ## 总体约束
 
