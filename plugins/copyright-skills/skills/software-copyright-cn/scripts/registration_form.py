@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect or safely fill a copied Excel registration template."""
+"""Inspect or safely fill a copied Excel worksheet for the online registration form."""
 
 from __future__ import annotations
 

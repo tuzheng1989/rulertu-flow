@@ -22,9 +22,14 @@
 
 ```powershell
 python scripts/build_manual_docx.py --spec manual.json --output "软件说明书.docx" --min-pages 10
+python scripts/render_check.py --docx "软件说明书.docx" --min-lines 30 --output render-report.json
 ```
 
 构建器使用封面、目录说明和逐页内容单元保证至少 10 页。页面数量是下限，不要用空白页凑数；每页要有具体功能、操作、结果或必要图示。目录页可在 Word 中更新自动目录，也可保留构建器生成的静态目录。
+
+页数口径：官方要求文档不足 60 页的全部提交，且每页不少于 30 行；"至少 10 页"只是本插件的内部下限，不是官方页数要求（核对记录：中国版权保护中心官网"所需文件"页，https://www.ccopyright.com.cn/index.php?optionid=1080，2026-09-03）。
+
+构建后用 `render_check.py` 实测渲染行数：本机未安装 LibreOffice（soffice）时脚本不会伪造通过，会非零退出并提示转人工——此时把"逐页核对每页行数"列入 `review-needed.md` 人工核对项。报告列出每页实测行数与不足 `--min-lines` 的页清单，不足页须整改（调整内容量或版式）后重新构建并复测。
 
 ## 文字审校
 
@@ -32,9 +37,11 @@ python scripts/build_manual_docx.py --spec manual.json --output "软件说明书
 
 ## 完成标准
 
-- 至少 10 页，并且功能顺序从入口到结果连贯。
+- 至少 10 页（内部下限，官方口径见上文页数口径说明），并且功能顺序从入口到结果连贯。
 - 正文中的每个按钮、页面、输入、输出都能在截图或代码中找到。
 - 图片清晰、图题连续、正文有引用；同一张图不反复充页数。
 - 软件名称、版本、完成日期口径与登记表一致。
+- 渲染实测每页 ≥30 行，不足页整改后复测；本机无法渲染时按上文说明转人工核对。
 - 在 Word 或导出的 PDF 中逐页检查，无孤行标题、图片截断或空白内容页。
+- spec 中的 `evidence` 是内部复核记录：不写入说明书正文，只进旁路 audit JSON 的 `page_evidence` 字段。
 

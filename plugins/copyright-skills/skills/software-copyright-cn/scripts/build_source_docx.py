@@ -57,6 +57,12 @@ def main() -> int:
     parser.add_argument("--title", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--lines-per-page", type=int, default=50)
+    parser.add_argument(
+        "--first",
+        action="append",
+        metavar="PATH",
+        help="把清单内该相对路径的文件前置到串接序列最前（可重复，按传入顺序排列）",
+    )
     args = parser.parse_args()
     if args.lines_per_page < 1:
         raise SystemExit("--lines-per-page must be positive")
@@ -66,8 +72,22 @@ def main() -> int:
 
     inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
     repo = Path(inventory["repo"])
+    included = inventory["included_files"]
+    # --first：按传入顺序把命中文件移到串接序列最前，其余保持清单相对顺序
+    first_paths = list(dict.fromkeys(args.first or []))
+    known = {entry["path"] for entry in included}
+    unknown = [value for value in first_paths if value not in known]
+    if unknown:
+        available = ", ".join(entry["path"] for entry in included)
+        raise SystemExit(
+            "--first path not in inventory: " + ", ".join(unknown)
+            + "; available paths: " + available
+        )
+    ordered = [entry for path in first_paths for entry in included if entry["path"] == path]
+    ordered += [entry for entry in included if entry["path"] not in first_paths]
+
     records: list[dict] = []
-    for entry in inventory["included_files"]:
+    for entry in ordered:
         path = repo / entry["path"]
         data = path.read_bytes()
         digest = hashlib.sha256(data).hexdigest()
@@ -142,6 +162,7 @@ def main() -> int:
         "total_physical_lines": total,
         "selected_line_count": len(selected),
         "selection": "all" if total <= 3000 else "first-1500-and-last-1500",
+        "reordered_first": first_paths,
         "first": selected[0] if selected else None,
         "head_end": selected[min(1499, len(selected) - 1)] if selected else None,
         "tail_start": selected[-1500] if total > 3000 else None,

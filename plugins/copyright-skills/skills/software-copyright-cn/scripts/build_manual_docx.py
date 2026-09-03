@@ -27,6 +27,7 @@ EXAMPLE = {
             "steps": ["确认服务状态。", "打开系统首页。"],
             "image": "screenshots/01-home.png",
             "caption": "图1 系统首页",
+            # evidence 是内部复核记录，不写入说明书正文，只进旁路 audit JSON 的 page_evidence
             "evidence": ["poc/server/app.py", "poc/server/static/index.html"]
         }
     ]
@@ -130,21 +131,25 @@ def main() -> int:
             caption = document.add_paragraph()
             caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
             add_text(caption, page.get("caption", image_path.name), 9)
-        if page.get("evidence"):
-            paragraph = document.add_paragraph()
-            paragraph.paragraph_format.space_before = Pt(8)
-            add_text(paragraph, "材料复核依据：" + "；".join(page["evidence"]), 8)
         if index < len(pages) - 1:
             document.add_page_break()
 
     output.parent.mkdir(parents=True, exist_ok=True)
     document.save(output)
+    # evidence 只进旁路 audit JSON，不进说明书正文（全局红线 3）。
+    # page_evidence 键为内容页序号（1 起，字符串），无 evidence 的页省略。
+    page_evidence = {
+        str(page_index): page["evidence"]
+        for page_index, page in enumerate(pages, start=1)
+        if page.get("evidence")
+    }
     audit = {
         "spec": str(args.spec.resolve()),
         "explicit_pages": total_pages,
         "content_pages": len(pages),
         "illustrated_content_pages": image_count,
         "evidence_references": sum(len(page.get("evidence", [])) for page in pages),
+        "page_evidence": page_evidence,
     }
     output.with_suffix(output.suffix + ".audit.json").write_text(
         json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8"
