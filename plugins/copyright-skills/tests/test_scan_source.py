@@ -5,8 +5,9 @@
 - :31-35  LICENSE_PATTERN
 - :36     STUB_PATTERN（pass / ... 行）
 - :45-46  MOJIBAKE_SNIPPETS
+- :47-58  AI 特征注释四规则：MD_BOLD / SECTION_REF / PATH_REF / HALFWIDTH_PAREN_NOTE
 - :37-44  入口候选：文件名在 ENTRY_FILE_NAMES 或正文命中 ENTRY_CODE_PATTERN
-- :90-117 scan_file 各 findings 行号与 finding_counts
+- :102-129 scan_file 各 findings 行号与 finding_counts
 """
 
 from __future__ import annotations
@@ -88,6 +89,69 @@ def test_gb18030_file_flagged_as_mojibake(load_module, scripts, tmp_path):
     assert result["findings"]["mojibake"] == [1]
 
 
+def test_ai_style_comment_rules_hit_with_line_number(load_module, scripts, tmp_path):
+    """AI 特征注释四规则各自命中并记录行号（锚点 :47-58, :113-120）。
+
+    - md_markup：注释里的 **加粗**
+    - section_ref：§ 精确文档引用（plan §2-W1.2）
+    - path_ref：带斜杠的相对路径引用（data/prototype_kg/kg.json）
+    - halfwidth_paren_note：中文内容的半角括号元组式注
+    """
+    module = load_module("scan_source", scripts.scan_source.parent)
+    sample = "\n".join([
+        "# 按**实际付费调用**累计",                      # 1 md 加粗
+        "# 配置见 `data/prototype_kg/kg.json`",          # 2 行内代码反引号
+        '"""W3.4 告警等级合成(plan §2-W3.4)。"""',        # 3 § 引用
+        "# 配置见 data/prototype_kg/kg.json",            # 4 路径引用
+        "# provenance 单向投影(只写不读,P5-Q1)",          # 5 半角括号元组式注
+    ])
+    path = tmp_path / "sample.py"
+    path.write_text(sample, encoding="utf-8")
+
+    result = module.scan_file(path, "sample.py")
+    assert result["findings"]["md_markup"] == [1]
+    assert result["findings"]["inline_code"] == [2]
+    assert result["findings"]["section_ref"] == [3]
+    assert result["findings"]["path_ref"] == [2, 4]  # 行 2 反引号里也是路径，双规则命中
+    assert result["findings"]["halfwidth_paren_note"] == [5]
+    assert result["finding_counts"]["md_markup"] == 1
+    assert result["finding_counts"]["inline_code"] == 1
+    assert result["finding_counts"]["halfwidth_paren_note"] == 1
+
+
+def test_ai_style_comment_rules_do_not_hit_normal_writing(load_module, scripts, tmp_path):
+    """人类常规写法不命中：全角括号注、纯文件名、幂运算、含引号的代码元组、URL。"""
+    module = load_module("scan_source", scripts.scan_source.parent)
+    sample = "\n".join([
+        "# 单点可配置阈值（百分数口径，演示用）",            # 1 全角括号 + 全角逗号
+        "# 配置见 kg.json",                              # 2 纯文件名，无斜杠路径
+        "area = width ** 2",                             # 3 幂运算
+        'label = ("人类门", "机器门")',                    # 4 含引号的代码元组
+        "# 文档见 https://example.com/guide.md",          # 5 URL 不按路径引用计
+        "# 时间线分析工具（仅展示与复盘）",                  # 6 全角括号注
+    ])
+    path = tmp_path / "sample.py"
+    path.write_text(sample, encoding="utf-8")
+
+    result = module.scan_file(path, "sample.py")
+    for key in ("md_markup", "inline_code", "section_ref", "path_ref", "halfwidth_paren_note"):
+        assert key not in result["findings"], (key, result["findings"])
+
+
+def test_inline_code_rule_only_flags_comment_lines(load_module, scripts, tmp_path):
+    """行内代码规则只查 # 注释行；shell 代码行的反引号是命令替换语法，不命中。"""
+    module = load_module("scan_source", scripts.scan_source.parent)
+
+    sh = tmp_path / "run.sh"
+    sh.write_text("#!/bin/bash\nVALUE=`cat config.txt`\necho $VALUE\n", encoding="utf-8")
+    result = module.scan_file(sh, "run.sh")
+    assert "inline_code" not in result["findings"]
+
+    py = tmp_path / "note.py"
+    py.write_text("# 用法见 `python main.py --help`\n", encoding="utf-8")
+    assert module.scan_file(py, "note.py")["findings"]["inline_code"] == [1]
+
+
 def test_cli_summary_and_excluded_files(write_tree, run_cli, scripts, tmp_path):
     """CLI：入口候选汇总、excluded 记录与 finding_totals（锚点 :175-183）。"""
     repo = write_tree({
@@ -109,3 +173,44 @@ def test_cli_summary_and_excluded_files(write_tree, run_cli, scripts, tmp_path):
     excluded = {item["path"]: item["reason"] for item in payload["excluded_files"]}
     assert excluded["node_modules/x.js"] == "excluded by node_modules/**"
     assert excluded["docs/x.md"] == "not an application source extension"
+
+
+def test_audit_round2_rules_hit_with_line_number(load_module, scripts, tmp_path):
+    """审核反馈五规则：横幅、列表、强调词、需求编号、工具名各自命中（独立真值）。"""
+    module = load_module("scan_source", scripts.scan_source.parent)
+    sample = "\n".join([
+        "# ============================",          # 1 横幅
+        "# - 列表项（注释行列表）",                  # 2 注释行 md 列表
+        '"""',                                     # 3 docstring 开
+        "- 如实返回，不可绕过",                      # 4 docstring 列表 + 强调词
+        "符合唯一出口约束（W4.1）",                   # 5 强调词 + 需求编号
+        '"""',                                     # 6 docstring 闭
+        'note = "严禁超时（R23）"',                  # 7 强调词 + 编号（运行时字符串，审核口径同样须清）
+        "# Codex 生成的模块",                        # 8 工具名
+    ])
+    path = tmp_path / "sample.py"
+    path.write_text(sample, encoding="utf-8")
+    result = module.scan_file(path, "sample.py")
+    assert result["findings"]["banner_divider"] == [1]
+    assert result["findings"]["md_list"] == [2, 4]
+    # 强调词只查注释/docstring；运行时文案中的"严禁超时"是人类正常表达，不报
+    assert result["findings"]["emph_phrase"] == [4, 5]
+    assert result["findings"]["req_id"] == [5, 7]
+    assert result["findings"]["ai_tool_marker"] == [8]
+
+
+def test_audit_round2_rules_negative_cases(load_module, scripts, tmp_path):
+    """人类常规写法与易混代码不命中：T-2h、V1.0、乘法、普通中文句。"""
+    module = load_module("scan_source", scripts.scan_source.parent)
+    sample = "\n".join([
+        "start = t0 + T-2h_offset",                # 1 T-2h 不算需求编号
+        "version = \"V1.0\"",                       # 2 版本号不算编号
+        "area = width ** 2",                        # 3 幂运算
+        "# 按时间点读取快照并计算均值",                # 4 普通注释
+        "# 五幕时间线与告警等级联动的说明文字",        # 5 普通注释
+    ])
+    path = tmp_path / "sample.py"
+    path.write_text(sample, encoding="utf-8")
+    result = module.scan_file(path, "sample.py")
+    for key in ("banner_divider", "md_list", "emph_phrase", "req_id", "ai_tool_marker"):
+        assert key not in result["findings"], (key, result["findings"])

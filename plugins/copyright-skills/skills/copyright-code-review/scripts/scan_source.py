@@ -43,7 +43,32 @@ ENTRY_FILE_NAMES = {
     "main.c", "main.cpp", "app.java", "main.java",
 }
 MOJIBAKE_SNIPPETS = ("�", "锟斤拷", "ï¿½")
+# AI 特征注释：Markdown 加粗、行内代码反引号、§ 文档精确引用、带斜杠的相对路径
+# 引用、中文内容的半角括号元组式注（(只写不读,P5-Q1)）。全行检索，与占位符同样
+# 容忍字符串内误报，命中项走用户逐条审批，不自动改写。
+MD_BOLD_PATTERN = re.compile(r"\*\*[^*\s][^*]*[^*\s]\*\*|\*\*[^*\s]\*\*")
+INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
+SECTION_REF_PATTERN = re.compile(r"§")
+PATH_REF_PATTERN = re.compile(
+    r"[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_./-]*\."
+    r"(?:py|js|jsx|ts|tsx|vue|json|md|yaml|yml|csv|txt|sh|sql|html|css)\b"
+)
+HALFWIDTH_PAREN_NOTE_PATTERN = re.compile(
+    r"\([^()\"'`=%]*[一-鿿][^()\"'`=%]*,[^()\"'`=%]*\)"
+)
 MAX_LISTED_HITS = 50
+# 反引号在 shell 里是命令替换语法，行内代码检测只针对 # 注释行，避免误报
+INLINE_CODE_COMMENT_PREFIXES = ("#",)
+# 2026-09-04 审核反馈新增：注释块分隔线横幅、Markdown 列表、强调性表达、
+# 需求编号（W/R/T/G/P 系）、生成工具名。同走"命中即列项、人工审批"口径。
+BANNER_DIVIDER_PATTERN = re.compile(r"^\s*(?:#|//).*[=\-_]{4,}")
+MD_LIST_PATTERN = re.compile(r"^\s*[-*]\s+\S|^\s*\d+[.)]\s+\S")
+EMPH_PHRASES = ("不可绕过", "唯一出口", "绝不", "严禁", "红线", "如实")
+REQ_ID_PATTERN = re.compile(r"\b[WRTGP][0-9]{1,3}(?:[-.·][A-Za-z0-9]{1,6})?\b")
+AI_TOOL_PATTERN = re.compile(
+    r"Claude|ChatGPT|Copilot|Codex|Gemini|GPT-[45o]|作为 ?AI|AI 生成|AI生成|人工智能生成|大模型生成",
+    re.IGNORECASE,
+)
 
 
 def git_output(repo: Path, *args: str) -> str | None:
@@ -95,16 +120,56 @@ def scan_file(path: Path, relative: str) -> dict:
         "license_marker": [],
         "stub_line": [],
         "mojibake": [],
+        "md_markup": [],
+        "inline_code": [],
+        "section_ref": [],
+        "path_ref": [],
+        "halfwidth_paren_note": [],
+        "banner_divider": [],
+        "md_list": [],
+        "emph_phrase": [],
+        "req_id": [],
+        "ai_tool_marker": [],
     }
+    in_docstring = False
     for number, line in enumerate(lines, start=1):
         if PLACEHOLDER_PATTERN.search(line):
             hits["placeholder"].append(number)
-        if LICENSE_PATTERN.search(line):
+        if LICENSE_PATTERN.search(line) and not in_docstring:
             hits["license_marker"].append(number)
-        if STUB_PATTERN.match(line):
+        if STUB_PATTERN.match(line) and not in_docstring:
             hits["stub_line"].append(number)
         if any(snippet in line for snippet in MOJIBAKE_SNIPPETS):
             hits["mojibake"].append(number)
+        if MD_BOLD_PATTERN.search(line):
+            hits["md_markup"].append(number)
+        stripped = line.strip()
+        if stripped.startswith(INLINE_CODE_COMMENT_PREFIXES) and INLINE_CODE_PATTERN.search(line):
+            hits["inline_code"].append(number)
+        if SECTION_REF_PATTERN.search(line):
+            hits["section_ref"].append(number)
+        if PATH_REF_PATTERN.search(line) and "http://" not in line and "https://" not in line:
+            hits["path_ref"].append(number)
+        if HALFWIDTH_PAREN_NOTE_PATTERN.search(line):
+            hits["halfwidth_paren_note"].append(number)
+        if BANNER_DIVIDER_PATTERN.search(line):
+            hits["banner_divider"].append(number)
+        in_commentish = in_docstring or stripped.startswith("#")
+        comment_text = stripped[1:] if stripped.startswith("#") else stripped
+        if in_commentish and MD_LIST_PATTERN.match(comment_text):
+            hits["md_list"].append(number)
+        if (in_docstring or stripped.startswith("#")) and any(w in line for w in EMPH_PHRASES):
+            hits["emph_phrase"].append(number)
+        if REQ_ID_PATTERN.search(line):
+            hits["req_id"].append(number)
+        if AI_TOOL_PATTERN.search(line):
+            hits["ai_tool_marker"].append(number)
+        if relative.endswith(".py"):
+            triple = line.count(chr(34)*3)
+            if in_docstring and triple % 2 == 1:
+                in_docstring = False
+            elif not in_docstring and triple == 1:
+                in_docstring = True
     listed = {key: value[:MAX_LISTED_HITS] for key, value in hits.items() if value}
     return {
         "path": relative,
