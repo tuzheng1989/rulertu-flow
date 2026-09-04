@@ -353,3 +353,140 @@ def test_first_flag_applied_after_selection_over_3000(
     assert manifest["head_end"] == {"path": "main.py", "line": 1500, "text": "entry_1500"}
     assert manifest["tail_start"] == {"path": "app.py", "line": 501, "text": "line_0501"}
     assert manifest["last"] == {"path": "app.py", "line": 2000, "text": "line_2000"}
+
+
+# ---------------------------------------------------------------------------
+# 剥离口径：注释/空行/docstring 构建时剥离，行号重编，行数双轨
+# ---------------------------------------------------------------------------
+
+# 独立真值：main.py 原 7 行（shebang + 模块 docstring 2 行 + 空行 + def +
+# 函数 docstring + 行尾注）；剥离后 retained 2 行。app.py 原 4 行（注释 +
+# 代码 + 空行 + 代码）；retained 2 行。清单序 app 在前。
+STRIP_LAYOUT = {
+    "main.py": (
+        "#!/usr/bin/env python3\n"
+        '"""模块说明\n'
+        '跨行"""\n'
+        "\n"
+        "def run():\n"
+        '    """函数说明"""\n'
+        "    return 1  # 尾注\n"
+    ),
+    "app.py": "# 注释\nvalue = 1\n\nrun(value)\n",
+}
+
+
+def build_strip_layout(run_cli, scripts, write_tree, tmp_path):
+    repo = write_tree(STRIP_LAYOUT)
+    inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
+    return repo, inventory
+
+
+def test_strip_removes_comments_blanks_docstrings(
+    write_tree, run_cli, scripts, tmp_path
+):
+    """构建剥离：selected 按 retained 口径，manifest 双轨行数与逐文件统计。"""
+    _, inventory = build_strip_layout(run_cli, scripts, write_tree, tmp_path)
+    output = tmp_path / "src.docx"
+
+    result = run_cli(
+        scripts.build_source_docx,
+        "--inventory", inventory, "--output", output,
+        "--title", "演示系统", "--version", "V1.0",
+        "--lines-per-page", "500",
+    )
+    assert result.returncode == 0, result.stderr
+
+    manifest = read_manifest(output)
+    assert manifest["total_physical_lines"] == 11
+    assert manifest["total_retained_lines"] == 4
+    assert manifest["selected_line_count"] == 4
+    assert manifest["selection"] == "all"
+    assert manifest["strip_stats"]["app.py"] == {
+        "original_lines": 4,
+        "retained_lines": 2,
+        "removed_comment_lines": 1,
+        "removed_blank_lines": 1,
+        "trimmed_trailing_comments": 0,
+    }
+    assert manifest["strip_stats"]["main.py"] == {
+        "original_lines": 7,
+        "retained_lines": 2,
+        "removed_comment_lines": 4,
+        "removed_blank_lines": 1,
+        "trimmed_trailing_comments": 1,
+    }
+    # 首条记录为重编行号 1：app.py 剥离后首行
+    assert manifest["first"] == {"path": "app.py", "line": 1, "text": "value = 1"}
+    assert manifest["last"] == {"path": "main.py", "line": 2, "text": "    return 1  "}
+
+
+def test_docx_left_column_shows_filename_only(
+    write_tree, run_cli, scripts, tmp_path
+):
+    """docx 左列显示 文件名:重编行号，不显示相对路径目录前缀。"""
+    repo = write_tree({"sub/app.py": "value = 1  # 注\n\nrun()\n"})
+    inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
+    output = tmp_path / "src.docx"
+
+    result = run_cli(
+        scripts.build_source_docx,
+        "--inventory", inventory, "--output", output,
+        "--title", "演示系统", "--version", "V1.0",
+        "--lines-per-page", "500",
+    )
+    assert result.returncode == 0, result.stderr
+
+    from docx import Document
+
+    table = Document(str(output)).tables[0]
+    cells = [
+        (row.cells[0].text, row.cells[1].text)
+        for row in table.rows
+    ]
+    assert cells == [
+        ("app.py:1", "value = 1  "),
+        ("app.py:2", "run()"),
+    ]
+
+
+def test_selection_all_when_stripping_crosses_3000_threshold(
+    write_tree, run_cli, scripts, tmp_path
+):
+    """3,000 行阈值按剥离后行数判定：原始 3200 行、剥离后 1600 行 → 全选。"""
+    body = "".join(f"line_{i:04d}\n\n" for i in range(1, 1601))
+    repo = write_tree({"big.py": body})
+    inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
+    output = tmp_path / "src.docx"
+
+    result = run_cli(
+        scripts.build_source_docx,
+        "--inventory", inventory, "--output", output,
+        "--title", "演示系统", "--version", "V1.0",
+        "--lines-per-page", "1600",
+    )
+    assert result.returncode == 0, result.stderr
+
+    manifest = read_manifest(output)
+    assert manifest["total_physical_lines"] == 3200
+    assert manifest["total_retained_lines"] == 1600
+    assert manifest["selection"] == "all"
+    assert manifest["selected_line_count"] == 1600
+    assert manifest["tail_start"] is None
+
+
+def test_python_syntax_error_refuses_build(
+    write_tree, run_cli, scripts, tmp_path
+):
+    """Python 语法不可解析：拒构建转人工，不伪造通过。"""
+    repo = write_tree({"broken.py": "def broken(:\n"})
+    inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
+
+    result = run_cli(
+        scripts.build_source_docx,
+        "--inventory", inventory, "--output", tmp_path / "src.docx",
+        "--title", "演示系统", "--version", "V1.0",
+    )
+    assert result.returncode != 0
+    assert "strip failed" in result.stderr
+    assert "broken.py" in result.stderr

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Create an auditable Word source-code excerpt from an inventory JSON."""
+"""Create an auditable Word source-code excerpt from an inventory JSON.
+
+申报口径：源代码文档不得包含注释、不得有空行。构建时经 strip_source 剥离，
+仓库源码不动；manifest 双轨记录原始行数（total_physical_lines）与剥离后行数
+（total_retained_lines）及每文件剥离统计（strip_stats）。选择、截断、行号
+一律以剥离后（retained）口径为准；左列显示 文件名:行号（不显示相对路径）。
+"""
 
 from __future__ import annotations
 
@@ -18,6 +24,8 @@ try:
     from docx.shared import Cm, Pt
 except ImportError as exc:
     raise SystemExit("python-docx is required: python -m pip install python-docx") from exc
+
+from strip_source import StripError, strip_lines
 
 
 def decode(data: bytes) -> str:
@@ -87,19 +95,23 @@ def main() -> int:
     ordered += [entry for entry in included if entry["path"] not in first_paths]
 
     records: list[dict] = []
+    strip_stats: dict[str, dict] = {}
+    total_original = 0
     for entry in ordered:
         path = repo / entry["path"]
         data = path.read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if digest != entry["sha256"]:
             raise SystemExit(f"source changed after inventory: {entry['path']}")
-        lines = decode(data).splitlines()
-        if entry["physical_lines"] and data.endswith((b"\n", b"\r")):
-            pass
-        for number, content in enumerate(lines, start=1):
+        try:
+            kept, file_stats = strip_lines(decode(data), path.suffix)
+        except StripError as exc:
+            raise SystemExit(f"strip failed: {entry['path']}: {exc}") from exc
+        strip_stats[entry["path"]] = file_stats
+        total_original += file_stats["original_lines"]
+        name = path.name
+        for number, content in enumerate(kept, start=1):
             records.append({"path": entry["path"], "line": number, "text": content})
-        if entry["physical_lines"] > len(lines):
-            records.append({"path": entry["path"], "line": len(lines) + 1, "text": ""})
 
     total = len(records)
     selected = records if total <= 3000 else records[:1500] + records[-1500:]
@@ -139,7 +151,7 @@ def main() -> int:
             cells[1].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             set_cell_shading(cells[0], "F2F2F2")
             for cell, value, font_name, size in (
-                (cells[0], f"{item['path']}:{item['line']}", "宋体", 6.5),
+                (cells[0], f"{Path(item['path']).name}:{item['line']}", "宋体", 6.5),
                 (cells[1], item["text"].replace("\t", "    "), "Consolas", 6.5),
             ):
                 paragraph = cell.paragraphs[0]
@@ -159,7 +171,9 @@ def main() -> int:
         "inventory": str(args.inventory.resolve()),
         "title": args.title,
         "version": args.version,
-        "total_physical_lines": total,
+        "total_physical_lines": total_original,
+        "total_retained_lines": total,
+        "strip_stats": strip_stats,
         "selected_line_count": len(selected),
         "selection": "all" if total <= 3000 else "first-1500-and-last-1500",
         "reordered_first": first_paths,
