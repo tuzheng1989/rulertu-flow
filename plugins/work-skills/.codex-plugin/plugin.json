@@ -1,6 +1,6 @@
 {
   "name": "work-skills",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "工作型技能合集：深度研究、战略分析、文档转换与思维工具",
   "author": {
     "name": "rulertu",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Work Skills",
     "shortDescription": "深度研究、战略分析、文档转换与思维工具",
-    "longDescription": "17 个工作型技能：深度研究（deep-research + 多源搜索通道）、战略分析、头脑风暴、费曼教学、文档与网页转换（PDF/Markdown）、长文写作、去 AI 味改写等。",
+    "longDescription": "18 个工作型技能：深度研究（deep-research + 多源搜索通道）、战略分析、头脑风暴、费曼教学、文档与网页转换（PDF/Markdown）、录屏自动精简、长文写作、去 AI 味改写等。",
     "developerName": "rulertu",
     "category": "Productivity",
     "capabilities": ["Research", "Documents", "Writing"],

@@ -1,0 +1,3 @@
+interface:
+  display_name: "录屏自动精简"
+  short_description: "离线识别录屏画面变化，自动压缩等待并导出指定时长的无声短视频"
