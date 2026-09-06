@@ -30,7 +30,7 @@ def validate() -> list[str]:
     review_schema = load(PLUGIN / "skills" / "plan-iterate" / "scripts" / "review-schema.json")
     plan_iterate = (PLUGIN / "skills" / "plan-iterate" / "SKILL.md").read_text(encoding="utf-8")
     require(codex_manifest["name"] == claude_manifest["name"] == "rulertu-flow", "manifest names differ", errors)
-    require(codex_manifest["version"] == claude_manifest["version"] == "2.0.0", "manifest versions differ", errors)
+    require(codex_manifest["version"] == claude_manifest["version"], "manifest versions differ", errors)
     codex_flow = market_entry(codex_market, "rulertu-flow")
     claude_flow = market_entry(claude_market, "rulertu-flow")
     require(codex_flow is not None and claude_flow is not None, "rulertu-flow marketplace entry missing", errors)
@@ -79,13 +79,19 @@ def validate() -> list[str]:
             if front:
                 require("name:" in front.group(1) and "description:" in front.group(1), f"incomplete frontmatter: {skill}", errors)
 
-    role_models = {"executor": "sonnet", "auditor": "opus", "advisor": "opus"}
+    role_models = {"auditor": "opus", "advisor": "opus"}
     for role, model in role_models.items():
         wrapper = (PLUGIN / "agents" / f"{role}.md").read_text(encoding="utf-8")
         require(f"model: {model}" in wrapper, f"{role} wrapper model must be {model}", errors)
         require(f"references/roles/{role}.md" in wrapper, f"{role} wrapper lacks role pointer", errors)
         require(len(wrapper.splitlines()) <= 10, f"{role} wrapper is not thin", errors)
         require((PLUGIN / "references" / "roles" / f"{role}.md").is_file(), f"{role} body missing", errors)
+
+    executor_wrapper = (PLUGIN / "agents" / "executor.md").read_text(encoding="utf-8")
+    require("model:" not in executor_wrapper, "executor wrapper must not pin a model", errors)
+    require("references/roles/executor.md" in executor_wrapper, "executor wrapper lacks role pointer", errors)
+    require(len(executor_wrapper.splitlines()) <= 10, "executor wrapper is not thin", errors)
+    require((PLUGIN / "references" / "roles" / "executor.md").is_file(), "executor role body missing", errors)
 
     executor = (PLUGIN / "references" / "roles" / "executor.md").read_text(encoding="utf-8")
     implement = (PLUGIN / "skills" / "implement-plan" / "SKILL.md").read_text(encoding="utf-8")
@@ -102,6 +108,8 @@ def validate() -> list[str]:
         )
     require('fork_turns="all"' in implement and "强制继承主控模型" in implement, "Codex full-fork guard missing", errors)
     require("普通子任务不扩大为全仓测试" in executor, "Executor directed-test policy missing", errors)
+    require("需主控裁决" in executor, "Executor escalation marker missing", errors)
+    require("直连" in implement, "Advisor direct-dispatch policy missing", errors)
     require("收尾时跑一次全量测试" not in executor + implement, "legacy full-suite rule remains", errors)
     require(implement.count("仅有以下情况运行全量测试") == 1, "full-suite exceptions must have one policy source", errors)
     for stale in (ROOT / "skills", ROOT / "agents", ROOT / ".codex-plugin"):

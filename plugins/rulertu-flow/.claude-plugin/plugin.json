@@ -1,7 +1,7 @@
 {
   "name": "rulertu-flow",
   "description": "分级规划、执行与验证工作流",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "author": { "name": "rulertu" },
   "homepage": "https://github.com/tuzheng1989/rulertu-flow",
   "repository": "https://github.com/tuzheng1989/rulertu-flow"

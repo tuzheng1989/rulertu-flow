@@ -23,7 +23,8 @@ description: 执行含 T0-T3 定级的分批实施计划。当用户要求执行
 
   `fork_turns="all"` 会强制继承主控模型，不用于这三个角色。Auditor/Advisor 的独立上下文所需事实全部由证据包注入。
 - Claude Code：调用 `rulertu-flow:executor`、`rulertu-flow:auditor`、`rulertu-flow:advisor` 薄封装。模型路由由 wrapper frontmatter 固定：Executor 使用 `sonnet`，Auditor 与 Advisor 使用 `opus`。
-- Advisor 只由主控派发。Executor 只上报角色文档列出的咨询触发条件。
+- Advisor 由主控或 Executor 派发：技术歧义类 Executor 可直连，条件与输入要件见角色文档，意见原文落盘证据目录；边界与范围类必须上报主控。主控验收回报时复核落盘意见是否越界、输入是否为具体选择题。
+- Codex 侧 Executor 无嵌套代理能力时，上报触发条件与完整试错清单，由主控按同规格派发；输入要件不降。
 
 委派能力不可用时，T1 由主控实施，并加强定向测试与完整差异核验，同时在证据中声明降级；T2/T3 立即阻断并报告缺失能力。
 

@@ -8,6 +8,13 @@
 - `validate_repo.py`：marketplace 条目按名称查找（不再依赖数组顺序），并遍历所有插件校验双宿主 manifest 一致性、skills 目录与技能 frontmatter。
 - CI 的 Codex 安装冒烟测试覆盖全部三个插件；README 新增选择性与安装范围（user/project/local）说明。
 
+## 2.3.0
+
+- 咨询权分类下放：技术歧义类（一次修复失败后仍有多个可信方案、接缝选型歧义且不动边界与公共契约）允许 Executor 直连 Advisor，输入要件强制自包含（委派单原文、试错清单、锚点、具体选择题），意见原文落盘证据目录；边界、公共契约与批次范围类仍必须上报主控。
+- Advisor 角色适配双委派方：Executor 委派时涉及边界的建议标注"需主控裁决"；选择题偏颇时先点明再作答。
+- Codex 侧 Executor 无嵌套代理能力时降级为主控按同规格派发，输入要件不降。
+- `validate_repo.py`：解除版本硬编码与 executor 模型钉死（改为禁止 wrapper 内钉模型），新增直连机制与上报标记防回退锚点。
+
 ## 2.0.0
 
 - Breaking: 插件安装根从仓库根迁移到 `plugins/rulertu-flow`，1.x 用户需要卸载并重新安装。
