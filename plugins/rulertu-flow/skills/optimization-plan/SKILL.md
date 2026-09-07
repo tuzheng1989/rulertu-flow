@@ -1,6 +1,8 @@
 ---
 name: optimization-plan
 description: 分批优化或修复方案的撰写标准与风险定级工作流。当用户要求制定分批优化方案、实施计划、optimization-plan、批次五要素，或任何“多批次实施 + 验证收口”的方案时使用。包含 T0-T3 风险分级；本技能只管如何写方案，执行侧规则的唯一出处是同插件的 implement-plan。方案拆成至少两个有依赖关系的实施批次时必须使用；单票小改不触发。
+model: opus
+effort: max
 ---
 
 # 分批优化方案 · 撰写标准与分级验证
