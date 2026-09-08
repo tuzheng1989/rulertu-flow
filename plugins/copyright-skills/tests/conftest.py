@@ -48,6 +48,7 @@ def scripts() -> SimpleNamespace:
         build_manual_docx=CN_SCRIPTS / "build_manual_docx.py",
         registration_form=CN_SCRIPTS / "registration_form.py",
         strip_source=CN_SCRIPTS / "strip_source.py",
+        batch_validate=CN_SCRIPTS / "batch_validate.py",
         scan_source=REVIEW_SCRIPTS / "scan_source.py",
         similarity_check=REVIEW_SCRIPTS / "similarity_check.py",
     )

@@ -20,6 +20,10 @@ description: "Generate Chinese computer-software copyright application materials
 6. 改稿后逐句回查事实表：专名、数字、状态、功能边界和限制必须与证据一致；改稿新增而无来源的事实全部撤回。完成标准：每段申报文字均能指向仓库文件、界面截图或用户确认。
 7. 在独立输出目录交付原模板副本、说明书 `.docx`、源代码 `.docx`、代码清单 JSON、事实表、权属文件清单、render-report（说明书/源代码渲染实测）、submission-check（提交前校验）和 `review-needed.md`。官网申请须知的核对 URL 为待人工补齐项，交付时列入 `review-needed.md` 防遗忘。保留原模板和原截图，不覆盖用户文件。
 
+## 多软著批量模式（一项目多报）
+
+用户要求把一份项目拆多个软著（如一次批量生成 5 份材料）时，读 [references/multi-filing.md](references/multi-filing.md)。拆分按模块真实边界做，先编 batch 配置并运行 `scripts/batch_validate.py`（唯一归属、代码行达标、两两查重三道校验，任一阻断不进入生成），通过后逐条目走本工作流单套流程；说明书与登记表逐份独立撰写，不跨份复用。同代码换名称的"换汤不换药"批量申报是高概率团灭路径，不做。
+
 ## 总体约束
 
 - 当前工作树可能有未提交改动。材料按用户指定的代码状态生成，并在清单中记录 Git 提交号、分支和工作树是否干净；不要为了“统一版本”改动或清理仓库。
