@@ -1,11 +1,11 @@
-"""build_source_docx.py 行为基线（B3）。
+"""build_source_docx.py 行为基线。
 
 锚点（build_source_docx.py）：
-- :61-62  --lines-per-page 必须 >= 1
-- :63-65  输出已存在拒绝覆盖
-- :74-75  入选文件 sha256 与清单不符时拒构建
-- :85     <=3000 全选；>3000 取前 1500 + 后 1500
-- :138-157 manifest 字段（selection / selected_line_count / first/head_end/tail_start/last / selected_sha256）
+- --lines-per-page 必须 >= 1；输出已存在拒绝覆盖；sha256 漂移拒构建
+- <=3,000 代码行全选；>3,000 代码行取覆盖前 1,500 代码行的物理行段 +
+  覆盖后 1,500 代码行的物理行段，段内注释与空行随物理行保留
+- manifest 双轨（total_physical_lines / total_code_lines）与边界条目、
+  selected_sha256
 """
 
 from __future__ import annotations
@@ -46,9 +46,11 @@ def test_at_most_3000_lines_selects_all(write_tree, run_cli, scripts, tmp_path, 
     assert output.is_file()
 
     manifest = read_manifest(output)
-    # 独立真值：写入的 10 + 3 = 13 行
+    # 独立真值：写入的 10 + 3 = 13 行（无注释空行，物理行=代码行）
     assert manifest["total_physical_lines"] == 13
-    assert manifest["selected_line_count"] == 13
+    assert manifest["total_code_lines"] == 13
+    assert manifest["selected_physical_line_count"] == 13
+    assert manifest["selected_code_line_count"] == 13
     assert manifest["selection"] == "all"
     assert manifest["tail_start"] is None
     # 清单序（casefold）在前：app.py 排在 main.py 之前
@@ -72,10 +74,12 @@ def test_over_3000_lines_takes_head_and_tail(write_tree, run_cli, scripts, tmp_p
     assert result.returncode == 0, result.stderr
 
     manifest = read_manifest(output)
-    # 独立真值：3001 行文件，records[:1500] 是 1..1500，records[-1500:] 是 1502..3001
+    # 独立真值：3001 行全为代码行，head 段物理 1..1500，tail 段物理 1502..3001
     assert manifest["total_physical_lines"] == 3001
-    assert manifest["selected_line_count"] == 3000
-    assert manifest["selection"] == "first-1500-and-last-1500"
+    assert manifest["total_code_lines"] == 3001
+    assert manifest["selected_physical_line_count"] == 3000
+    assert manifest["selected_code_line_count"] == 3000
+    assert manifest["selection"] == "first-1500-code-lines-and-last-1500"
     assert manifest["first"] == {"path": "big.py", "line": 1, "text": "line_0001"}
     assert manifest["head_end"]["line"] == 1500
     assert manifest["tail_start"]["line"] == 1502
@@ -210,7 +214,8 @@ def test_first_flag_moves_entry_to_front(write_tree, run_cli, scripts, tmp_path,
     assert manifest["first"]["line"] == 1
     # 其余文件保持清单相对顺序：app.py 在 zed.py 前，串接顺序 main → app → zed
     assert manifest["last"]["path"] == "zed.py"
-    assert manifest["selected_line_count"] == 5
+    assert manifest["selected_physical_line_count"] == 5
+    assert manifest["selected_code_line_count"] == 5
     assert manifest["selected_sha256"] == expected_sha256(["main.py", "app.py", "zed.py"])
 
 
@@ -272,8 +277,10 @@ def test_first_flag_keeps_line_count_changes_sha256(
 
     plain_manifest = read_manifest(tmp_path / "plain.docx")
     fronted_manifest = read_manifest(tmp_path / "fronted.docx")
-    assert plain_manifest["selected_line_count"] == 5
-    assert fronted_manifest["selected_line_count"] == plain_manifest["selected_line_count"]
+    assert plain_manifest["selected_physical_line_count"] == 5
+    assert plain_manifest["selected_code_line_count"] == 5
+    assert fronted_manifest["selected_physical_line_count"] == plain_manifest["selected_physical_line_count"]
+    assert fronted_manifest["selected_code_line_count"] == plain_manifest["selected_code_line_count"]
     assert fronted_manifest["selected_sha256"] != plain_manifest["selected_sha256"]
     assert fronted_manifest["selected_sha256"] == expected_sha256(["main.py", "app.py", "zed.py"])
     # 无 --first 的构建顺序不受影响：仍是清单序 app → main → zed
@@ -346,9 +353,11 @@ def test_first_flag_applied_after_selection_over_3000(
 
     manifest = read_manifest(output)
     assert manifest["total_physical_lines"] == 5001
-    assert manifest["selection"] == "first-1500-and-last-1500"
+    assert manifest["total_code_lines"] == 5001
+    assert manifest["selection"] == "first-1500-code-lines-and-last-1500"
     assert manifest["reordered_first"] == ["main.py"]
-    assert manifest["selected_line_count"] == 3000
+    assert manifest["selected_physical_line_count"] == 3000
+    assert manifest["selected_code_line_count"] == 3000
     assert manifest["first"] == {"path": "main.py", "line": 1, "text": "entry_0001"}
     assert manifest["head_end"] == {"path": "main.py", "line": 1500, "text": "entry_1500"}
     assert manifest["tail_start"] == {"path": "app.py", "line": 501, "text": "line_0501"}
@@ -356,12 +365,12 @@ def test_first_flag_applied_after_selection_over_3000(
 
 
 # ---------------------------------------------------------------------------
-# 剥离口径：注释/空行/docstring 构建时剥离，行号重编，行数双轨
+# 代码行口径：物理行全渲染（注释空行保留），行数达标按代码行统计
 # ---------------------------------------------------------------------------
 
 # 独立真值：main.py 原 7 行（shebang + 模块 docstring 2 行 + 空行 + def +
-# 函数 docstring + 行尾注）；剥离后 retained 2 行。app.py 原 4 行（注释 +
-# 代码 + 空行 + 代码）；retained 2 行。清单序 app 在前。
+# 函数 docstring + 行尾注），代码行 [5, 7] 共 2 行。app.py 原 4 行（注释 +
+# 代码 + 空行 + 代码），代码行 [2, 4] 共 2 行。清单序 app 在前。
 STRIP_LAYOUT = {
     "main.py": (
         "#!/usr/bin/env python3\n"
@@ -382,10 +391,10 @@ def build_strip_layout(run_cli, scripts, write_tree, tmp_path):
     return repo, inventory
 
 
-def test_strip_removes_comments_blanks_docstrings(
+def test_physical_lines_rendered_and_code_lines_accounted(
     write_tree, run_cli, scripts, tmp_path
 ):
-    """构建剥离：selected 按 retained 口径，manifest 双轨行数与逐文件统计。"""
+    """物理行全渲染（含注释空行），manifest 双轨行数与逐文件统计。"""
     _, inventory = build_strip_layout(run_cli, scripts, write_tree, tmp_path)
     output = tmp_path / "src.docx"
 
@@ -399,8 +408,9 @@ def test_strip_removes_comments_blanks_docstrings(
 
     manifest = read_manifest(output)
     assert manifest["total_physical_lines"] == 11
-    assert manifest["total_retained_lines"] == 4
-    assert manifest["selected_line_count"] == 4
+    assert manifest["total_code_lines"] == 4
+    assert manifest["selected_physical_line_count"] == 11
+    assert manifest["selected_code_line_count"] == 4
     assert manifest["selection"] == "all"
     assert manifest["strip_stats"]["app.py"] == {
         "original_lines": 4,
@@ -416,16 +426,16 @@ def test_strip_removes_comments_blanks_docstrings(
         "removed_blank_lines": 1,
         "trimmed_trailing_comments": 1,
     }
-    # 首条记录为重编行号 1：app.py 剥离后首行
-    assert manifest["first"] == {"path": "app.py", "line": 1, "text": "value = 1"}
-    assert manifest["last"] == {"path": "main.py", "line": 2, "text": "    return 1  "}
+    # 首末记录为物理首末行：注释与行尾注随行保留
+    assert manifest["first"] == {"path": "app.py", "line": 1, "text": "# 注释"}
+    assert manifest["last"] == {"path": "main.py", "line": 7, "text": "    return 1  # 尾注"}
 
 
-def test_docx_left_column_shows_filename_only(
+def test_docx_renders_all_physical_lines_with_relative_path(
     write_tree, run_cli, scripts, tmp_path
 ):
-    """docx 左列显示 文件名:重编行号，不显示相对路径目录前缀。"""
-    repo = write_tree({"sub/app.py": "value = 1  # 注\n\nrun()\n"})
+    """docx 左列显示 相对路径:原物理行号；注释行与空行原样成行。"""
+    repo = write_tree({"sub/app.py": "# 顶注\nvalue = 1  # 注\n\nrun()\n"})
     inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
     output = tmp_path / "src.docx"
 
@@ -445,15 +455,17 @@ def test_docx_left_column_shows_filename_only(
         for row in table.rows
     ]
     assert cells == [
-        ("app.py:1", "value = 1  "),
-        ("app.py:2", "run()"),
+        ("sub/app.py:1", "# 顶注"),
+        ("sub/app.py:2", "value = 1  # 注"),
+        ("sub/app.py:3", ""),
+        ("sub/app.py:4", "run()"),
     ]
 
 
-def test_selection_all_when_stripping_crosses_3000_threshold(
+def test_selection_all_when_code_lines_under_3000(
     write_tree, run_cli, scripts, tmp_path
 ):
-    """3,000 行阈值按剥离后行数判定：原始 3200 行、剥离后 1600 行 → 全选。"""
+    """3,000 行阈值按代码行判定：原始 3200 物理行、代码行 1600 → 全选。"""
     body = "".join(f"line_{i:04d}\n\n" for i in range(1, 1601))
     repo = write_tree({"big.py": body})
     inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
@@ -469,10 +481,52 @@ def test_selection_all_when_stripping_crosses_3000_threshold(
 
     manifest = read_manifest(output)
     assert manifest["total_physical_lines"] == 3200
-    assert manifest["total_retained_lines"] == 1600
+    assert manifest["total_code_lines"] == 1600
     assert manifest["selection"] == "all"
-    assert manifest["selected_line_count"] == 1600
+    assert manifest["selected_physical_line_count"] == 3200
+    assert manifest["selected_code_line_count"] == 1600
     assert manifest["tail_start"] is None
+
+
+def test_head_tail_segments_bound_at_code_lines_and_keep_comments(
+    write_tree, run_cli, scripts, tmp_path
+):
+    """前后段按代码行定界：边界停在第 1500 / 第 total−1499 个代码行所在
+    物理行，段内注释与空行随物理行保留。
+
+    独立真值：big.py = line_0001..line_1500（物理 1..1500，代码 1..1500）+
+    "# 头段边界注释"（物理 1501）+ line_1501..line_3001（物理 1502..3002，
+    代码 1501..3001）。总代码行 3001 > 3000。
+    head 段 = 物理 1..1500；tail 段 = 第 1502 个代码行（line_1502，物理 1503）
+    至末行物理 3002；物理 1501 的注释与物理 1502 的 line_1501 落在中段不提交。
+    """
+    body = (
+        "".join(f"line_{i:04d}\n" for i in range(1, 1501))
+        + "# 头段边界注释\n"
+        + "".join(f"line_{i:04d}\n" for i in range(1501, 3002))
+    )
+    repo = write_tree({"big.py": body})
+    inventory = build_inventory(run_cli, scripts, repo, tmp_path / "inventory.json")
+    output = tmp_path / "src.docx"
+
+    result = run_cli(
+        scripts.build_source_docx,
+        "--inventory", inventory, "--output", output,
+        "--title", "演示系统", "--version", "V1.0",
+        "--lines-per-page", "3000",
+    )
+    assert result.returncode == 0, result.stderr
+
+    manifest = read_manifest(output)
+    assert manifest["total_physical_lines"] == 3002
+    assert manifest["total_code_lines"] == 3001
+    assert manifest["selection"] == "first-1500-code-lines-and-last-1500"
+    assert manifest["selected_physical_line_count"] == 3000
+    assert manifest["selected_code_line_count"] == 3000
+    assert manifest["first"] == {"path": "big.py", "line": 1, "text": "line_0001"}
+    assert manifest["head_end"] == {"path": "big.py", "line": 1500, "text": "line_1500"}
+    assert manifest["tail_start"] == {"path": "big.py", "line": 1503, "text": "line_1502"}
+    assert manifest["last"] == {"path": "big.py", "line": 3002, "text": "line_3001"}
 
 
 def test_python_syntax_error_refuses_build(

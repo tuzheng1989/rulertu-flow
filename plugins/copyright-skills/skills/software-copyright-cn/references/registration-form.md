@@ -67,7 +67,7 @@ python scripts/registration_form.py fill --template "登记表.xlsx" --facts "re
 
 - 软件名称、版本与两份 Word 文档完全一致。
 - 每个声称的功能指向具体代码证据（文件/函数），与说明书章节对应；无实现对应的声称功能删去或列入 `review-needed.md`，不保留。
-- 源程序量取自源代码构建 manifest 的剥离后行数（`total_retained_lines`，注释与空行已剥离口径），与提交文档页数 × 每页行数自洽；原始物理行数（`total_physical_lines`）与逐文件剥离统计（`strip_stats`）在审计文件中可追溯。
+- 源程序量取自源代码构建 manifest 的代码行数（`total_code_lines`，注释与空行不计入），与截断口径（3,000 阈值、前后 1,500 段）自洽；原始物理行数（`total_physical_lines`）与逐文件统计（`strip_stats`）在审计文件中可追溯。
 - 主体、日期、发表和权利字段均为 `user_confirmed` 或明确列入 `review-needed.md`。
 - 在线填报映射表中无未决的 `pending` 项，或未决项已列入 `review-needed.md`。
 - 底稿模板未改，输出副本可正常打开，版式和打印区域无明显变化。

@@ -216,3 +216,30 @@ def test_no_comment_no_blank_passthrough(strip_lines):
         "removed_blank_lines": 0,
         "trimmed_trailing_comments": 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# 代码行定位（code_line_rows）：物理行号映射
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def code_line_rows(load_module, scripts):
+    """加载 strip_source 模块并返回其 code_line_rows 函数。"""
+    module = load_module("strip_source", scripts.strip_source.parent)
+    return module.code_line_rows
+
+
+def test_py_code_line_rows_map_to_physical_lines(code_line_rows):
+    """Python：代码行返回 1 起物理行号，注释/空行/docstring 不占代码行。"""
+    text = "#!/usr/bin/env python3\n# 说明\nvalue = 1\n\nrun(value)  # 尾注\n"
+    rows, stats = code_line_rows(text, ".py")
+    assert rows == [3, 5]
+    assert stats["retained_lines"] == 2
+
+
+def test_js_code_line_rows_map_to_physical_lines(code_line_rows):
+    """js：整行注/块注行不占代码行，行尾注所在行算代码行。"""
+    text = "// 头\nconst a = 1;  // 注\n\n/* 块\n注 */\nrun();\n"
+    py_rows, stats = code_line_rows(text, ".js")
+    assert py_rows == [2, 6]
+    assert stats["retained_lines"] == 2

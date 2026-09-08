@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Strip comments and blank lines from source text for copyright submission.
+"""Locate code lines (non-comment, non-blank) in source text for line accounting.
 
-新口径：申报源代码不得包含注释、不得有空行。剥离发生在构建层，仓库源码不动。
-Python 走 tokenize + ast 精确路径；其余语言走引号感知状态机（启发式，局限见
-references/source-code.md）。字符串字面量内的注释符绝不误删。
+行数统计器：申报行数达标（3,000 阈值 / 前 1,500 + 后 1,500）按代码行口径统计，
+注释与空行不计入行数，但仍保留在提交文档中（中文功能注释是审查要点，口径见
+references/source-code.md）。剥离逻辑在此复用于定位代码行；构建器渲染使用原始
+物理行，仓库源码不动。Python 走 tokenize + ast 精确路径；其余语言走引号感知
+状态机（启发式，局限见 references/source-code.md）。字符串字面量内的注释符
+绝不误删。
 """
 
 from __future__ import annotations
@@ -42,6 +45,23 @@ StripStats = dict[str, int]
 
 def strip_lines(text: str, suffix: str) -> tuple[list[str], StripStats]:
     """按扩展名剥离注释与空行，返回 (保留行, 统计)。行内代码原文逐字保留。"""
+    kept, _, stats = _strip(text, suffix)
+    return kept, stats
+
+
+def code_line_rows(text: str, suffix: str) -> tuple[list[int], StripStats]:
+    """返回代码行（非注释、非空行）的 1 起物理行号列表与统计。
+
+    行尾注释所在行算代码行；docstring 与多行字符串内部行的归类与 strip_lines
+    的保留/删除判定完全一致，只是额外给出物理行号。
+    """
+    _, rows, stats = _strip(text, suffix)
+    return rows, stats
+
+
+def _strip(
+    text: str, suffix: str
+) -> tuple[list[str], list[int], StripStats]:
     stats = {
         "original_lines": len(text.splitlines()),
         "retained_lines": 0,
@@ -50,37 +70,41 @@ def strip_lines(text: str, suffix: str) -> tuple[list[str], StripStats]:
         "trimmed_trailing_comments": 0,
     }
     if suffix.lower() == ".py":
-        kept = _strip_python(text, stats)
+        kept, rows = _strip_python(text, stats)
     else:
         rule_name = SUFFIX_RULES.get(suffix.lower())
         if rule_name is None:
             raise StripError(f"unsupported source extension: {suffix!r}")
-        kept = _strip_generic(text, STRIP_RULES[rule_name], stats)
+        kept, rows = _strip_generic(text, STRIP_RULES[rule_name], stats)
     stats["retained_lines"] = len(kept)
-    return kept, stats
+    return kept, rows, stats
 
 
 # ---------------------------------------------------------------------------
 # Python 精确路径：tokenize 定位注释，ast 区分 docstring 与多行字符串
 # ---------------------------------------------------------------------------
 
-def _strip_python(text: str, stats: StripStats) -> list[str]:
+def _strip_python(text: str, stats: StripStats) -> tuple[list[str], list[int]]:
     full_line_rows, trailing_cols = _py_comment_facts(text)
     doc_rows, string_rows = _py_string_rows(text)
     kept: list[str] = []
+    rows: list[int] = []
     for number, line in enumerate(text.splitlines(), start=1):
         if number in doc_rows or number in full_line_rows:
             stats["removed_comment_lines"] += 1
         elif number in trailing_cols:
             kept.append(line[:trailing_cols[number]])
+            rows.append(number)
             stats["trimmed_trailing_comments"] += 1
         elif number in string_rows:
             kept.append(line)  # 多行字符串内部（非 docstring）逐字保留
+            rows.append(number)
         elif not line.strip():
             stats["removed_blank_lines"] += 1
         else:
             kept.append(line)
-    return kept
+            rows.append(number)
+    return kept, rows
 
 
 def _py_comment_facts(text: str) -> tuple[set[int], dict[int, int]]:
@@ -126,23 +150,26 @@ def _py_string_rows(text: str) -> tuple[set[int], set[int]]:
 # 非 Python 启发式路径：引号感知状态机（正则字面量、模板插值等属已知局限）
 # ---------------------------------------------------------------------------
 
-def _strip_generic(text: str, rule: dict, stats: StripStats) -> list[str]:
+def _strip_generic(text: str, rule: dict, stats: StripStats) -> tuple[list[str], list[int]]:
     line_markers: list[str] = rule["line"]
     block_markers: list[tuple[str, str]] = rule["block"]
     quotes = rule["quotes"]
     kept: list[str] = []
+    rows: list[int] = []
     state = {"buffer": "", "quote": "", "block_end": "", "escape": False,
-             "is_comment": False, "trimmed": False}
+             "is_comment": False, "trimmed": False, "row": 1}
 
     def flush() -> None:
         if state["buffer"].strip():
             if state["trimmed"]:
                 stats["trimmed_trailing_comments"] += 1
             kept.append(state["buffer"].rstrip("\n"))
+            rows.append(state["row"])
         elif state["is_comment"]:
             stats["removed_comment_lines"] += 1
         else:
             stats["removed_blank_lines"] += 1
+        state["row"] += 1
         state["buffer"] = ""
         state["is_comment"] = False
         state["trimmed"] = False
@@ -208,7 +235,7 @@ def _strip_generic(text: str, rule: dict, stats: StripStats) -> list[str]:
 
     if state["buffer"] or state["is_comment"] or state["trimmed"]:
         flush()  # 末行无换行符
-    return kept
+    return kept, rows
 
 
 def _match_marker(markers: list[str], pair: str, char: str) -> str | None:
