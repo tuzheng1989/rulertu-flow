@@ -214,3 +214,44 @@ def test_audit_round2_rules_negative_cases(load_module, scripts, tmp_path):
     result = module.scan_file(path, "sample.py")
     for key in ("banner_divider", "md_list", "emph_phrase", "req_id", "ai_tool_marker"):
         assert key not in result["findings"], (key, result["findings"])
+
+
+def test_sensitive_info_rules_hit(load_module, scripts, tmp_path):
+    """敏感信息：URL 全行命中；第三方软件名只命中注释/docstring（独立真值）。
+
+    依据经验清单第 3 条（提交材料不得含他人网址/软件名）；API endpoint 等
+    合法 URL 命中后由用户审批豁免，脚本只列项不判罚。
+    """
+    module = load_module("scan_source", scripts.scan_source.parent)
+    sample = "\n".join([
+        "# 项目主页见 https://github.com/someone/proj",   # 1 URL + 第三方名
+        "# 原 demo 基于 Flask 实现",                      # 2 注释里的第三方名
+        "import flask  # 库名小写且非注释",                # 3 不命中 third_party_name
+        "ENDPOINT = \"https://api.example.com/v1\"",      # 4 代码内 URL，列项供审批
+        '"""',                                           # 5 docstring 开
+        "基于 Docker 部署",                               # 6 docstring 第三方名
+        '"""',                                           # 7 docstring 闭
+    ])
+    path = tmp_path / "sample.py"
+    path.write_text(sample, encoding="utf-8")
+
+    result = module.scan_file(path, "sample.py")
+    assert result["findings"]["sensitive_url"] == [1, 4]
+    # 行 1 的 github.com 是小写，大小写敏感词表不命中；GitHub 驼峰才命中
+    assert result["findings"]["third_party_name"] == [2, 6]
+
+
+def test_sensitive_info_rules_negative_cases(load_module, scripts, tmp_path):
+    """负例：自有标识符含第三方名子串不命中；无 URL 的普通注释不命中。"""
+    module = load_module("scan_source", scripts.scan_source.parent)
+    sample = "\n".join([
+        "component = ReactWidget()",               # 1 词边界：ReactWidget 非 React
+        "# 自研调度器按优先级出队，无外部依赖",        # 2 普通注释
+        "host = 'localhost:8080'",                 # 3 无 scheme 的地址不算 URL
+    ])
+    path = tmp_path / "sample.py"
+    path.write_text(sample, encoding="utf-8")
+
+    result = module.scan_file(path, "sample.py")
+    for key in ("sensitive_url", "third_party_name"):
+        assert key not in result["findings"], (key, result["findings"])

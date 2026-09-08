@@ -69,6 +69,18 @@ AI_TOOL_PATTERN = re.compile(
     r"Claude|ChatGPT|Copilot|Codex|Gemini|GPT-[45o]|作为 ?AI|AI 生成|AI生成|人工智能生成|大模型生成",
     re.IGNORECASE,
 )
+# 2026-09-08 经验清单补充：提交材料不得含他人网址与第三方软件名（经验第 3 条
+# "无他人软件名/公司名/网址"）。URL 全行检索，API endpoint 等合法引用命中后由
+# 用户审批豁免；第三方软件名只查注释/docstring——import 与配置赋值里引用开源
+# 库名是合法使用，注释里的宣传性提及才是驳回风险。词表大小写敏感、词边界匹配，
+# 先小清单硬编码，误报/漏报积累后再外置。
+SENSITIVE_URL_PATTERN = re.compile(r"https?://|www\.", re.IGNORECASE)
+THIRD_PARTY_NAME_PATTERN = re.compile(
+    r"\b(?:Vue|React|Angular|Django|Flask|FastAPI|Laravel|Rails"
+    r"|TensorFlow|PyTorch|Kubernetes|Docker|Elasticsearch|Redis"
+    r"|MySQL|PostgreSQL|MongoDB|Kafka|Nginx|Apache|WordPress"
+    r"|GitLab|GitHub|Electron)\b"
+)
 
 
 def git_output(repo: Path, *args: str) -> str | None:
@@ -130,6 +142,8 @@ def scan_file(path: Path, relative: str) -> dict:
         "emph_phrase": [],
         "req_id": [],
         "ai_tool_marker": [],
+        "sensitive_url": [],
+        "third_party_name": [],
     }
     in_docstring = False
     for number, line in enumerate(lines, start=1):
@@ -164,6 +178,10 @@ def scan_file(path: Path, relative: str) -> dict:
             hits["req_id"].append(number)
         if AI_TOOL_PATTERN.search(line):
             hits["ai_tool_marker"].append(number)
+        if SENSITIVE_URL_PATTERN.search(line):
+            hits["sensitive_url"].append(number)
+        if in_commentish and THIRD_PARTY_NAME_PATTERN.search(line):
+            hits["third_party_name"].append(number)
         if relative.endswith(".py"):
             triple = line.count(chr(34)*3)
             if in_docstring and triple % 2 == 1:

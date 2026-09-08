@@ -1,7 +1,7 @@
 {
   "name": "copyright-skills",
   "description": "知识产权申报技能：软著申报文稿与材料、源代码合规预审修复、专利分析与交底书撰写",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": { "name": "rulertu" },
   "homepage": "https://github.com/tuzheng1989/rulertu-flow",
   "repository": "https://github.com/tuzheng1989/rulertu-flow"
