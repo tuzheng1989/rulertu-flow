@@ -3,7 +3,7 @@
 锚点（batch_validate.py）：
 - entries 为空报错；name/version/module_roots/output_dir 必填
 - 跨条目共享文件未列入 allowlist 即阻断；列入则记 review_items
-- 每份代码行低于内部下限（--min-code-lines，默认 500）报错
+- 每份代码行低于下限（--min-code-lines，默认 3000，用户口径每份必须满 3000）报错
 - 条目两两查重（复用 similarity_check 指纹），任一方向超限即阻断
 - --first 指向条目文件集外的路径报错
 """
@@ -140,6 +140,11 @@ def test_allowlist_unknown_entry_recorded(batch_module, tmp_path):
 # ---------------------------------------------------------------------------
 # 代码行下限与配置校验
 # ---------------------------------------------------------------------------
+
+def test_default_min_code_lines_is_3000(batch_module):
+    """默认下限锁定 3,000（用户口径，对齐官方分档阈值），防止无意下调。"""
+    assert batch_module.MIN_CODE_LINES_DEFAULT == 3000
+
 
 def test_code_lines_below_minimum_blocked(batch_module, tmp_path):
     repo = tmp_path / "repo"

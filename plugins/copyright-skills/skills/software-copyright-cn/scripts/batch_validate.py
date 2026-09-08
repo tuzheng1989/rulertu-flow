@@ -2,9 +2,10 @@
 """Validate a multi-filing batch configuration before any material is generated.
 
 一份项目拆多个软著申报前的批量校验：条目间文件唯一归属（共享文件必须列入
-allowlist）、每份代码行达标（内部风控下限，非官方要求）、条目两两源码查重
-（复用同插件 similarity_check 的 6 行窗口指纹）。任一阻断项存在则非零退出；
-通过只代表拆分本身过了本地自检，不等于机关审查通过。
+allowlist）、每份代码行达标（用户口径：每份必须满 3,000 代码行，官方"不足
+3,000 行交全部"的分档阈值）、条目两两源码查重（复用同插件 similarity_check
+的 6 行窗口指纹）。任一阻断项存在则非零退出；通过只代表拆分本身过了本地
+自检，不等于机关审查通过。
 
 流程文档见 references/multi-filing.md（权威出处）。
 """
@@ -24,7 +25,7 @@ from inventory_repo import DEFAULT_EXCLUDES, SOURCE_EXTENSIONS, discover, git_ou
 from strip_source import StripError, code_line_rows
 from similarity_check import check_file, normalize_lines, shingles
 
-MIN_CODE_LINES_DEFAULT = 500
+MIN_CODE_LINES_DEFAULT = 3000  # 用户口径：每份必须满 3000 代码行（对齐官方"不足 3000 行交全部"的分档阈值，每份按满额规格独立成材料）
 
 
 def decode(data: bytes) -> str:
