@@ -31,6 +31,15 @@ def normalize_review(value: Any) -> dict[str, Any]:
         item = dict(issue)
         if "suggestion" not in item and "fix" in item:
             item["suggestion"] = item.pop("fix")
+        # 兜底（异构后端字段漂移，如 GLM 输出 evidence/impact/fix 三段式而留空 detail）：
+        # detail 缺失或空白时依次回退 impact/evidence/title；随后剥除协议外字段。
+        if not isinstance(item.get("detail"), str) or not item["detail"].strip():
+            for alt in ("impact", "evidence", "title"):
+                candidate = item.get(alt)
+                if isinstance(candidate, str) and candidate.strip():
+                    item["detail"] = candidate
+                    break
+        item = {k: item[k] for k in ("severity", "title", "detail", "suggestion") if k in item}
         if item.get("severity") not in {"P0", "P1", "P2"}:
             raise ReviewError("invalid issue severity")
         for field in ("title", "detail", "suggestion"):
@@ -42,8 +51,12 @@ def normalize_review(value: Any) -> dict[str, Any]:
     if any(not isinstance(item, str) for item in review["suggestions"]):
         raise ReviewError("suggestions must contain strings")
     review["issues"] = normalized_issues
-    if set(review) != {"overall_quality", "score", "issues", "suggestions"}:
-        raise ReviewError("review contains unknown fields")
+    # 兜底（异构后端顶层字段漂移，如 GLM 附带 passed 布尔）：剥除协议外字段；
+    # 必需四字段缺失仍拒绝（真不完整 ≠ 字段多余）。
+    missing = {"overall_quality", "score", "issues", "suggestions"} - set(review)
+    if missing:
+        raise ReviewError(f"review missing required fields: {sorted(missing)}")
+    review = {k: review[k] for k in ("overall_quality", "score", "issues", "suggestions")}
     return review
 
 def atomic_write_json(path: Path, value: Any) -> None:

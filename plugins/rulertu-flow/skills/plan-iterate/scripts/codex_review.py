@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -28,9 +29,13 @@ from review_common import (
 
 
 def build_command(prefix: list[str], repo: Path, output: Path, session_id: str | None, prompt: str) -> list[str]:
+    # CODEX_REVIEW_PROFILE：可选注入 -p <profile>（如 glm），规避宿主账号配额；
+    # 未设置时行为与历史版本逐字节一致（默认无 profile）。
+    profile = os.environ.get("CODEX_REVIEW_PROFILE", "").strip()
+    prof = ["-p", profile] if profile else []
     if session_id:
-        return prefix + ["exec", "resume", session_id, "--json", "-o", str(output), prompt]
-    return prefix + ["exec", "-s", "read-only", "-C", str(repo), "--json", "-o", str(output), prompt]
+        return prefix + ["exec", *prof, "resume", session_id, "--json", "-o", str(output), prompt]
+    return prefix + ["exec", *prof, "-s", "read-only", "-C", str(repo), "--json", "-o", str(output), prompt]
 
 
 def extract_thread_id(events: str) -> str | None:
