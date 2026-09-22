@@ -1,7 +1,7 @@
 ---
 name: anydoc-to-md
-description: EvoCenter 专用本地文档转 Markdown 技能。文本型文档（Word/PowerPoint/Excel/ODF/RTF/EPUB/CSV/PDF）用 anydoc 引擎（纯 Rust，亚 5ms/文档）；扫描版 PDF 自动路由到最佳 OCR 引擎（route_ocr.py 采样评分：现代横排印刷→Windows OCR 秒级/页；古籍竖排繁体/复杂版面→DeepSeek-OCR+llama.cpp；短文档≤8页→Claude 视觉直读），含循环检测/断点续传/版式整理。当用户说"把 docx/pdf/pptx/xlsx 转成 markdown"、"文档转 md"、"anydoc"、"转换文档"、"转成 md"、"扫描版 pdf 转文字"、"OCR 这本书/文档"时触发。默认输出位置由调用决定（工具型）；用于知识库导入时输出到 inbox/ 并加 frontmatter。
-version: 3.0.0
+description: EvoCenter 专用本地文档转 Markdown 技能。文本型文档（Word/PowerPoint/Excel/ODF/RTF/EPUB/CSV/PDF）用 anydoc 引擎（纯 Rust，亚 5ms/文档）；扫描版 PDF 自动路由到最佳 OCR 引擎（route_ocr.py 采样评分：现代横排印刷→Windows OCR 秒级/页；古籍竖排繁体/复杂版面→DeepSeek-OCR+llama.cpp；短文档≤8页→Claude 视觉直读），含循环检测/幻觉八形态清洗（clean_hallucinations.py）/断点续传/版式整理。当用户说"把 docx/pdf/pptx/xlsx 转成 markdown"、"文档转 md"、"anydoc"、"转换文档"、"转成 md"、"扫描版 pdf 转文字"、"OCR 这本书/文档"时触发。默认输出位置由调用决定（工具型）；用于知识库导入时输出到 inbox/ 并加 frontmatter。
+version: 3.1.0
 metadata:
   openclaw:
     requires:
@@ -193,6 +193,40 @@ python .claude/skills/anydoc-to-md/scripts/ocr_pdf.py "<书.pdf>" -o inbox/<书�
 | 形近字误识（如 秦艽→秦芃） | ❌ 合并后词频抽查领域高频词，源页替换 |
 | 每页顶部栏目名重复成标题（「导读」×3） | ✅ 栏目级短标题全书唯一化 |
 | OCR 逐行输出导致段落碎片化 | ✅ 段落重建（非句末行并入下文，标题/目录条目/论名行保护） |
+| pypdf 渲染 JBIG2 编码内嵌图失败（缺 jbig2dec） | ❌ 用 pypdfium2 整页渲染替代（内建 JBIG2），渲染时顺带裁水印/地脚 |
+| 温度 0 下重试无意义（同输入必同输出） | ❌ 失败页必须**改变输入**：切半/旋转/缩放/换 prompt/人工，纯重试是浪费时间 |
+| 长任务随 Claude 会话死掉 | ❌ Windows 下用 `powershell Start-Process` 独立进程跑（断点续传保底），双 llama-server 并行实测无收益（瓶颈在内存带宽） |
+| llama-server 线程默认 8 不满载 | ❌ 12 核机器手动拉 `--threads 12`（实测比 8 快 34%），脚本会复用已运行的 server |
+
+### 幻觉清洗（成书必做，《赤脚医生手册》766 页八轮实战）
+
+DeepSeek-OCR 在**插图页/密集表格页**会把图内标注或表头「无限复读」或「编造模板」。这些输出能通过循环检测（不是逐行重复、不超长），必须成书后专项清洗：
+
+```bash
+python .claude/skills/anydoc-to-md/scripts/clean_hallucinations.py <成书.md 或 pages-md/ 目录> --check   # 先检测
+python .claude/skills/anydoc-to-md/scripts/clean_hallucinations.py <同目标>                             # 清洗（1-7 类自动，8 类报告待人工）
+```
+
+八种已确认形态（脚本覆盖前 7 类自动清 + 第 8 类检测报告）：
+
+| # | 形态 | 例 |
+|---|------|----|
+| 1 | 字级刷屏 | 蛔虫蛔虫蛔虫×500 |
+| 2 | 词+标点噪声刷屏 | 尿胆原、尿胆原、、（双标点破坏周期） |
+| 3 | 数字/单字+空格刷屏 | 2 2 2 2×2000 |
+| 4 | 长单元复读 | 「结缔组织之间由结缔组织相连，」×50（8-60 字混合单元） |
+| 5 | 递增编号复读 | 椎体（77节）…（192节）；图 21-100 名例86…（编号变化，完全相同单元匹配失效） |
+| 6 | 行级/交替重复 | 同行×5；A\|B\|A\|B 交替 |
+| 7 | 幻觉标签 | 【摘要】【解析】【查看译文】【中文标题】 |
+| 8 | 时代错位编造 | AI 论文/专利正文、现代日期表、高考数学题、产品规格表、假书名「中医临床诊疗学」——**只检测不自动删**（需人工定位段落边界） |
+
+**关键经验**：
+- 检测正则要容忍噪声（标点/空白/编号变化），但**只在页内生效**（不跨页），医书固定体例（【诊断要点】等）白名单保护
+- 第 8 类幻觉段删除后**必须改底稿页再重建**，只改成书会在下次 merge 回流
+- 复读吞掉真实内容的页：读图人工转录（图内标注+图题通常就是全部真实文字）
+- **严格转录 prompt** 可根治多数幻觉页（对顽固页单独重跑，不要全书换）：
+  `逐字转录图片中所有可见的文字。不要总结、不要描述图片、不要添加任何图中没有的文字。如果没有文字就输出：无文字。`
+- **旋转印刷页**（附录横排大表）旋转 270° 重 OCR 即可根治；判断方法：整页文字顺时针转 90° 后可读
 
 ### 时长与规模预期
 
