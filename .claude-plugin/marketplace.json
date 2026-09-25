@@ -16,7 +16,7 @@
     {
       "name": "agent-skills",
       "source": "./plugins/agent-skills",
-      "description": "Agent 设计与评测技能：AI Agent 设计知识包、Agent 评测、DeepAgents 文档与模型查询"
+      "description": "Agent 设计与评测技能：AI Agent 设计知识包、Agent 评测、DeepAgents 文档、agent-retrieval 检索指南与模型查询"
     },
     {
       "name": "copyright-skills",

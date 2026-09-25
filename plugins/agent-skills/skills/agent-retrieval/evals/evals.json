@@ -1,0 +1,61 @@
+{
+  "skill_name": "agent-retrieval",
+  "evals": [
+    {
+      "id": 1,
+      "name": "basic-bm25-integration",
+      "prompt": "我想给一组工具候选加自然语言检索，让 Agent 能按目标描述找到工具，用 agent-retrieval 怎么起步？",
+      "expected_output": "应提供 pip install agent-retrieval 后的 rank_candidates 最小示例：候选 dataclass、corpus_text 投影（id/name/description 拼接）、BM25-only 调用（省略 vector）",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "corpus-projection",
+      "prompt": "corpus_text 投影函数应该怎么写？工具的长篇正文说明要不要放进语料？",
+      "expected_output": "应说明惯例是只拼身份字段（id/name/description），检索面=判定面；正文进语料是权限决策，正文噪声词会获得抬分能力，需要正文召回时用 ResourceBM25Index 双面结构",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "relevance-gate",
+      "prompt": "rank_candidates 返回了全量列表，我怎么判断哪些候选是真的相关？bm25_relevance 的阈值定多少合适？",
+      "expected_output": "应说明用 bm25_relevance（score/ideal_score 相对分）配 clearly_related 判定，minimum_relevance 无默认值需按调用点标定，给出真命中 0.32-0.72 与噪声 0.045-0.054 的实测刻度",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "api-embedder-setup",
+      "prompt": "我想接智谱的 embedding-3 走向量路，EmbeddingConfig 怎么配置？",
+      "expected_output": "应提供 EmbeddingConfig(kind=\"api\", provider=..., base_url=..., api_key=..., dimensions=...) 示例，说明 build_embedder 返回 None 表示未配置而非故障，pip install 需加 [api] extra",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "cosine-all-none",
+      "prompt": "为什么我的检索结果里 cosine 全是 None？向量路是不是没生效？",
+      "expected_output": "应列出缺席三源：未注入 embedder、build_embedder 返回 None、Run 级降级已冻结；说明 None=向量路缺席（区别于 0.0），降级是静默的不报错",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "redis-snapshot-publish",
+      "prompt": "每次启动都重新嵌入整个候选语料太贵了，Redis 向量快照怎么发布和复用？",
+      "expected_output": "应提供 vector_snapshot_id + corpus_hash 计算、read_meta 预检、acquire_lock 单飞、publish_vectors 与 extend_ttl 的完整发布编排，说明内容寻址与零重嵌",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "run-query-cache",
+      "prompt": "同一个 run 里会发起多次检索，相同查询会重复调嵌入 API，怎么缓存？",
+      "expected_output": "应提供 make_backend + query_embedder 装配示例，说明两级缓存、首败冻结本 Run 不重试、Run 收尾 clear_run_cache 防泄漏",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "truncation-and-determinism",
+      "prompt": "rank_candidates 为什么全量返回不截断？我想只取前 5 个该怎么办？还有排序是确定的吗，平局怎么处理？",
+      "expected_output": "应说明 k 截断是展示层职责（调用方 hits[:5]，exact 不受截断限制），确定性来自固定累积顺序 + id 字典序平局裁决，同输入位级同输出",
+      "files": []
+    }
+  ]
+}

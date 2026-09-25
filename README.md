@@ -40,7 +40,7 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 ## agent-skills
 
-5 个 Agent 工程技能：`ai-agent-design`（《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件，原书插图不随插件分发）、`agent-evaluator`（Agent 评测 Harness 构建）、`deepagents`（LangChain DeepAgents 使用指南）、`deepagents-update`（技能文档与 Python 包同步）、`model-info`（模型参数查询）。
+6 个 Agent 工程技能：`ai-agent-design`（《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件，原书插图不随插件分发）、`agent-evaluator`（Agent 评测 Harness 构建）、`deepagents`（LangChain DeepAgents 使用指南）、`agent-retrieval`（确定性 BM25 + 向量双路 RRF 融合检索库使用指南：接入分层与契约排查）、`deepagents-update`（技能文档与 Python 包同步）、`model-info`（模型参数查询）。
 
 ## copyright-skills
 
