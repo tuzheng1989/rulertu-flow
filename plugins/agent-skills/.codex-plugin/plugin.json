@@ -1,7 +1,7 @@
 {
   "name": "agent-skills",
-  "version": "1.1.0",
-  "description": "Agent 设计与评测技能：AI Agent 设计知识包、Agent 评测、DeepAgents 文档与模型查询",
+  "version": "1.2.0",
+  "description": "Agent 设计与评测技能：AI Agent 设计知识包、Agent 评测、DeepAgents 文档、agent-retrieval 检索指南与模型查询",
   "author": {
     "name": "rulertu",
     "url": "https://github.com/tuzheng1989"
@@ -12,13 +12,14 @@
   "interface": {
     "displayName": "Agent Skills",
     "shortDescription": "AI Agent 设计知识包、Agent 评测与模型查询",
-    "longDescription": "面向 Agent 工程的技能：ai-agent-design 统一路由（《深入理解 AI Agent》知识包：百科/原文/方法/案例/实践五组件）、agent-evaluator 评测 Harness 构建、deepagents 使用指南与文档同步、model-info 模型参数查询。",
+    "longDescription": "面向 Agent 工程的技能：ai-agent-design 统一路由（《深入理解 AI Agent》知识包：百科/原文/方法/案例/实践五组件）、agent-evaluator 评测 Harness 构建、deepagents 使用指南与文档同步、agent-retrieval 确定性 BM25+向量双路 RRF 融合检索指南、model-info 模型参数查询。",
     "developerName": "rulertu",
     "category": "Productivity",
     "capabilities": ["Planning", "Evaluation", "Reference"],
     "defaultPrompt": [
       "用 ai-agent-design 解释上下文工程。",
       "为我的 agent 构建一套评测方案。",
+      "用 agent-retrieval 给我的工具列表加自然语言检索。",
       "对比几个主流模型的参数和价格。"
     ]
   }
