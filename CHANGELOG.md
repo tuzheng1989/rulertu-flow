@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- flow-deck 0.4.1：`/flow` 改为 toggle 语义——面板已开时再输入即关闭（经 `$.ui.panes()` 感知），与引擎原生关闭方式互不干扰。
 - flow-deck 0.4.0：波次依赖 DAG 可视化——新增 `flow_deps` 工具（`mcp__flow-deck__flow_deps`），optimization-plan 路线图定稿时声明波次依赖图；`/flow` 面板新增「执行 DAG」区块，按推荐执行顺序逐批标注三态（收口 ✓ 绿 / 进行中 ● 黄 / 待执行 ○ 灰）与依赖箭头。`flow_report` 顺带累积各批阶段记录（此前仅保留当前批）。技能侧协同：optimization-plan「文档分层」节加声明义务（工具不存在静默跳过）。
 - flow-deck 0.3.0：锚点边界守卫——新增 `flow_batch` 工具（`mcp__flow-deck__flow_batch`），每批派单完成后声明本批允许改动的文件集合；此后对边界外文件的 Edit/Write 按 `guardMode` 配置处理（默认 `warn` 越界提醒后放行，可切 `deny` 硬拦截），未声明边界或 cwd 未就绪时静默放行。路径比较归一化分隔符、工作目录前缀与大小写（Windows 友好）。技能侧协同：implement-plan「进度上报」小节补 `flow_batch` 义务（派单完成后声明边界，工具不存在静默跳过）。已知平台行为：工具执行期间 toast 不显示，越界提醒走 transcript 系统通知。
 - flow-deck 0.2.0：执行期进度上报——新增 `flow_report` 工具（`mcp__flow-deck__flow_report`），implement-plan 各阶段（开工/派单/执行/验证/收口）完成即上报，输入框上方横条实时显示批次/T级/验证进度；上报跨会话保留，新会话启动时 toast 提醒上次执行位置。技能侧协同：implement-plan 新增「进度上报」小节（工具不存在时静默跳过，不绑定插件安装），证据目录约定固化为方案未指定时用方案文档同目录 `.flow-evidence/`。

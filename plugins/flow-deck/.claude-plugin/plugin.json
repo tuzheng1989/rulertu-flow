@@ -1,6 +1,6 @@
 {
   "name": "flow-deck",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "rulertu-flow 工作流仪表盘：评审进度可视化、执行期批次守卫与波次依赖图",
   "types": "./types/index.d.ts",
   "userConfig": {

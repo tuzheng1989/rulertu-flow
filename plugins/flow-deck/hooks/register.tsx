@@ -280,6 +280,12 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'flow' }, async $ => {
+    // toggle：面板已开则关闭（引擎原生关闭键同样可用，这里补键盘流的对称入口）
+    const isUp = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
+    if (isUp) {
+      await $.ui.close({ id: PANE_ID })
+      return { text: '已关闭评审仪表盘。' }
+    }
     await $.ui.open({ id: PANE_ID, title: 'Flow 评审仪表盘' })
     return { text: '已打开评审仪表盘。' }
   })

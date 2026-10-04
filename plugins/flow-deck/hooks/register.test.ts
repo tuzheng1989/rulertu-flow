@@ -66,6 +66,8 @@ describe('pane', () => {
 
   // 「无上报时横条让位」不单测：该分支就是 return next(e)，链底兜底是引擎语义，
   // 测试引擎没有实现可喂（M1 时 $.ui.open 同理）。
+  // 「/flow toggle 开关」不做自动化：依赖 $.ui.panes/open/close 三个无实现设施，
+  // 引擎文档的 toggle 示例即此形态，由会话内端到端验证。
 
   test('flow_batch 声明边界后 deny 模式拦截越界 Edit', { options: { guardMode: 'deny' } }, async ($, on) => {
     // session.start 首行缓存 cwd；随后 command.register 在测试引擎无实现被跳过，
