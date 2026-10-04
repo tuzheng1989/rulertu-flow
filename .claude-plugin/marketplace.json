@@ -22,6 +22,11 @@
       "name": "copyright-skills",
       "source": "./plugins/copyright-skills",
       "description": "知识产权申报技能：软著申报文稿与材料、源代码合规预审修复、专利分析与交底书撰写"
+    },
+    {
+      "name": "flow-deck",
+      "source": "./plugins/flow-deck",
+      "description": "工作流仪表盘：plan-iterate 评审进度实时面板、里程碑提醒与 statusline"
     }
   ]
 }

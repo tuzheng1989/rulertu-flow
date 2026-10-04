@@ -1,0 +1,6 @@
+{
+  "name": "flow-deck",
+  "version": "0.1.0",
+  "description": "rulertu-flow 工作流仪表盘：plan-iterate 评审进度实时可视化",
+  "types": "./types/index.d.ts"
+}

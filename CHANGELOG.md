@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 新增插件 `flow-deck` 0.1.0（mod 形态，仅 Claude Code 生效）：plan-iterate 评审进度实时可视化——`/flow` 打开评审仪表盘面板（轮次进度、评分趋势条、P0/P1/P2 计数、达标标记），评审文件落盘即弹 toast 提醒，statusline 常驻当前评审摘要；轮询消费 `.plan-iterate/<plan名>/` 下的 `state.json` 与 `review-RN.json`，对工作流零侵入。Codex 侧 manifest 为占位元数据。
+- work-skills Codex manifest 版本补对齐 1.3.0（上版漏更，门禁拦截）。
 - work-skills 1.2.0：新增 `screen-condense`（录屏自动精简，离线画面变化分析 + 抽帧变速压缩为指定时长无声 MP4，附时间对应表），自 `.codex/skills` 收编；双 manifest 版本对齐 1.2.0。
 - 门禁基线修复：Codex marketplace 补 `copyright-skills` 条目，agent-skills 双 manifest 版本对齐 1.1.0，`validate_repo.py` 恢复通过。
 - copyright-skills 1.1.0：软著链路整改——表述治理（删除无出处的"2026.3.15 新版审查规则 / 官方查重 / 必被驳回 / 征信"类表述，改按内部口径并附官网核对记录与 URL）、新增权属文件决策表与权属清单 JSON（references/ownership.md）、登记表重定位为在线填报工作底稿并新增 `check_submission.py` 提交前校验、说明书/源码构建器整改（证据移出 docx 正文改入 audit JSON、`build_source_docx.py` 新增 `--first` 入口前置、新增 `render_check.py` 渲染实测，后端自动选择本机 Word COM，无需安装 LibreOffice）、补齐 pytest 测试基建（52 用例）。

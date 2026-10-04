@@ -1,0 +1,5 @@
+{
+  "name": "flow-deck",
+  "description": "rulertu-flow 工作流仪表盘：plan-iterate 评审进度实时可视化（mod 机制仅 Claude Code 生效，Codex 侧为占位元数据）",
+  "version": "0.1.0"
+}
