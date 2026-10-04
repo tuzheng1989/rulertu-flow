@@ -11,6 +11,17 @@ function paneProps(title: string) {
   }
 }
 
+function bandProps() {
+  return {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 3,
+    bodyColumns: 80,
+    scroll: { offset: 0, bodyRows: 3 },
+    view: {},
+  }
+}
+
 describe('pane', () => {
   test('空状态给出提示文案', async $ => {
     const ui = await $.ui.mount({
@@ -46,7 +57,7 @@ describe('pane', () => {
         plugin: 'flow-deck',
         surface,
         component: 'AbovePrompt',
-        props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80 },
+        props: bandProps(),
       })
       await ui.find({ text: /demo · B2 · T1 · 执行 · 验证 12\/15/ })
       await ui.unmount()
@@ -55,6 +66,79 @@ describe('pane', () => {
 
   // 「无上报时横条让位」不单测：该分支就是 return next(e)，链底兜底是引擎语义，
   // 测试引擎没有实现可喂（M1 时 $.ui.open 同理）。
+
+  test('flow_batch 声明边界后 deny 模式拦截越界 Edit', { options: { guardMode: 'deny' } }, async ($, on) => {
+    // session.start 首行缓存 cwd；随后 command.register 在测试引擎无实现被跳过，
+    // 链底由本测试应答
+    on('session.start', async ($, e, next) => {
+      void next
+      return { cwd: 'C:\\repo' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    const declared = await $.tool.call({
+      tool: 'mcp__flow-deck__flow_batch',
+      plan: 'demo',
+      batch: 'B2',
+      files: ['src/a.ts', 'src/b.ts'],
+    })
+    expect(declared.result).toBe('批次边界已声明：B2 共 2 个文件')
+
+    const denied = await $.tool.call({
+      tool: 'Edit',
+      file_path: 'C:\\repo\\other\\c.ts',
+      old_string: 'x',
+      new_string: 'y',
+    })
+    expect(denied.deny).toContain('边界外')
+  })
+
+  test('deny 模式下界内 Edit 放行到真工具', { options: { guardMode: 'deny' } }, async ($, on) => {
+    // 底层应答：插件钩子放行（next）时由本钩子收口并留标记
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    on('session.start', async ($, e, next) => {
+      void next
+      return { cwd: 'C:\\repo' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_batch',
+      plan: 'demo',
+      batch: 'B2',
+      files: ['src/a.ts'],
+    })
+    const allowed = await $.tool.call({
+      tool: 'Edit',
+      file_path: 'SRC\\A.TS',
+      old_string: 'x',
+      new_string: 'y',
+    })
+    expect(allowed.result).toBe('reached-bottom')
+  })
+
+  test('未声明边界时 Edit 不受守卫', async ($, on) => {
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    on('session.start', async ($, e, next) => {
+      void next
+      return { cwd: 'C:\\repo' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    const result = await $.tool.call({
+      tool: 'Edit',
+      file_path: 'C:\\repo\\anything.ts',
+      old_string: 'x',
+      new_string: 'y',
+    })
+    expect(result.result).toBe('reached-bottom')
+  })
+
+  // warn 模式的越界 toast 不做自动化：$.ui.toast 在测试引擎是无实现的 dispatch
+  // （M1 时 $.ui.open 同理），其判定逻辑与 deny 共用 guardDecision 纯函数（已覆盖）。
 
   // 两类路径不经自动化测试，改由会话内 fixture 端到端确认：
   // 1. 有数据卡片的渲染——宿主规则不允许测试模块写插件状态（$.state 调用权按

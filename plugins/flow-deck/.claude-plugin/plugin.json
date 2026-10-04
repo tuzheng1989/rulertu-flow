@@ -1,6 +1,15 @@
 {
   "name": "flow-deck",
-  "version": "0.2.0",
-  "description": "rulertu-flow 工作流仪表盘：plan-iterate 评审进度实时可视化",
-  "types": "./types/index.d.ts"
+  "version": "0.3.0",
+  "description": "rulertu-flow 工作流仪表盘：plan-iterate 评审进度实时可视化与执行期批次守卫",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "guardMode": {
+      "type": "string",
+      "title": "守卫模式",
+      "options": ["warn", "deny"],
+      "default": "warn",
+      "description": "越界改动处理：warn 提醒后放行，deny 硬拦截"
+    }
+  }
 }

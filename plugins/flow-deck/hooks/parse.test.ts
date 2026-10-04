@@ -4,12 +4,16 @@ import {
   buildPlanReview,
   countIssues,
   extractRound,
+  guardDecision,
   isPassing,
+  normalizePath,
+  parseBatchScope,
   parseExecution,
   parseReviewJson,
   parseStateJson,
   sparkline,
 } from './parse'
+import type { BatchScope } from '../types'
 
 describe('parse', () => {
   test('extractRound 认识 review-RN.json', () => {
@@ -109,6 +113,59 @@ describe('parse', () => {
       phase: '开工',
       updatedAt: 0,
     })
+  })
+
+  test('normalizePath 归一化分隔符并剥工作目录前缀', () => {
+    const cwd = 'C:\\Users\\tuzhe\\repo'
+    expect(normalizePath('src\\app.ts', cwd)).toBe('src/app.ts')
+    expect(normalizePath('C:\\Users\\TUZHE\\repo\\src\\app.ts', cwd)).toBe('src/app.ts')
+    expect(normalizePath('C:/Users/tuzhe/repo/src/app.ts', 'C:/Users/tuzhe/repo/')).toBe(
+      'src/app.ts',
+    )
+    // 非工作目录下的路径原样（仅分隔符归一）
+    expect(normalizePath('C:\\other\\a.ts', cwd)).toBe('C:/other/a.ts')
+    expect(normalizePath('src/a.ts', '')).toBe('src/a.ts')
+  })
+
+  test('parseBatchScope 校验边界声明', () => {
+    const scope = parseBatchScope({ plan: 'demo', batch: 'B2', files: ['a.ts', 'b.ts'] })
+    expect(scope).toEqual({ plan: 'demo', batch: 'B2', files: ['a.ts', 'b.ts'] })
+    // files 中非字符串与空串被过滤
+    expect(parseBatchScope({ plan: 'p', batch: 'B1', files: ['a.ts', 3, ''] })).toEqual({
+      plan: 'p',
+      batch: 'B1',
+      files: ['a.ts'],
+    })
+    expect(parseBatchScope({ plan: 'p', batch: 'B1' })).toBe(null)
+    expect(parseBatchScope({ plan: 'p', batch: 'B1', files: 'a.ts' })).toBe(null)
+    expect(parseBatchScope({ plan: '', batch: 'B1', files: [] })).toBe(null)
+    expect(parseBatchScope('x')).toBe(null)
+  })
+
+  test('guardDecision 判定越界并归一化比较', () => {
+    const cwd = 'C:\\repo'
+    const scope: BatchScope = {
+      plan: 'demo',
+      batch: 'B2',
+      files: ['src\\a.ts', 'C:/repo/lib/b.ts'],
+    }
+    // 未声明边界放行
+    expect(guardDecision(null, 'Edit', { file_path: 'x.ts' }, cwd)).toEqual({ kind: 'pass' })
+    // 非文件写入工具放行
+    expect(guardDecision(scope, 'Bash', { command: 'ls' }, cwd)).toEqual({ kind: 'pass' })
+    // 界内（含反斜杠声明、绝对路径声明、大小写差异）
+    expect(guardDecision(scope, 'Edit', { file_path: 'C:\\repo\\src\\a.ts' }, cwd)).toEqual({
+      kind: 'pass',
+    })
+    expect(guardDecision(scope, 'Write', { file_path: 'LIB\\B.TS' }, cwd)).toEqual({ kind: 'pass' })
+    // 越界：保留调用方原样路径供提示
+    expect(guardDecision(scope, 'Edit', { file_path: 'C:\\repo\\other\\c.ts' }, cwd)).toEqual({
+      kind: 'outOfScope',
+      path: 'C:\\repo\\other\\c.ts',
+    })
+    // file_path 缺失或空放行
+    expect(guardDecision(scope, 'Edit', {}, cwd)).toEqual({ kind: 'pass' })
+    expect(guardDecision(scope, 'Edit', { file_path: '' }, cwd)).toEqual({ kind: 'pass' })
   })
 
   test('buildPlanReview 组装概览并以最新轮判定达标', () => {

@@ -43,6 +43,16 @@ export type ExecutionReport = {
   updatedAt: number
 }
 
+/** 一个批次的改动边界（源自 flow_batch 工具声明） */
+export type BatchScope = {
+  /** 方案名 */
+  plan: string
+  /** 批次标识，如 B2 */
+  batch: string
+  /** 本批允许改动的文件集合（经路径归一化，相对会话工作目录） */
+  files: string[]
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'flow-deck': {
@@ -54,6 +64,8 @@ declare module 'claude-code' {
       baselined: boolean
       /** 本会话最近一次执行上报；无则 null */
       execution: ExecutionReport | null
+      /** 当前批次改动边界；未声明则 null（守卫放行） */
+      batchScope: BatchScope | null
     }
   }
 }

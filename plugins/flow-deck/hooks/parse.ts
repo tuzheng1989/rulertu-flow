@@ -1,4 +1,4 @@
-import type { ExecutionReport, PlanReview, ReviewRound } from '../types'
+import type { BatchScope, ExecutionReport, PlanReview, ReviewRound } from '../types'
 
 /** plan-iterate 的达标线：最新轮评分不低于它且无 P0/P1 问题 */
 export const PASS_SCORE = 8.5
@@ -97,6 +97,47 @@ export function parseExecution(value: unknown): ExecutionReport | null {
   return report
 }
 
+/** 校验并归一化 flow_batch 边界声明，不符返回 null */
+export function parseBatchScope(value: unknown): BatchScope | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  if (typeof record.plan !== 'string' || record.plan === '') return null
+  if (typeof record.batch !== 'string' || record.batch === '') return null
+  if (!Array.isArray(record.files)) return null
+  const files = record.files.filter((file): file is string => typeof file === 'string' && file !== '')
+  return { plan: record.plan, batch: record.batch, files }
+}
+
+/** 路径归一化：反斜杠转正斜杠；绝对路径剥掉工作目录前缀（大小写不敏感比较） */
+export function normalizePath(path: string, cwd: string): string {
+  const unified = path.replace(/\\/g, '/')
+  const cwdUnified = cwd.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (cwdUnified !== '' && unified.toLowerCase().startsWith(`${cwdUnified.toLowerCase()}/`)) {
+    return unified.slice(cwdUnified.length + 1)
+  }
+  return unified
+}
+
+export type GuardDecision =
+  | { kind: 'pass' }
+  | { kind: 'outOfScope'; path: string }
+
+/** 判定一次文件写入是否越出批次边界；未声明边界或非文件写入工具一律放行 */
+export function guardDecision(
+  scope: BatchScope | null,
+  tool: string,
+  input: unknown,
+  cwd: string,
+): GuardDecision {
+  if (scope === null) return { kind: 'pass' }
+  if (tool !== 'Edit' && tool !== 'Write') return { kind: 'pass' }
+  const record = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
+  if (typeof record.file_path !== 'string' || record.file_path === '') return { kind: 'pass' }
+  const keys = new Set(scope.files.map(file => normalizePath(file, cwd).toLowerCase()))
+  const target = normalizePath(record.file_path, cwd).toLowerCase()
+  return keys.has(target) ? { kind: 'pass' } : { kind: 'outOfScope', path: record.file_path }
+}
+
 /** 组装一个方案的评审概览；stateText 为 null 时仅靠评审文件推导 */
 export function buildPlanReview(
   name: string,
@@ -109,7 +150,7 @@ export function buildPlanReview(
     .filter((round): round is ReviewRound => round !== null)
     .sort((a, b) => a.round - b.round)
   const state = stateText === null ? null : parseStateJson(stateText)
-  const latest = rounds.length > 0 ? rounds[rounds.length - 1] : null
+  const latest = rounds.at(-1) ?? null
   return {
     name,
     dir,

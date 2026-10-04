@@ -1,8 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildPlanReview, extractRound, parseExecution, sparkline } from './parse'
-import type { ExecutionReport, PlanReview } from '../types'
+import {
+  buildPlanReview,
+  extractRound,
+  guardDecision,
+  parseBatchScope,
+  parseExecution,
+  sparkline,
+} from './parse'
+import type { BatchScope, ExecutionReport, PlanReview } from '../types'
 
 const PANE_ID = 'flow'
 const POLL_MS = 2000
@@ -14,9 +21,40 @@ const plans = atom({ plugin: 'flow-deck', key: 'plans' } as const, [])
 const notified = atom({ plugin: 'flow-deck', key: 'notified' } as const, [])
 const baselined = atom({ plugin: 'flow-deck', key: 'baselined' } as const, false)
 const execution = atom({ plugin: 'flow-deck', key: 'execution' } as const, null)
+const batchScope = atom({ plugin: 'flow-deck', key: 'batchScope' } as const, null)
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
+
+/** 越界改动处理模式；register 时按 userConfig 覆盖（引擎要求钩子处于文件顶层，经此间接读取配置） */
+let guardMode: 'warn' | 'deny' = 'warn'
+
+/** 会话工作目录；tool.call 事件不带 cwd，自 session.start 缓存（先于首个工具调用触发） */
+let sessionCwd = ''
+
+/** 越界拦截的 deny 文案 */
+function guardDenyMessage(path: string, batch: string): string {
+  return `flow-deck：${path} 在批次 ${batch} 边界外，已按 guardMode=deny 拦截。确需改动请先调用 flow_batch 更新边界。`
+}
+
+/** 越界放行的 warn 文案 */
+function guardWarnMessage(path: string, batch: string): string {
+  return `⚠ flow-deck：${path} 在批次 ${batch} 边界外，已放行（guardMode=warn）`
+}
+
+/** 守卫动作：pass 放行；deny/warn 附越界路径与所属批次 */
+export type GuardAction =
+  | { action: 'pass' }
+  | { action: 'deny' | 'warn'; path: string; batch: string }
+
+/** 读取边界并作出守卫判定；未声明边界或 cwd 未就绪时放行（fail-open） */
+async function decideGuard($: EngineInterface, tool: string, file_path: unknown): Promise<GuardAction> {
+  const scope: BatchScope | null = await read($, batchScope)
+  if (scope === null || sessionCwd === '') return { action: 'pass' }
+  const decision = guardDecision(scope, tool, { file_path }, sessionCwd)
+  if (decision.kind === 'pass') return { action: 'pass' }
+  return { action: guardMode, path: decision.path, batch: scope.batch }
+}
 
 /** 读文件，不存在或读不了时返回 null */
 async function readTextIfExists($: EngineInterface, path: string): Promise<string | null> {
@@ -91,7 +129,7 @@ async function scanForPlans(
 
 /** 一个方案的一行状态文案（statusline 与 toast 共用的口径） */
 function summarize(plan: PlanReview): string {
-  const latest = plan.rounds.length > 0 ? plan.rounds[plan.rounds.length - 1] : null
+  const latest = plan.rounds.at(-1) ?? null
   if (latest === null) return `「${plan.name}」评审 R${plan.round} 进行中 · 暂无评审结果`
   const mark = plan.passed ? ' · ✓ 已达标' : ''
   return `「${plan.name}」评审 R${plan.round}/5 · 最新 ${latest.score} 分${mark}`
@@ -131,10 +169,11 @@ async function poll($: EngineInterface): Promise<void> {
   }
   // 首轮扫描只做基线（存量轮次静默入账），避免新会话把历史评审全部重播
   const first = !(await read($, baselined))
+  const lastFresh = fresh.at(-1) ?? null
   if (first) {
     await update($, baselined, () => true)
-  } else if (fresh.length > 0) {
-    const { plan, round } = fresh[fresh.length - 1]
+  } else if (lastFresh !== null) {
+    const { plan, round } = lastFresh
     const mark = plan.passed ? ' · ✓ 已达标' : ''
     const counts =
       round.p0 === 0 && round.p1 === 0 && round.p2 === 0
@@ -144,7 +183,8 @@ async function poll($: EngineInterface): Promise<void> {
   }
 
   // 多方案并存时 statusline 展示名字排序的最后一个；单方案（常态）即其本身
-  const summary = found.length > 0 ? summarize(found[found.length - 1]) : undefined
+  const lastPlan = found.at(-1) ?? null
+  const summary = lastPlan === null ? undefined : summarize(lastPlan)
   $.ui.log(`flow-deck 扫描完成：${found.length} 个方案`, { to: 'debug' })
   if (summary !== lastStatus) {
     lastStatus = summary
@@ -152,8 +192,11 @@ async function poll($: EngineInterface): Promise<void> {
   }
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  guardMode = options.guardMode === 'deny' ? 'deny' : 'warn'
+
   on('session.start', async ($, e, next) => {
+    sessionCwd = e.cwd
     await $.command.register({ name: 'flow', description: '打开 rulertu-flow 评审仪表盘' })
     await $.tool.register({
       name: 'flow_report',
@@ -172,6 +215,25 @@ export const register: Register = on => {
           evidenceDir: { type: 'string', description: '证据目录路径' },
         },
         required: ['plan', 'batch', 'phase'],
+      },
+    })
+    await $.tool.register({
+      name: 'flow_batch',
+      description:
+        'implement-plan 批次边界声明。每批开工时调用一次，声明本批允许改动的文件集合' +
+        '（来自委派单的改动锚点）；此后本批对边界外文件的编辑会被守卫拦截或提醒。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          plan: { type: 'string', description: '方案名（方案文档文件名去扩展名）' },
+          batch: { type: 'string', description: '批次标识，如 B2' },
+          files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '本批允许改动的文件路径（相对会话工作目录或绝对路径）',
+          },
+        },
+        required: ['plan', 'batch', 'files'],
       },
     })
     const last = await readLastExecution($)
@@ -204,6 +266,32 @@ export const register: Register = on => {
     return { result: '进度已上报' }
   })
 
+  on('tool.call', { tool: 'mcp__flow-deck__flow_batch' }, async ($, e) => {
+    const scope = parseBatchScope(e)
+    if (scope === null) {
+      return { result: 'plan、batch 为必填字符串，files 为非空字符串数组', isError: true }
+    }
+    await update($, batchScope, () => scope)
+    return { result: `批次边界已声明：${scope.batch} 共 ${scope.files.length} 个文件` }
+  })
+
+  // 引擎要求钩子处于文件顶层或内联；Edit/Write 入参类型不同，守卫判定已下沉
+  // decideGuard 纯函数，这里内联两份薄壳
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    const verdict = await decideGuard($, e.tool, e.file_path)
+    if (verdict.action === 'pass') return next(e)
+    if (verdict.action === 'deny') return { deny: guardDenyMessage(verdict.path, verdict.batch) }
+    $.ui.log(guardWarnMessage(verdict.path, verdict.batch))
+    return next(e)
+  })
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    const verdict = await decideGuard($, e.tool, e.file_path)
+    if (verdict.action === 'pass') return next(e)
+    if (verdict.action === 'deny') return { deny: guardDenyMessage(verdict.path, verdict.batch) }
+    $.ui.log(guardWarnMessage(verdict.path, verdict.batch))
+    return next(e)
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const list = await read($, plans)
@@ -220,7 +308,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {list.map(plan => {
-          const latest = plan.rounds.length > 0 ? plan.rounds[plan.rounds.length - 1] : null
+          const latest = plan.rounds.at(-1) ?? null
           return (
             <Box key={plan.dir} flexDirection="column">
               <Box flexDirection="row">
@@ -259,12 +347,23 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const report = await read($, execution)
-    if (report === null) return next(e)
+    const scope = await read($, batchScope)
+    if (report === null && scope === null) return next(e)
     const { Box, Text } = $.ui.resolve(e)
     return (
-      <Box>
-        <Text dimColor>▸ </Text>
-        <Text>{describeExecution(report)}</Text>
+      <Box flexDirection="column">
+        {report !== null && (
+          <Box>
+            <Text dimColor>▸ </Text>
+            <Text>{describeExecution(report)}</Text>
+            {scope !== null && <Text dimColor> · 守卫 {scope.files.length} 文件</Text>}
+          </Box>
+        )}
+        {report === null && scope !== null && (
+          <Text dimColor>
+            ▸ {scope.plan} · {scope.batch} · 守卫 {scope.files.length} 文件
+          </Text>
+        )}
       </Box>
     )
   })
