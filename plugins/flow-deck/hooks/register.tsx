@@ -3,13 +3,15 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import {
   buildPlanReview,
+  depStatuses,
   extractRound,
   guardDecision,
   parseBatchScope,
+  parseDepGraph,
   parseExecution,
   sparkline,
 } from './parse'
-import type { BatchScope, ExecutionReport, PlanReview } from '../types'
+import type { BatchScope, DepGraph, ExecutionReport, PlanReview } from '../types'
 
 const PANE_ID = 'flow'
 const POLL_MS = 2000
@@ -22,6 +24,8 @@ const notified = atom({ plugin: 'flow-deck', key: 'notified' } as const, [])
 const baselined = atom({ plugin: 'flow-deck', key: 'baselined' } as const, false)
 const execution = atom({ plugin: 'flow-deck', key: 'execution' } as const, null)
 const batchScope = atom({ plugin: 'flow-deck', key: 'batchScope' } as const, null)
+const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
+const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
@@ -236,6 +240,35 @@ export const register: Register = (on, options) => {
         required: ['plan', 'batch', 'files'],
       },
     })
+    await $.tool.register({
+      name: 'flow_deps',
+      description:
+        'optimization-plan 波次依赖声明。路线图定稿时调用一次，把波次依赖图声明为机器可读' +
+        '清单；仪表盘面板将按推荐执行顺序绘制执行进度图。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          plan: { type: 'string', description: '方案名（方案文档文件名去扩展名）' },
+          batches: {
+            type: 'array',
+            description: '批次依赖节点，按推荐执行顺序排列',
+            items: {
+              type: 'object',
+              properties: {
+                batch: { type: 'string', description: '批次标识，如 B2' },
+                dependsOn: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: '依赖的前置批次标识列表',
+                },
+              },
+              required: ['batch'],
+            },
+          },
+        },
+        required: ['plan', 'batches'],
+      },
+    })
     const last = await readLastExecution($)
     if (last !== null) $.ui.toast(`上次执行：${describeExecution(last)}`)
     $.clock.every(POLL_MS, () => {
@@ -258,6 +291,10 @@ export const register: Register = (on, options) => {
     }
     const stamped: ExecutionReport = { ...report, updatedAt: Date.now() }
     await update($, execution, () => stamped)
+    await update($, progress, prev => ({
+      ...prev,
+      [`${stamped.plan}#${stamped.batch}`]: stamped.phase,
+    }))
     try {
       await $.store.set(EXECUTION_STORE_KEY, stamped)
     } catch (error) {
@@ -273,6 +310,15 @@ export const register: Register = (on, options) => {
     }
     await update($, batchScope, () => scope)
     return { result: `批次边界已声明：${scope.batch} 共 ${scope.files.length} 个文件` }
+  })
+
+  on('tool.call', { tool: 'mcp__flow-deck__flow_deps' }, async ($, e) => {
+    const graph = parseDepGraph(e)
+    if (graph === null || graph.batches.length === 0) {
+      return { result: 'plan 为必填字符串，batches 为非空数组（每项含 batch）', isError: true }
+    }
+    await update($, deps, () => graph)
+    return { result: `波次依赖已声明：${graph.plan} 共 ${graph.batches.length} 批` }
   })
 
   // 引擎要求钩子处于文件顶层或内联；Edit/Write 入参类型不同，守卫判定已下沉
@@ -295,18 +341,23 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const list = await read($, plans)
+    const graph: DepGraph | null = await read($, deps)
+    const progressMap: Record<string, string> = await read($, progress)
 
-    if (list.length === 0) {
+    if (list.length === 0 && graph === null) {
       return (
         <Box flexDirection="column">
-          <Text>未发现活跃的 plan-iterate 评审。</Text>
-          <Text dimColor>运行 plan-iterate 后自动出现；/flow 可随时打开本面板。</Text>
+          <Text>未发现活跃的 plan-iterate 评审或波次依赖声明。</Text>
+          <Text dimColor>运行 plan-iterate / optimization-plan 后自动出现；/flow 可随时打开本面板。</Text>
         </Box>
       )
     }
 
     return (
       <Box flexDirection="column">
+        {list.length > 0 && (
+          <Text bold>▍plan-iterate 评审</Text>
+        )}
         {list.map(plan => {
           const latest = plan.rounds.at(-1) ?? null
           return (
@@ -340,6 +391,23 @@ export const register: Register = (on, options) => {
             </Box>
           )
         })}
+        {graph !== null && (
+          <Box flexDirection="column">
+            <Text bold>▍执行 DAG（{graph.plan}）</Text>
+            {depStatuses(graph, progressMap).map(node => (
+              <Box key={node.batch} flexDirection="row">
+                <Text
+                  dimColor={node.status === 'pending'}
+                  color={node.status === 'done' ? 'green' : node.status === 'active' ? 'yellow' : undefined}
+                >
+                  {node.status === 'done' ? '✓ ' : node.status === 'active' ? '● ' : '○ '}
+                </Text>
+                <Text dimColor={node.status === 'pending'}>{node.batch}</Text>
+                {node.dependsOn.length > 0 && <Text dimColor> ← {node.dependsOn.join('、')}</Text>}
+              </Box>
+            ))}
+          </Box>
+        )}
       </Box>
     )
   })

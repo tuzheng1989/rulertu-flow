@@ -53,6 +53,22 @@ export type BatchScope = {
   files: string[]
 }
 
+/** 一个批次的依赖节点（源自 flow_deps 工具声明） */
+export type BatchDep = {
+  /** 批次标识，如 B2 */
+  batch: string
+  /** 依赖的前置批次标识列表 */
+  dependsOn: string[]
+}
+
+/** 一个方案的波次依赖图（按推荐执行顺序排列） */
+export type DepGraph = {
+  /** 方案名 */
+  plan: string
+  /** 批次依赖节点，按推荐执行顺序 */
+  batches: BatchDep[]
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'flow-deck': {
@@ -66,6 +82,10 @@ declare module 'claude-code' {
       execution: ExecutionReport | null
       /** 当前批次改动边界；未声明则 null（守卫放行） */
       batchScope: BatchScope | null
+      /** 各批次最新阶段，键 <plan>#<batch>，flow_report 逐批累积 */
+      progress: Record<string, string>
+      /** 当前方案的波次依赖图；未声明则 null */
+      deps: DepGraph | null
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "flow-deck",
-  "version": "0.3.0",
-  "description": "rulertu-flow 工作流仪表盘：plan-iterate 评审进度实时可视化与执行期批次守卫",
+  "version": "0.4.0",
+  "description": "rulertu-flow 工作流仪表盘：评审进度可视化、执行期批次守卫与波次依赖图",
   "types": "./types/index.d.ts",
   "userConfig": {
     "guardMode": {

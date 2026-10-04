@@ -3,11 +3,13 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   buildPlanReview,
   countIssues,
+  depStatuses,
   extractRound,
   guardDecision,
   isPassing,
   normalizePath,
   parseBatchScope,
+  parseDepGraph,
   parseExecution,
   parseReviewJson,
   parseStateJson,
@@ -166,6 +168,49 @@ describe('parse', () => {
     // file_path 缺失或空放行
     expect(guardDecision(scope, 'Edit', {}, cwd)).toEqual({ kind: 'pass' })
     expect(guardDecision(scope, 'Edit', { file_path: '' }, cwd)).toEqual({ kind: 'pass' })
+  })
+
+  test('parseDepGraph 校验波次依赖声明', () => {
+    const graph = parseDepGraph({
+      plan: 'demo',
+      batches: [
+        { batch: 'B1', dependsOn: [] },
+        { batch: 'B2', dependsOn: ['B1'] },
+        { batch: 'B3', dependsOn: ['B1', 3, ''] },
+        { batch: '' },
+        'junk',
+      ],
+    })
+    expect(graph).toEqual({
+      plan: 'demo',
+      batches: [
+        { batch: 'B1', dependsOn: [] },
+        { batch: 'B2', dependsOn: ['B1'] },
+        { batch: 'B3', dependsOn: ['B1'] },
+      ],
+    })
+    expect(parseDepGraph({ plan: 'p', batches: 'x' })).toBe(null)
+    expect(parseDepGraph({ batches: [] })).toBe(null)
+    expect(parseDepGraph(null)).toBe(null)
+  })
+
+  test('depStatuses 按 progress 标注三态', () => {
+    const graph = parseDepGraph({
+      plan: 'demo',
+      batches: [{ batch: 'B1', dependsOn: [] }, { batch: 'B2', dependsOn: ['B1'] }],
+    })
+    if (graph === null) throw new Error('fixture 不可为 null')
+    // 无记录全部待执行
+    expect(depStatuses(graph, {})).toEqual([
+      { batch: 'B1', dependsOn: [], status: 'pending' },
+      { batch: 'B2', dependsOn: ['B1'], status: 'pending' },
+    ])
+    // 收口=完成；其他阶段=进行中；其他方案的记录不影响
+    const progress = { 'demo#B1': '收口', 'demo#B2': '执行', 'other#B1': '收口' }
+    expect(depStatuses(graph, progress)).toEqual([
+      { batch: 'B1', dependsOn: [], status: 'done' },
+      { batch: 'B2', dependsOn: ['B1'], status: 'active' },
+    ])
   })
 
   test('buildPlanReview 组装概览并以最新轮判定达标', () => {

@@ -1,4 +1,4 @@
-import type { BatchScope, ExecutionReport, PlanReview, ReviewRound } from '../types'
+import type { BatchScope, DepGraph, ExecutionReport, PlanReview, ReviewRound } from '../types'
 
 /** plan-iterate 的达标线：最新轮评分不低于它且无 P0/P1 问题 */
 export const PASS_SCORE = 8.5
@@ -136,6 +136,40 @@ export function guardDecision(
   const keys = new Set(scope.files.map(file => normalizePath(file, cwd).toLowerCase()))
   const target = normalizePath(record.file_path, cwd).toLowerCase()
   return keys.has(target) ? { kind: 'pass' } : { kind: 'outOfScope', path: record.file_path }
+}
+
+/** 校验并归一化 flow_deps 波次依赖声明，不符返回 null */
+export function parseDepGraph(value: unknown): DepGraph | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  if (typeof record.plan !== 'string' || record.plan === '') return null
+  if (!Array.isArray(record.batches)) return null
+  const batches = []
+  for (const entry of record.batches) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const node = entry as Record<string, unknown>
+    if (typeof node.batch !== 'string' || node.batch === '') continue
+    const dependsOn = Array.isArray(node.dependsOn)
+      ? node.dependsOn.filter((dep): dep is string => typeof dep === 'string' && dep !== '')
+      : []
+    batches.push({ batch: node.batch, dependsOn })
+  }
+  return { plan: record.plan, batches }
+}
+
+export type DepNodeStatus = 'done' | 'active' | 'pending'
+
+export type DepNode = BatchDep & {
+  status: DepNodeStatus
+}
+
+/** 结合各批阶段记录标注状态：收口=完成，有记录=进行中，未上报=待执行 */
+export function depStatuses(graph: DepGraph, progress: Record<string, string>): DepNode[] {
+  return graph.batches.map(node => {
+    const phase = progress[`${graph.plan}#${node.batch}`]
+    if (phase === undefined) return { ...node, status: 'pending' as const }
+    return { ...node, status: phase === '收口' ? ('done' as const) : ('active' as const) }
+  })
 }
 
 /** 组装一个方案的评审概览；stateText 为 null 时仅靠评审文件推导 */

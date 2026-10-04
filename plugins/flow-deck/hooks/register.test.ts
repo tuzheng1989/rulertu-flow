@@ -137,8 +137,41 @@ describe('pane', () => {
     expect(result.result).toBe('reached-bottom')
   })
 
-  // warn 模式的越界 toast 不做自动化：$.ui.toast 在测试引擎是无实现的 dispatch
-  // （M1 时 $.ui.open 同理），其判定逻辑与 deny 共用 guardDecision 纯函数（已覆盖）。
+  // warn 模式的越界提醒不做自动化：$.ui.log 在测试引擎是无实现的 dispatch
+  // （同 $.ui.open），其判定逻辑与 deny 共用 guardDecision 纯函数（已覆盖）。
+
+  test('flow_deps 声明后面板绘制执行 DAG 区块', async $ => {
+    const declared = await $.tool.call({
+      tool: 'mcp__flow-deck__flow_deps',
+      plan: 'demo',
+      batches: [{ batch: 'B1', dependsOn: [] }, { batch: 'B2', dependsOn: ['B1'] }],
+    })
+    expect(declared.result).toBe('波次依赖已声明：demo 共 2 批')
+    // B1 收口 → ✓；B2 未上报 → ○
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_report',
+      plan: 'demo',
+      batch: 'B1',
+      phase: '收口',
+    })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'flow',
+      props: paneProps('Flow 评审仪表盘'),
+    })
+    await ui.find({ text: /▍执行 DAG（demo）/ })
+    await ui.find({ text: /← B1/ })
+    await ui.find({ type: 'Text', text: '✓ B1' })
+    await ui.find({ type: 'Text', text: '○ B2' })
+    await ui.unmount()
+  })
+
+  test('flow_deps 缺 batches 返回错误结果', async $ => {
+    const result = await $.tool.call({ tool: 'mcp__flow-deck__flow_deps', plan: 'demo' })
+    expect(result.isError).toBe(true)
+  })
 
   // 两类路径不经自动化测试，改由会话内 fixture 端到端确认：
   // 1. 有数据卡片的渲染——宿主规则不允许测试模块写插件状态（$.state 调用权按
