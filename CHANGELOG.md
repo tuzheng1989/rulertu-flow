@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- flow-deck 0.2.0：执行期进度上报——新增 `flow_report` 工具（`mcp__flow-deck__flow_report`），implement-plan 各阶段（开工/派单/执行/验证/收口）完成即上报，输入框上方横条实时显示批次/T级/验证进度；上报跨会话保留，新会话启动时 toast 提醒上次执行位置。技能侧协同：implement-plan 新增「进度上报」小节（工具不存在时静默跳过，不绑定插件安装），证据目录约定固化为方案未指定时用方案文档同目录 `.flow-evidence/`。
 - 新增插件 `flow-deck` 0.1.0（mod 形态，仅 Claude Code 生效）：plan-iterate 评审进度实时可视化——`/flow` 打开评审仪表盘面板（轮次进度、评分趋势条、P0/P1/P2 计数、达标标记），评审文件落盘即弹 toast 提醒，statusline 常驻当前评审摘要；轮询消费 `.plan-iterate/<plan名>/` 下的 `state.json` 与 `review-RN.json`，对工作流零侵入。Codex 侧 manifest 为占位元数据。
 - work-skills Codex manifest 版本补对齐 1.3.0（上版漏更，门禁拦截）。
 - work-skills 1.2.0：新增 `screen-condense`（录屏自动精简，离线画面变化分析 + 抽帧变速压缩为指定时长无声 MP4，附时间对应表），自 `.codex/skills` 收编；双 manifest 版本对齐 1.2.0。

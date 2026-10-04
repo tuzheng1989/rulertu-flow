@@ -23,6 +23,26 @@ export type PlanReview = {
   passed: boolean
 }
 
+/** 一条 implement-plan 执行进度上报（源自 flow_report 工具调用） */
+export type ExecutionReport = {
+  /** 方案名（方案文档文件名去扩展名） */
+  plan: string
+  /** 批次标识，如 B2 */
+  batch: string
+  /** 当前阶段：开工 | 派单 | 执行 | 验证 | 收口 */
+  phase: string
+  /** 风险定级：T0-T3 */
+  tLevel?: string
+  /** 已通过的定向测试数 */
+  testsPassed?: number
+  /** 定向测试总数 */
+  testsTotal?: number
+  /** 证据目录路径 */
+  evidenceDir?: string
+  /** 上报时间（ms）；$.store 旧值缺失时为 0 */
+  updatedAt: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'flow-deck': {
@@ -32,6 +52,8 @@ declare module 'claude-code' {
       notified: string[]
       /** 首次扫描已把存量评审静默标记为已通知 */
       baselined: boolean
+      /** 本会话最近一次执行上报；无则 null */
+      execution: ExecutionReport | null
     }
   }
 }

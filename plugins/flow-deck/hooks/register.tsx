@@ -1,17 +1,19 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildPlanReview, extractRound, sparkline } from './parse'
-import type { PlanReview } from '../types'
+import { buildPlanReview, extractRound, parseExecution, sparkline } from './parse'
+import type { ExecutionReport, PlanReview } from '../types'
 
 const PANE_ID = 'flow'
 const POLL_MS = 2000
 const MAX_DEPTH = 4
 const SKIP_DIRS = new Set(['node_modules', '.git'])
+const EXECUTION_STORE_KEY = 'lastExecution'
 
 const plans = atom({ plugin: 'flow-deck', key: 'plans' } as const, [])
 const notified = atom({ plugin: 'flow-deck', key: 'notified' } as const, [])
 const baselined = atom({ plugin: 'flow-deck', key: 'baselined' } as const, false)
+const execution = atom({ plugin: 'flow-deck', key: 'execution' } as const, null)
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
@@ -95,6 +97,23 @@ function summarize(plan: PlanReview): string {
   return `「${plan.name}」评审 R${plan.round}/5 · 最新 ${latest.score} 分${mark}`
 }
 
+/** 一条执行上报的摘要文案（横条与 toast 共用的口径） */
+function describeExecution(report: ExecutionReport): string {
+  const t = report.tLevel === undefined ? '' : ` · ${report.tLevel}`
+  const tests =
+    report.testsTotal === undefined ? '' : ` · 验证 ${report.testsPassed ?? 0}/${report.testsTotal}`
+  return `${report.plan} · ${report.batch}${t} · ${report.phase}${tests}`
+}
+
+/** 读上次执行的跨会话记录；store 不可用或无记录时返回 null（best-effort） */
+async function readLastExecution($: EngineInterface): Promise<ExecutionReport | null> {
+  try {
+    return parseExecution(await $.store.get(EXECUTION_STORE_KEY))
+  } catch {
+    return null
+  }
+}
+
 /** 一轮扫描：更新面板数据、对新落盘轮次发 toast、刷新 statusline */
 async function poll($: EngineInterface): Promise<void> {
   const found = (await scanForPlans($, '', 0)).sort((a, b) => (a.name < b.name ? -1 : 1))
@@ -136,6 +155,27 @@ async function poll($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'flow', description: '打开 rulertu-flow 评审仪表盘' })
+    await $.tool.register({
+      name: 'flow_report',
+      description:
+        'implement-plan 执行进度上报。每完成一个阶段（开工/派单/执行/验证/收口）调用一次；' +
+        '进度会实时显示在输入框上方横条，并跨会话保留以便续接。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          plan: { type: 'string', description: '方案名（方案文档文件名去扩展名）' },
+          batch: { type: 'string', description: '批次标识，如 B2' },
+          phase: { type: 'string', description: '当前阶段：开工 | 派单 | 执行 | 验证 | 收口' },
+          tLevel: { type: 'string', description: '风险定级：T0 | T1 | T2 | T3' },
+          testsPassed: { type: 'number', description: '已通过的定向测试数' },
+          testsTotal: { type: 'number', description: '定向测试总数' },
+          evidenceDir: { type: 'string', description: '证据目录路径' },
+        },
+        required: ['plan', 'batch', 'phase'],
+      },
+    })
+    const last = await readLastExecution($)
+    if (last !== null) $.ui.toast(`上次执行：${describeExecution(last)}`)
     $.clock.every(POLL_MS, () => {
       void poll($).catch(error => {
         $.ui.log(`flow-deck 轮询失败：${String(error)}`, { to: 'debug' })
@@ -147,6 +187,21 @@ export const register: Register = on => {
   on('command.run', { command: 'flow' }, async $ => {
     await $.ui.open({ id: PANE_ID, title: 'Flow 评审仪表盘' })
     return { text: '已打开评审仪表盘。' }
+  })
+
+  on('tool.call', { tool: 'mcp__flow-deck__flow_report' }, async ($, e) => {
+    const report = parseExecution(e)
+    if (report === null) {
+      return { result: 'plan、batch、phase 为必填字符串', isError: true }
+    }
+    const stamped: ExecutionReport = { ...report, updatedAt: Date.now() }
+    await update($, execution, () => stamped)
+    try {
+      await $.store.set(EXECUTION_STORE_KEY, stamped)
+    } catch (error) {
+      $.ui.log(`flow-deck 跨会话持久化失败：${String(error)}`, { to: 'debug' })
+    }
+    return { result: '进度已上报' }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
@@ -197,6 +252,19 @@ export const register: Register = on => {
             </Box>
           )
         })}
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
+    const report = await read($, execution)
+    if (report === null) return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    return (
+      <Box>
+        <Text dimColor>▸ </Text>
+        <Text>{describeExecution(report)}</Text>
       </Box>
     )
   })

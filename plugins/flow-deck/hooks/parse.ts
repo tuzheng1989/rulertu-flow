@@ -1,4 +1,4 @@
-import type { PlanReview, ReviewRound } from '../types'
+import type { ExecutionReport, PlanReview, ReviewRound } from '../types'
 
 /** plan-iterate 的达标线：最新轮评分不低于它且无 P0/P1 问题 */
 export const PASS_SCORE = 8.5
@@ -75,6 +75,26 @@ export function sparkline(scores: readonly number[]): string {
   return scores
     .map(score => BLOCKS[Math.max(0, Math.min(7, Math.round((score / 10) * 7)))])
     .join('')
+}
+
+/** 校验并归一化 flow_report 上报（来自模型工具入参或 $.store 旧值），不符返回 null */
+export function parseExecution(value: unknown): ExecutionReport | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  if (typeof record.plan !== 'string' || record.plan === '') return null
+  if (typeof record.batch !== 'string' || record.batch === '') return null
+  if (typeof record.phase !== 'string' || record.phase === '') return null
+  const report: ExecutionReport = {
+    plan: record.plan,
+    batch: record.batch,
+    phase: record.phase,
+    updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : 0,
+  }
+  if (typeof record.tLevel === 'string') report.tLevel = record.tLevel
+  if (typeof record.testsPassed === 'number') report.testsPassed = record.testsPassed
+  if (typeof record.testsTotal === 'number') report.testsTotal = record.testsTotal
+  if (typeof record.evidenceDir === 'string') report.evidenceDir = record.evidenceDir
+  return report
 }
 
 /** 组装一个方案的评审概览；stateText 为 null 时仅靠评审文件推导 */

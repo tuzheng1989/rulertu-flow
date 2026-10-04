@@ -5,6 +5,7 @@ import {
   countIssues,
   extractRound,
   isPassing,
+  parseExecution,
   parseReviewJson,
   parseStateJson,
   sparkline,
@@ -64,6 +65,50 @@ describe('parse', () => {
     // 5 分 → round(3.5) = 4 → '▅'；10 分夹紧到下标 7 → '█'
     expect(sparkline([0, 5, 10])).toBe('▁▅█')
     expect(sparkline([])).toBe('')
+  })
+
+  test('parseExecution 校验上报并容错 store 旧值', () => {
+    const full = parseExecution({
+      plan: 'demo',
+      batch: 'B2',
+      phase: '执行',
+      tLevel: 'T1',
+      testsPassed: 12,
+      testsTotal: 15,
+      evidenceDir: 'plans/.flow-evidence',
+      updatedAt: 1000,
+    })
+    expect(full).toEqual({
+      plan: 'demo',
+      batch: 'B2',
+      phase: '执行',
+      tLevel: 'T1',
+      testsPassed: 12,
+      testsTotal: 15,
+      evidenceDir: 'plans/.flow-evidence',
+      updatedAt: 1000,
+    })
+    // 必填缺失
+    expect(parseExecution({ plan: 'demo' })).toBe(null)
+    expect(parseExecution({ plan: '', batch: 'B1', phase: '开工' })).toBe(null)
+    // store 旧值：updatedAt 缺失补 0，未知字段忽略
+    expect(parseExecution({ plan: 'p', batch: 'B1', phase: '收口' })).toEqual({
+      plan: 'p',
+      batch: 'B1',
+      phase: '收口',
+      updatedAt: 0,
+    })
+    // 类型不符
+    expect(parseExecution(null)).toBe(null)
+    expect(parseExecution([1])).toBe(null)
+    expect(parseExecution('x')).toBe(null)
+    // 字段类型错则忽略该可选字段，不整体拒绝
+    expect(parseExecution({ plan: 'p', batch: 'B1', phase: '开工', testsTotal: '5' })).toEqual({
+      plan: 'p',
+      batch: 'B1',
+      phase: '开工',
+      updatedAt: 0,
+    })
   })
 
   test('buildPlanReview 组装概览并以最新轮判定达标', () => {
