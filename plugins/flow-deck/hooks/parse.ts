@@ -1,4 +1,13 @@
-import type { BatchScope, DepGraph, ExecutionReport, PlanReview, ReviewRound } from '../types'
+import type {
+  BatchDep,
+  BatchScope,
+  DepGraph,
+  ExecutionReport,
+  GitFileState,
+  GitStatus,
+  PlanReview,
+  ReviewRound,
+} from '../types'
 
 /** plan-iterate 的达标线：最新轮评分不低于它且无 P0/P1 问题 */
 export const PASS_SCORE = 8.5
@@ -193,4 +202,166 @@ export function buildPlanReview(
     rounds,
     passed: latest !== null && isPassing(latest.score, latest),
   }
+}
+
+/** git status --porcelain=v1 -b 的一行原始文件记录（分类前） */
+export type PorcelainFile = {
+  /** 原始 XY 码 */
+  code: string
+  /** 文件路径（rename 为新路径；带引号输出已剥引号） */
+  path: string
+  /** rename 原路径 */
+  oldPath?: string
+}
+
+/** git status --porcelain=v1 -b 头行与文件行的解析结果 */
+export type PorcelainStatus = {
+  branch: string
+  upstream: string | null
+  ahead: number
+  behind: number
+  files: PorcelainFile[]
+}
+
+/** 合并冲突的 XY 码全集 */
+const CONFLICT_CODES = new Set(['UU', 'AA', 'DD', 'AU', 'UA', 'DU', 'UD'])
+
+/** 剥 porcelain 输出对特殊路径加的引号（quotePath=false 下仅含控制字符等罕见路径仍带） */
+function unquotePath(path: string): string {
+  if (path.startsWith('"') && path.endsWith('"') && path.length >= 2) {
+    return path.slice(1, -1)
+  }
+  return path
+}
+
+/** 解析 git status --porcelain=v1 -b 的 stdout；无 ## 头行（非 git 仓库输出）返回 null */
+export function parsePorcelain(stdout: string): PorcelainStatus | null {
+  const header = stdout.split('\n').find(line => line.startsWith('## '))
+  if (header === undefined) return null
+
+  // 头行变体：## main / ## main...origin/main [ahead 2, behind 1] /
+  // ## No commits yet on main（unborn）/ ## HEAD (no branch)（detached）
+  const body = header.slice(3).trim()
+  let branch: string
+  let upstream: string | null = null
+  let ahead = 0
+  let behind = 0
+  if (body === 'HEAD (no branch)') {
+    branch = 'HEAD*'
+  } else if (body.startsWith('No commits yet on ')) {
+    branch = body.slice('No commits yet on '.length)
+  } else {
+    const dots = body.indexOf('...')
+    if (dots === -1) {
+      branch = body
+    } else {
+      branch = body.slice(0, dots)
+      const rest = body.slice(dots + 3)
+      const bracket = rest.indexOf(' [')
+      upstream = bracket === -1 ? rest : rest.slice(0, bracket)
+      const marks = bracket === -1 ? '' : rest.slice(bracket + 2, rest.lastIndexOf(']'))
+      const aheadMatch = /\bahead (\d+)/.exec(marks)
+      const behindMatch = /\bbehind (\d+)/.exec(marks)
+      if (aheadMatch !== null) ahead = Number(aheadMatch[1])
+      if (behindMatch !== null) behind = Number(behindMatch[1])
+    }
+  }
+
+  const files: PorcelainFile[] = []
+  for (const line of stdout.split('\n')) {
+    if (line === '' || line.startsWith('## ')) continue
+    const code = line.slice(0, 2)
+    const rest = line.slice(3)
+    if (rest === '') continue
+    const arrow = rest.indexOf(' -> ')
+    if (arrow !== -1) {
+      files.push({
+        code,
+        path: unquotePath(rest.slice(arrow + 4)),
+        oldPath: unquotePath(rest.slice(0, arrow)),
+      })
+    } else {
+      files.push({ code, path: unquotePath(rest) })
+    }
+  }
+  return { branch, upstream, ahead, behind, files }
+}
+
+/** 解析 git diff --numstat 的 stdout，累加行级增删；二进制行（-\t-）与非法行跳过 */
+export function parseNumstat(stdout: string): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const line of stdout.split('\n')) {
+    const parts = line.split('\t')
+    if (parts.length < 3) continue
+    const lineAdded = Number(parts[0])
+    const lineRemoved = Number(parts[1])
+    if (!Number.isNaN(lineAdded)) added += lineAdded
+    if (!Number.isNaN(lineRemoved)) removed += lineRemoved
+  }
+  return { added, removed }
+}
+
+/** 组装 git 状态快照：XY 码分类 + 两次 numstat 合计行级增删 */
+export function buildGitStatus(
+  porcelain: PorcelainStatus,
+  worktreeNumstat: { added: number; removed: number },
+  cachedNumstat: { added: number; removed: number },
+  fetchedAt: number,
+): GitStatus {
+  const staged: GitFileState[] = []
+  const unstaged: GitFileState[] = []
+  const untracked: GitFileState[] = []
+  const conflicts: GitFileState[] = []
+  for (const file of porcelain.files) {
+    if (CONFLICT_CODES.has(file.code)) {
+      conflicts.push(file)
+    } else if (file.code === '??') {
+      untracked.push(file)
+    } else {
+      // charAt 越界返回空串，includes('') 为 false，免于索引 undefined
+      if ('MADRC'.includes(file.code.charAt(0))) staged.push(file)
+      if ('MD'.includes(file.code.charAt(1))) unstaged.push(file)
+    }
+  }
+  return {
+    branch: porcelain.branch,
+    upstream: porcelain.upstream,
+    ahead: porcelain.ahead,
+    behind: porcelain.behind,
+    staged,
+    unstaged,
+    untracked,
+    conflicts,
+    added: worktreeNumstat.added + cachedNumstat.added,
+    removed: worktreeNumstat.removed + cachedNumstat.removed,
+    fetchedAt,
+  }
+}
+
+/** 工作区干净且与上游同步；此时横条不画 git 行 */
+export function isGitQuiet(status: GitStatus): boolean {
+  return (
+    status.staged.length === 0 &&
+    status.unstaged.length === 0 &&
+    status.untracked.length === 0 &&
+    status.conflicts.length === 0 &&
+    status.ahead === 0 &&
+    status.behind === 0
+  )
+}
+
+/** 横条 git 行的计数段与行级段文案；各自无内容时为 null（冲突计数由渲染层独立红字展示） */
+export function gitSummaryParts(
+  status: GitStatus,
+): { counts: string | null; lines: string | null } {
+  const counts: string[] = []
+  if (status.staged.length > 0) counts.push(`暂存${status.staged.length}`)
+  if (status.unstaged.length > 0) counts.push(`改${status.unstaged.length}`)
+  if (status.untracked.length > 0) counts.push(`新${status.untracked.length}`)
+  let lines: string | null = null
+  if (status.added > 0 && status.removed > 0) lines = `+${status.added} −${status.removed}`
+  else if (status.added > 0) lines = `+${status.added}`
+  else if (status.removed > 0) lines = `−${status.removed}`
+  return { counts: counts.length === 0 ? null : counts.join(' '), lines }
 }

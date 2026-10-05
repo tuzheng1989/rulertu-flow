@@ -2,20 +2,36 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
+  buildGitStatus,
   buildPlanReview,
   depStatuses,
   extractRound,
+  gitSummaryParts,
   guardDecision,
+  isGitQuiet,
   parseBatchScope,
   parseDepGraph,
   parseExecution,
+  parseNumstat,
+  parsePorcelain,
   sparkline,
 } from './parse'
-import type { BatchScope, DepGraph, ExecutionReport, PlanReview } from '../types'
+import type {
+  BatchScope,
+  DepGraph,
+  ExecutionReport,
+  GitFileState,
+  GitStatus,
+  PlanReview,
+} from '../types'
 
 const PANE_ID = 'flow'
+const GIT_PANE_ID = 'flow-git'
 const POLL_MS = 2000
+const GIT_POLL_MS = 3000
+const GIT_TIMEOUT_MS = 5000
 const MAX_DEPTH = 4
+const MAX_GIT_FILES = 15
 const SKIP_DIRS = new Set(['node_modules', '.git'])
 const EXECUTION_STORE_KEY = 'lastExecution'
 
@@ -26,6 +42,7 @@ const execution = atom({ plugin: 'flow-deck', key: 'execution' } as const, null)
 const batchScope = atom({ plugin: 'flow-deck', key: 'batchScope' } as const, null)
 const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
 const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
+const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
@@ -156,6 +173,53 @@ async function readLastExecution($: EngineInterface): Promise<ExecutionReport | 
   }
 }
 
+/** 跑一个 git 子命令；非零退出（含非 git 仓库的 128）或超时返回 null */
+async function runGit($: EngineInterface, args: readonly string[]): Promise<string | null> {
+  try {
+    const result = await $.process.run(['git', ...args], { timeoutMs: GIT_TIMEOUT_MS })
+    if (result.exitCode !== 0) return null
+    return result.stdout
+  } catch {
+    return null
+  }
+}
+
+const ZERO_LINES = { added: 0, removed: 0 } as const
+
+/** 一轮 git 取数：status + 双 numstat → 快照入 atom；非 git 仓库记 null（面板与横条静默） */
+async function pollGit($: EngineInterface): Promise<void> {
+  const porcelainText = await runGit($, [
+    '-c',
+    'core.quotePath=false',
+    'status',
+    '--porcelain=v1',
+    '-b',
+  ])
+  if (porcelainText === null) {
+    await update($, gitStatus, () => null)
+    return
+  }
+  const porcelain = parsePorcelain(porcelainText)
+  if (porcelain === null) return
+  // numstat 失败不阻塞状态展示，按 0 行计
+  const [worktree, cached] = await Promise.all([
+    runGit($, ['diff', '--numstat']),
+    runGit($, ['diff', '--cached', '--numstat']),
+  ])
+  const status = buildGitStatus(
+    porcelain,
+    worktree === null ? ZERO_LINES : parseNumstat(worktree),
+    cached === null ? ZERO_LINES : parseNumstat(cached),
+    Date.now(),
+  )
+  await update($, gitStatus, () => status)
+}
+
+/** 一个 git 文件行的显示文案；rename 显示 old → new */
+function gitFileLabel(file: GitFileState): string {
+  return file.oldPath === undefined ? file.path : `${file.oldPath} → ${file.path}`
+}
+
 /** 一轮扫描：更新面板数据、对新落盘轮次发 toast、刷新 statusline */
 async function poll($: EngineInterface): Promise<void> {
   const found = (await scanForPlans($, '', 0)).sort((a, b) => (a.name < b.name ? -1 : 1))
@@ -202,6 +266,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     sessionCwd = e.cwd
     await $.command.register({ name: 'flow', description: '打开 rulertu-flow 评审仪表盘' })
+    await $.command.register({ name: 'git', description: '打开 git 仓库状态面板' })
     await $.tool.register({
       name: 'flow_report',
       description:
@@ -276,6 +341,15 @@ export const register: Register = (on, options) => {
         $.ui.log(`flow-deck 轮询失败：${String(error)}`, { to: 'debug' })
       })
     })
+    // git 轮询：启动先取一次数（面板打开前即有数据），此后按独立周期刷新
+    void pollGit($).catch(error => {
+      $.ui.log(`flow-deck git 轮询失败：${String(error)}`, { to: 'debug' })
+    })
+    $.clock.every(GIT_POLL_MS, () => {
+      void pollGit($).catch(error => {
+        $.ui.log(`flow-deck git 轮询失败：${String(error)}`, { to: 'debug' })
+      })
+    })
     return next(e)
   })
 
@@ -288,6 +362,16 @@ export const register: Register = (on, options) => {
     }
     await $.ui.open({ id: PANE_ID, title: 'Flow 评审仪表盘' })
     return { text: '已打开评审仪表盘。' }
+  })
+
+  on('command.run', { command: 'git' }, async $ => {
+    const isUp = (await $.ui.panes()).some(pane => pane.id === GIT_PANE_ID)
+    if (isUp) {
+      await $.ui.close({ id: GIT_PANE_ID })
+      return { text: '已关闭 git 仓库状态面板。' }
+    }
+    await $.ui.open({ id: GIT_PANE_ID, title: 'Git 仓库状态' })
+    return { text: '已打开 git 仓库状态面板。' }
   })
 
   on('tool.call', { tool: 'mcp__flow-deck__flow_report' }, async ($, e) => {
@@ -418,11 +502,106 @@ export const register: Register = (on, options) => {
     )
   })
 
+  on('ui.render', { component: 'Pane', requestId: GIT_PANE_ID }, async ($, e) => {
+    const { Box, Text } = $.ui.resolve(e)
+    const status: GitStatus | null = await read($, gitStatus)
+
+    if (status === null) {
+      return (
+        <Box flexDirection="column">
+          <Text>当前目录不是 git 仓库，或状态尚未取到。</Text>
+          <Text dimColor>每 {Math.round(GIT_POLL_MS / 1000)} 秒自动刷新；在仓库根或其子目录打开会话即可。</Text>
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column">
+        <Box flexDirection="row">
+          <Text bold>{status.branch}</Text>
+          {status.upstream !== null && <Text dimColor> → {status.upstream}</Text>}
+          {status.ahead > 0 && <Text color="green"> ↑{status.ahead}</Text>}
+          {status.behind > 0 && <Text color="yellow"> ↓{status.behind}</Text>}
+        </Box>
+        {(status.added > 0 || status.removed > 0) && (
+          <Box>
+            {status.added > 0 && <Text color="green">+{status.added}</Text>}
+            {status.removed > 0 && <Text color="red"> −{status.removed}</Text>}
+            <Text dimColor> 行级改动（tracked 合计）</Text>
+          </Box>
+        )}
+        {isGitQuiet(status) && <Text color="green">✓ 工作区干净，与上游同步</Text>}
+        {status.conflicts.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold color="red">
+              ▍冲突（{status.conflicts.length}）
+            </Text>
+            {status.conflicts.slice(0, MAX_GIT_FILES).map(file => (
+              <Text key={file.path} color="red">
+                ✗ {file.code} {gitFileLabel(file)}
+              </Text>
+            ))}
+            {status.conflicts.length > MAX_GIT_FILES && (
+              <Text dimColor>…还有 {status.conflicts.length - MAX_GIT_FILES} 个</Text>
+            )}
+          </Box>
+        )}
+        {status.staged.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold color="green">
+              ▍已暂存（{status.staged.length}）
+            </Text>
+            {status.staged.slice(0, MAX_GIT_FILES).map(file => (
+              <Text key={file.path} color="green">
+                {file.code} {gitFileLabel(file)}
+              </Text>
+            ))}
+            {status.staged.length > MAX_GIT_FILES && (
+              <Text dimColor>…还有 {status.staged.length - MAX_GIT_FILES} 个</Text>
+            )}
+          </Box>
+        )}
+        {status.unstaged.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold color="yellow">
+              ▍未暂存（{status.unstaged.length}）
+            </Text>
+            {status.unstaged.slice(0, MAX_GIT_FILES).map(file => (
+              <Text key={file.path} color="yellow">
+                {file.code} {gitFileLabel(file)}
+              </Text>
+            ))}
+            {status.unstaged.length > MAX_GIT_FILES && (
+              <Text dimColor>…还有 {status.unstaged.length - MAX_GIT_FILES} 个</Text>
+            )}
+          </Box>
+        )}
+        {status.untracked.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold>▍未跟踪（{status.untracked.length}）</Text>
+            {status.untracked.slice(0, MAX_GIT_FILES).map(file => (
+              <Text key={file.path} dimColor>
+                {file.code} {gitFileLabel(file)}
+              </Text>
+            ))}
+            {status.untracked.length > MAX_GIT_FILES && (
+              <Text dimColor>…还有 {status.untracked.length - MAX_GIT_FILES} 个</Text>
+            )}
+          </Box>
+        )}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const report = await read($, execution)
     const scope = await read($, batchScope)
-    if (report === null && scope === null) return next(e)
+    const git = await read($, gitStatus)
+    // 工作区干净且与上游同步时不占横条
+    const gitLine = git !== null && !isGitQuiet(git) ? git : null
+    if (report === null && scope === null && gitLine === null) return next(e)
+    const { counts, lines } = gitLine === null ? { counts: null, lines: null } : gitSummaryParts(gitLine)
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
@@ -437,6 +616,19 @@ export const register: Register = (on, options) => {
           <Text dimColor>
             ▸ {scope.plan} · {scope.batch} · 守卫 {scope.files.length} 文件
           </Text>
+        )}
+        {gitLine !== null && (
+          <Box>
+            <Text dimColor>▸ git </Text>
+            <Text>{gitLine.branch}</Text>
+            {gitLine.ahead > 0 && <Text color="green"> ↑{gitLine.ahead}</Text>}
+            {gitLine.behind > 0 && <Text color="yellow"> ↓{gitLine.behind}</Text>}
+            {gitLine.conflicts.length > 0 && (
+              <Text color="red"> · ✗冲突{gitLine.conflicts.length}</Text>
+            )}
+            {counts !== null && <Text dimColor> · {counts}</Text>}
+            {lines !== null && <Text dimColor> · {lines}</Text>}
+          </Box>
         )}
       </Box>
     )

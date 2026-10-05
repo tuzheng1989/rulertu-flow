@@ -69,6 +69,42 @@ export type DepGraph = {
   batches: BatchDep[]
 }
 
+/** 一个 git 文件的更改状态（源自 git status --porcelain 的 XY 码） */
+export type GitFileState = {
+  /** 原始 XY 码，如 ' M'、'M '、'??'、'UU' */
+  code: string
+  /** 文件路径（rename 为新路径） */
+  path: string
+  /** rename 原路径 */
+  oldPath?: string
+}
+
+/** 一次 git 仓库状态快照（源自 status --porcelain=v1 -b 与 diff --numstat） */
+export type GitStatus = {
+  /** 当前分支名；detached HEAD 时为 'HEAD*' */
+  branch: string
+  /** 上游分支名；未设置或 unborn 时为 null */
+  upstream: string | null
+  /** 领先上游的提交数 */
+  ahead: number
+  /** 落后上游的提交数 */
+  behind: number
+  /** 已暂存的文件（X ∈ M/A/D/R/C 且非冲突） */
+  staged: GitFileState[]
+  /** 未暂存的改动文件（Y ∈ M/D 且非冲突） */
+  unstaged: GitFileState[]
+  /** 未跟踪的文件（??） */
+  untracked: GitFileState[]
+  /** 合并冲突文件（UU/AA/DD/AU/UA/DU/UD），最优先展示 */
+  conflicts: GitFileState[]
+  /** 行级新增合计（tracked 改动，untracked 不计） */
+  added: number
+  /** 行级删除合计 */
+  removed: number
+  /** 快照时间（ms） */
+  fetchedAt: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'flow-deck': {
@@ -86,6 +122,8 @@ declare module 'claude-code' {
       progress: Record<string, string>
       /** 当前方案的波次依赖图；未声明则 null */
       deps: DepGraph | null
+      /** 最近一次 git 仓库状态快照；非 git 仓库或尚未取数则 null */
+      git: GitStatus | null
     }
   }
 }

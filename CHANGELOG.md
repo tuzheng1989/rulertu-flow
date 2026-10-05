@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- flow-deck 0.5.0：git 仓库状态可视化——每 3 秒轮询 `git status --porcelain=v1 -b` 与两次 `diff --numstat`；工作区脏或与上游有偏差时输入框上方横条新增 `▸ git` 行（分支、↑ahead/↓behind、暂存/改/新计数、`+行 −行`，冲突红字优先），`/git` 命令 toggle 详情面板（冲突/已暂存/未暂存/未跟踪四分区，每区超 15 条折叠计数，行级增删着色汇总）。非 git 仓库全程静默；statusline 与 `/flow` 面板不受影响。
 - flow-deck 0.4.1：`/flow` 改为 toggle 语义——面板已开时再输入即关闭（经 `$.ui.panes()` 感知），与引擎原生关闭方式互不干扰。
 - flow-deck 0.4.0：波次依赖 DAG 可视化——新增 `flow_deps` 工具（`mcp__flow-deck__flow_deps`），optimization-plan 路线图定稿时声明波次依赖图；`/flow` 面板新增「执行 DAG」区块，按推荐执行顺序逐批标注三态（收口 ✓ 绿 / 进行中 ● 黄 / 待执行 ○ 灰）与依赖箭头。`flow_report` 顺带累积各批阶段记录（此前仅保留当前批）。技能侧协同：optimization-plan「文档分层」节加声明义务（工具不存在静默跳过）。
 - flow-deck 0.3.0：锚点边界守卫——新增 `flow_batch` 工具（`mcp__flow-deck__flow_batch`），每批派单完成后声明本批允许改动的文件集合；此后对边界外文件的 Edit/Write 按 `guardMode` 配置处理（默认 `warn` 越界提醒后放行，可切 `deny` 硬拦截），未声明边界或 cwd 未就绪时静默放行。路径比较归一化分隔符、工作目录前缀与大小写（Windows 友好）。技能侧协同：implement-plan「进度上报」小节补 `flow_batch` 义务（派单完成后声明边界，工具不存在静默跳过）。已知平台行为：工具执行期间 toast 不显示，越界提醒走 transcript 系统通知。

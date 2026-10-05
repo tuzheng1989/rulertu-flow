@@ -1,21 +1,26 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import {
+  buildGitStatus,
   buildPlanReview,
   countIssues,
   depStatuses,
   extractRound,
   guardDecision,
+  gitSummaryParts,
+  isGitQuiet,
   isPassing,
   normalizePath,
   parseBatchScope,
   parseDepGraph,
   parseExecution,
+  parseNumstat,
+  parsePorcelain,
   parseReviewJson,
   parseStateJson,
   sparkline,
 } from './parse'
-import type { BatchScope } from '../types'
+import type { BatchScope, GitStatus } from '../types'
 
 describe('parse', () => {
   test('extractRound 认识 review-RN.json', () => {
@@ -244,5 +249,189 @@ describe('parse', () => {
     expect(pending.round).toBe(3)
     expect(pending.rounds).toEqual([])
     expect(pending.passed).toBe(false)
+  })
+
+  test('parsePorcelain 解析各头行变体', () => {
+    // 无上游
+    expect(parsePorcelain('## main\n')).toEqual({
+      branch: 'main',
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      files: [],
+    })
+    // 有上游 + ahead/behind
+    expect(parsePorcelain('## main...origin/main [ahead 2, behind 1]\n')).toEqual({
+      branch: 'main',
+      upstream: 'origin/main',
+      ahead: 2,
+      behind: 1,
+      files: [],
+    })
+    // 有上游无偏差
+    expect(parsePorcelain('## dev...origin/dev\n M a.ts\n')).toMatchObject({
+      branch: 'dev',
+      upstream: 'origin/dev',
+      ahead: 0,
+      behind: 0,
+    })
+    // unborn 分支
+    expect(parsePorcelain('## No commits yet on main\n')).toEqual({
+      branch: 'main',
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      files: [],
+    })
+    // detached HEAD
+    expect(parsePorcelain('## HEAD (no branch)\n')).toMatchObject({
+      branch: 'HEAD*',
+      upstream: null,
+    })
+    // 非 git 输出（无头行）拒绝
+    expect(parsePorcelain('fatal: not a git repository\n')).toBe(null)
+    expect(parsePorcelain('')).toBe(null)
+  })
+
+  test('parsePorcelain 按 XY 码收集文件行', () => {
+    const parsed = parsePorcelain(
+      [
+        '## main',
+        '?? new.txt',
+        ' M work.ts',
+        'M  staged.ts',
+        'MM both.ts',
+        'A  added.ts',
+        'D  gone.ts',
+        ' D unstaged-del.ts',
+        'R  old.ts -> renamed.ts',
+        'UU conflict.ts',
+      ].join('\n') + '\n',
+    )
+    if (parsed === null) throw new Error('fixture 不可为 null')
+    expect(parsed.files).toEqual([
+      { code: '??', path: 'new.txt' },
+      { code: ' M', path: 'work.ts' },
+      { code: 'M ', path: 'staged.ts' },
+      { code: 'MM', path: 'both.ts' },
+      { code: 'A ', path: 'added.ts' },
+      { code: 'D ', path: 'gone.ts' },
+      { code: ' D', path: 'unstaged-del.ts' },
+      { code: 'R ', path: 'renamed.ts', oldPath: 'old.ts' },
+      { code: 'UU', path: 'conflict.ts' },
+    ])
+  })
+
+  test('parsePorcelain 剥带引号路径的引号', () => {
+    const parsed = parsePorcelain('## main\n?? "path with space.txt"\n')
+    if (parsed === null) throw new Error('fixture 不可为 null')
+    expect(parsed.files).toEqual([{ code: '??', path: 'path with space.txt' }])
+  })
+
+  test('parseNumstat 累加行级增删并跳过二进制', () => {
+    expect(parseNumstat('5\t3\ta.ts\n12\t0\tb.ts\n')).toEqual({ added: 17, removed: 3 })
+    expect(parseNumstat('-\t-\tbinary.png\n2\t1\tc.ts\n')).toEqual({ added: 2, removed: 1 })
+    expect(parseNumstat('')).toEqual({ added: 0, removed: 0 })
+    expect(parseNumstat('junk line\n')).toEqual({ added: 0, removed: 0 })
+  })
+
+  test('buildGitStatus 组装快照并按 XY 分类', () => {
+    const porcelain = parsePorcelain(
+      [
+        '## main...origin/main [ahead 1, behind 2]',
+        '?? fresh.txt',
+        ' M work.ts',
+        'M  staged.ts',
+        'A  added.ts',
+        'R  old.ts -> renamed.ts',
+        ' D del-later.ts',
+        'UU clash.ts',
+      ].join('\n') + '\n',
+    )
+    if (porcelain === null) throw new Error('fixture 不可为 null')
+    const status: GitStatus = buildGitStatus(porcelain, { added: 45, removed: 3 }, { added: 7, removed: 9 }, 1000)
+    expect(status).toEqual({
+      branch: 'main',
+      upstream: 'origin/main',
+      ahead: 1,
+      behind: 2,
+      staged: [
+        { code: 'M ', path: 'staged.ts' },
+        { code: 'A ', path: 'added.ts' },
+        { code: 'R ', path: 'renamed.ts', oldPath: 'old.ts' },
+      ],
+      unstaged: [
+        { code: ' M', path: 'work.ts' },
+        { code: ' D', path: 'del-later.ts' },
+      ],
+      untracked: [{ code: '??', path: 'fresh.txt' }],
+      conflicts: [{ code: 'UU', path: 'clash.ts' }],
+      added: 52,
+      removed: 12,
+      fetchedAt: 1000,
+    })
+  })
+
+  test('isGitQuiet 判定干净且同步', () => {
+    const base = {
+      branch: 'main',
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      unstaged: [],
+      untracked: [],
+      conflicts: [],
+      added: 0,
+      removed: 0,
+    }
+    expect(isGitQuiet({ ...base, fetchedAt: 0 })).toBe(true)
+    // 有任何文件动静或偏差都不安静
+    expect(isGitQuiet({ ...base, untracked: [{ code: '??', path: 'a' }], fetchedAt: 0 })).toBe(false)
+    expect(isGitQuiet({ ...base, ahead: 2, fetchedAt: 0 })).toBe(false)
+    expect(isGitQuiet({ ...base, conflicts: [{ code: 'UU', path: 'a' }], fetchedAt: 0 })).toBe(false)
+    expect(isGitQuiet({ ...base, staged: [{ code: 'M ', path: 'a' }], fetchedAt: 0 })).toBe(false)
+  })
+
+  test('gitSummaryParts 拼计数段与行级段', () => {
+    const base = {
+      branch: 'main',
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      unstaged: [],
+      untracked: [],
+      conflicts: [],
+      added: 0,
+      removed: 0,
+    }
+    // 全空 → 两段均 null
+    expect(gitSummaryParts({ ...base, fetchedAt: 0 })).toEqual({ counts: null, lines: null })
+    // 计数与行级
+    expect(
+      gitSummaryParts({
+        ...base,
+        staged: [{ code: 'M ', path: 'a' }, { code: 'A ', path: 'b' }],
+        unstaged: [{ code: ' M', path: 'c' }, { code: ' M', path: 'd' }, { code: ' M', path: 'e' }],
+        untracked: [{ code: '??', path: 'f' }],
+        added: 45,
+        removed: 12,
+        fetchedAt: 0,
+      }),
+    ).toEqual({ counts: '暂存2 改3 新1', lines: '+45 −12' })
+    // 为 0 的计数类省略；行级只显示非零侧
+    expect(gitSummaryParts({ ...base, unstaged: [{ code: ' M', path: 'c' }, { code: ' M', path: 'd' }], fetchedAt: 0 })).toEqual({
+      counts: '改2',
+      lines: null,
+    })
+    expect(gitSummaryParts({ ...base, added: 3, removed: 0, fetchedAt: 0 })).toEqual({
+      counts: null,
+      lines: '+3',
+    })
+    expect(gitSummaryParts({ ...base, removed: 5, fetchedAt: 0 })).toEqual({
+      counts: null,
+      lines: '−5',
+    })
   })
 })
