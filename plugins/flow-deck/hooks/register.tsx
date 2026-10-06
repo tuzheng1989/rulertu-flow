@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
+  bannerPlan,
   buildGitStatus,
   buildPlanReview,
   depStatuses,
@@ -250,8 +251,9 @@ async function poll($: EngineInterface): Promise<void> {
     $.ui.toast(`「${plan.name}」R${round.round} 评审完成：${round.score} 分 · ${counts}${mark}`)
   }
 
-  // 多方案并存时 statusline 展示名字排序的最后一个；单方案（常态）即其本身
-  const lastPlan = found.at(-1) ?? null
+  // 达标即撤：横条只留给未达标方案（达标瞬间 toast 已播报，常驻无增量价值）；
+  // 面板不受影响，仍展示全部方案与轮次历史
+  const lastPlan = bannerPlan(found)
   const summary = lastPlan === null ? undefined : summarize(lastPlan)
   $.ui.log(`flow-deck 扫描完成：${found.length} 个方案`, { to: 'debug' })
   if (summary !== lastStatus) {

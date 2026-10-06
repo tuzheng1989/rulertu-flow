@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- flow-deck 0.5.1：评审横条达标即撤——statusline 只展示最后一个未达标方案（`bannerPlan`），方案达标瞬间 toast 播报后横条即撤下，不再常驻已完结评审的残留状态；`/flow` 面板不受影响，仍展示全部方案与轮次历史。多方案并存时名字排序更靠后的达标方案不再挤占未达标方案的横条位。
 - flow-deck 0.5.0：git 仓库状态可视化——每 3 秒轮询 `git status --porcelain=v1 -b` 与两次 `diff --numstat`；工作区脏或与上游有偏差时输入框上方横条新增 `▸ git` 行（分支、↑ahead/↓behind、暂存/改/新计数、`+行 −行`，冲突红字优先），`/git` 命令 toggle 详情面板（冲突/已暂存/未暂存/未跟踪四分区，每区超 15 条折叠计数，行级增删着色汇总）。非 git 仓库全程静默；statusline 与 `/flow` 面板不受影响。
 - flow-deck 0.4.1：`/flow` 改为 toggle 语义——面板已开时再输入即关闭（经 `$.ui.panes()` 感知），与引擎原生关闭方式互不干扰。
 - flow-deck 0.4.0：波次依赖 DAG 可视化——新增 `flow_deps` 工具（`mcp__flow-deck__flow_deps`），optimization-plan 路线图定稿时声明波次依赖图；`/flow` 面板新增「执行 DAG」区块，按推荐执行顺序逐批标注三态（收口 ✓ 绿 / 进行中 ● 黄 / 待执行 ○ 灰）与依赖箭头。`flow_report` 顺带累积各批阶段记录（此前仅保留当前批）。技能侧协同：optimization-plan「文档分层」节加声明义务（工具不存在静默跳过）。

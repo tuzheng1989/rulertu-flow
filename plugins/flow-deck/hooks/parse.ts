@@ -204,6 +204,11 @@ export function buildPlanReview(
   }
 }
 
+/** 横条展示的方案：名字排序的最后一个未达标方案；全部达标或无方案时为 null（横条撤下） */
+export function bannerPlan(plans: readonly PlanReview[]): PlanReview | null {
+  return plans.filter(plan => !plan.passed).at(-1) ?? null
+}
+
 /** git status --porcelain=v1 -b 的一行原始文件记录（分类前） */
 export type PorcelainFile = {
   /** 原始 XY 码 */

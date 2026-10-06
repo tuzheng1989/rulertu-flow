@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import {
+  bannerPlan,
   buildGitStatus,
   buildPlanReview,
   countIssues,
@@ -249,6 +250,25 @@ describe('parse', () => {
     expect(pending.round).toBe(3)
     expect(pending.rounds).toEqual([])
     expect(pending.passed).toBe(false)
+  })
+
+  test('bannerPlan 选取横条方案:最后一个未达标者,全部达标撤下', () => {
+    const passed = buildPlanReview('done', '.plan-iterate/done', null, [
+      { round: 6, text: JSON.stringify({ score: 9.2, issues: [{ severity: 'P2' }] }) },
+    ])
+    const failing = buildPlanReview('wip', '.plan-iterate/wip', null, [
+      { round: 1, text: JSON.stringify({ score: 7.0, issues: [{ severity: 'P0' }] }) },
+    ])
+    expect(passed.passed).toBe(true)
+    expect(failing.passed).toBe(false)
+
+    // 横条只留给未达标方案;名字排序在后的达标方案不占横条
+    expect(bannerPlan([failing, passed])).toBe(failing)
+    expect(bannerPlan([passed, failing])).toBe(failing)
+
+    // 全部达标或无方案 → null(横条撤下)
+    expect(bannerPlan([passed])).toBe(null)
+    expect(bannerPlan([])).toBe(null)
   })
 
   test('parsePorcelain 解析各头行变体', () => {
