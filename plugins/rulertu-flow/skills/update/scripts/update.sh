@@ -5,7 +5,7 @@
 #       自我更新（会话内进程无法替换自身）。如需升级本体，请退出会话后手动
 #       `claude update`。
 #
-# 覆盖 6 类更新：
+# 覆盖 7 类更新：
 #   1. 所有 marketplaces       : claude plugin marketplace update
 #   2. 已安装 plugins          : 逐个 claude plugin update <id> --scope <scope>
 #                                （CLI 无原生 update-all；必须按每个插件的实际 scope 调用，
@@ -16,6 +16,9 @@
 #                                （CLI 命令为 ocr；纯 CLI 非常驻 MCP，无文件锁问题）
 #   6. deepeval (pip + skills) : pip install --upgrade deepeval
 #                                + npx skills update deepeval（skill 本体走 skills CLI）
+#   7. agent-skills (git 仓库) : 逐个 git -C ~/share/agent-skills/<name> pull --ff-only
+#                                （skill 单一源目录；~/.claude/skills、~/.agents/skills 里的
+#                                 junction 指向这里，pull 后链接处自动生效）
 #
 # 未安装组件的安装闸门：
 #   npm/pip 组件的「更新」命令对未安装的包会直接装上。默认对未安装组件跳过并
@@ -62,6 +65,8 @@ npm_ver() {
 codegraph_ver() { codegraph --version 2>/dev/null | head -1; }
 # deepeval 版本从 pip 元数据取（CLI 未上 PATH 时也能采集）
 deepeval_ver() { python -m pip show deepeval 2>/dev/null | sed -n 's/^Version: //p'; }
+# agent-skills 仓库版本 = 当前 HEAD 短哈希
+git_ver() { git -C "$1" rev-parse --short HEAD 2>/dev/null; }
 
 # ---------- 未安装组件的安装闸门 ----------
 # 仅当组件名出现在 UPDATE_INSTALL（逗号分隔）中，未安装的组件才允许新装；
@@ -124,7 +129,7 @@ reach_github() {
 }
 
 preflight_proxy() {
-  section "0/6" "代理与连通性预检"
+  section "0/7" "代理与连通性预检"
   if [ "${UPDATE_NO_PROXY_GATE:-0}" = "1" ]; then
     warn "已设 UPDATE_NO_PROXY_GATE=1，跳过代理预检（受限网络下 marketplace/plugins 可能失败）"
     return 0
@@ -171,7 +176,7 @@ preflight_proxy() {
 
 # ---------- 1. 所有 marketplaces ----------
 update_marketplaces() {
-  section "1/6" "所有 marketplaces"
+  section "1/7" "所有 marketplaces"
   local count err
   count=$(claude plugin marketplace list 2>/dev/null | grep -c '❯' || true)
   info "已配置市场数: ${count:-?}"
@@ -186,7 +191,7 @@ update_marketplaces() {
 
 # ---------- 2. 已安装 plugins（按 scope 逐个） ----------
 update_plugins() {
-  section "2/6" "已安装 plugins（按 scope 逐个）"
+  section "2/7" "已安装 plugins（按 scope 逐个）"
   local rows err
   # 同时取 id 与 scope（scope 不传会默认 user → Plugin not found）
   # 注意：Windows 上 Python stdout 是文本模式，会把 \n 翻译成 \r\n，
@@ -237,7 +242,7 @@ for p in json.load(sys.stdin):
 
 # ---------- 3. openwiki (npm) ----------
 update_openwiki() {
-  section "3/6" "openwiki (npm 全局包)"
+  section "3/7" "openwiki (npm 全局包)"
   local before after err
   before=$(npm_ver openwiki)
   if [ -z "$before" ] && ! want_install openwiki; then
@@ -281,7 +286,7 @@ kill_codegraph_procs() {
 
 # ---------- 4. codegraph (npm) ----------
 update_codegraph() {
-  section "4/6" "codegraph (npm 全局包 @colbymchenry/codegraph)"
+  section "4/7" "codegraph (npm 全局包 @colbymchenry/codegraph)"
   local before after err
   before=$(codegraph_ver)
   if [ -z "$before" ] && ! want_install codegraph; then
@@ -310,7 +315,7 @@ update_codegraph() {
 
 # ---------- 5. open-code-review (npm) ----------
 update_ocr() {
-  section "5/6" "open-code-review (npm 全局包 @alibaba-group/open-code-review)"
+  section "5/7" "open-code-review (npm 全局包 @alibaba-group/open-code-review)"
   local before after err
   before=$(npm_ver @alibaba-group/open-code-review)
   if [ -z "$before" ] && ! want_install ocr; then
@@ -333,7 +338,7 @@ update_ocr() {
 # deepeval 有两层：pip 包（CLI 与 SDK）和 skill 文档本体（由 npx skills 管理），
 # 分别更新、分别汇总；pip 走 PyPI，npx 走 npm registry，均继承已 export 的代理。
 update_deepeval() {
-  section "6/6" "deepeval (pip 包 + npx skills 管理的 skill)"
+  section "6/7" "deepeval (pip 包 + npx skills 管理的 skill)"
   local before after err
 
   # 6a. Python 包
@@ -367,6 +372,53 @@ update_deepeval() {
   fi
 }
 
+# ---------- 7. agent-skills（~/share/agent-skills 下的 git 仓库） ----------
+# skill 单一源目录，~/.claude/skills、~/.agents/skills 的 junction 都指向这里，
+# pull 后链接处自动生效。--ff-only 拒绝非快进合并：本地有改动/分叉时报错跳过，
+# 不自动 stash、不产生合并提交（更新工具不应碰用户工作区）。
+update_agent_skills() {
+  section "7/7" "agent-skills (git 仓库逐个 pull --ff-only)"
+  local root="$HOME/share/agent-skills"
+  if [ ! -d "$root" ]; then
+    warn "目录不存在: $root，跳过"
+    info "手动安装（详见各 skill README）：git clone <仓库URL> $root/<name>"
+    info "  再 mklink /J 到 %USERPROFILE%\\.claude\\skills\\<name> 与 %USERPROFILE%\\.agents\\skills\\<name>"
+    sum_skip "agent-skills（目录不存在）"
+    return
+  fi
+
+  local repos=() d
+  for d in "$root"/*/; do
+    [ -e "${d}.git" ] && repos+=("${d%/}")
+  done
+  [ "${#repos[@]}" -eq 0 ] && { warn "目录下无 git 仓库，跳过（手动安装：git clone <仓库URL> $root/<name>，再 mklink /J 到 ~/.claude/skills/<name> 与 ~/.agents/skills/<name>）"; sum_skip "agent-skills（无仓库）"; return; }
+
+  local total=${#repos[@]} okn=0 failn=0 repo name before after err
+  info "待更新仓库数: $total"
+  for repo in "${repos[@]}"; do
+    name=$(basename "$repo")
+    before=$(git_ver "$repo")
+    if err=$(git -C "$repo" pull --ff-only 2>&1); then
+      after=$(git_ver "$repo")
+      if [ "$before" = "$after" ]; then
+        good "$name: 已是最新 ($after)"
+      else
+        good "$name: $before → $after"
+      fi
+      okn=$((okn+1))
+    else
+      bad "$name: pull 失败（常见原因：本地有改动或历史分叉，--ff-only 拒绝）" "$err"
+      failn=$((failn+1))
+    fi
+  done
+
+  if [ "$failn" -gt 0 ]; then
+    sum_ok "agent-skills: $okn 成功 / $failn 失败（共 $total）"
+  else
+    sum_ok "agent-skills: $okn 成功（共 $total）"
+  fi
+}
+
 # ---------- 主流程 ----------
 echo "${BOLD}================================================${RESET}"
 echo "${BOLD} Claude Code 工具链外部组件一键更新${RESET}"
@@ -384,6 +436,7 @@ update_openwiki
 update_codegraph
 update_ocr
 update_deepeval
+update_agent_skills
 
 # ---------- 汇总表 ----------
 echo ""

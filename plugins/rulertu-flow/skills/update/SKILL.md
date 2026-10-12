@@ -1,11 +1,11 @@
 ---
 name: update
-description: 一键更新本机 Claude Code 工具链的外部组件（所有 marketplaces、已安装 plugins、openwiki、codegraph、open-code-review(ocr)、deepeval）。当用户说"更新 claude code 环境"、"update everything"、"整体更新"、"更新全部插件/插件市场"、"update plugins"、"刷新 codegraph/openwiki/ocr/deepeval"等时触发此技能。即使用户只说"帮我更新一下环境"或"把 claude code 相关的都更新一下"，只要涉及上述组件的升级就用本技能。注意：Claude Code 本体无法在运行中自我更新，已从本技能移除——如需升级本体请退出会话后用 `claude update` 手动处理。
+description: 一键更新本机 Claude Code 工具链的外部组件（所有 marketplaces、已安装 plugins、openwiki、codegraph、open-code-review(ocr)、deepeval、agent-skills（~/share/agent-skills 下的 skill git 仓库））。当用户说"更新 claude code 环境"、"update everything"、"整体更新"、"更新全部插件/插件市场"、"update plugins"、"刷新 codegraph/openwiki/ocr/deepeval/agent-skills"等时触发此技能。即使用户只说"帮我更新一下环境"或"把 claude code 相关的都更新一下"，只要涉及上述组件的升级就用本技能。注意：Claude Code 本体无法在运行中自我更新，已从本技能移除——如需升级本体请退出会话后用 `claude update` 手动处理。
 ---
 
 # /update — Claude Code 工具链外部组件一键更新
 
-把本机 Claude Code 工具链的 6 类外部组件一次性更新到位，逐项报告「更新前 → 更新后」版本，单步失败不中断整体流程，最后给出汇总表。
+把本机 Claude Code 工具链的 7 类外部组件一次性更新到位，逐项报告「更新前 → 更新后」版本，单步失败不中断整体流程，最后给出汇总表。
 
 > **Claude Code 本体不在此技能范围内**：它无法在运行中自我更新（会话内的进程无法替换自身），放在 skill 里既跑不通也容易误导。如需升级本体，请退出会话后手动 `claude update`。
 
@@ -20,7 +20,7 @@ python -m pip show deepeval 2>/dev/null | head -2
 
 - **无缺失**：直接启动脚本，不传 `UPDATE_INSTALL`。
 - **有缺失**：用 AskUserQuestion（multiSelect）列出未安装组件让用户勾选要装哪些，把勾选项拼成 `UPDATE_INSTALL=openwiki,codegraph,ocr,deepeval` 的子集再启动。**不问就装 = 违规**；用户全部不选则不传该变量。
-- marketplaces / plugins 无「安装」概念，不参与此步骤。
+- marketplaces / plugins / agent-skills 无「安装」概念，不参与此步骤。
 
 ## 怎么跑（必须后台跑，避免超时）
 
@@ -52,10 +52,10 @@ marketplace/plugins 走 github、npm 包（openwiki/codegraph/ocr）走 npm regi
 - 删掉 `proxy.env` 即可重新触发探测。
 - 若只想更新不依赖 github 的组件（npm 包 openwiki/codegraph/ocr），设 `UPDATE_NO_PROXY_GATE=1` 跳过闸门强制运行（marketplace/plugins 可能失败，其余步骤照跑）。
 
-> 所有更新步骤均走 github（marketplace/plugins）或 npm registry（openwiki/codegraph/ocr），无任何步骤依赖 `downloads.claude.ai`。
+> 所有更新步骤均走 github（marketplace/plugins/agent-skills）或 npm registry（openwiki/codegraph/ocr），无任何步骤依赖 `downloads.claude.ai`。
 
 
-## 脚本做了什么（6 步）
+## 脚本做了什么（7 步）
 
 | # | 组件 | 命令 | 版本采集 |
 |---|---|---|---|
@@ -65,10 +65,13 @@ marketplace/plugins 走 github、npm 包（openwiki/codegraph/ocr）走 npm regi
 | 4 | codegraph | `npm install -g @colbymchenry/codegraph@latest` | `codegraph --version` |
 | 5 | open-code-review (ocr) | `npm install -g @alibaba-group/open-code-review@latest` | `npm list -g @alibaba-group/open-code-review --depth=0 --json` |
 | 6 | deepeval | `python -m pip install --upgrade deepeval` + `npx -y skills update deepeval` | `pip show deepeval` 的 Version / `npx skills ls \| grep deepeval` |
+| 7 | agent-skills | 循环 `git -C <仓库> pull --ff-only`（`~/share/agent-skills/` 下每个 git 仓库） | 前→后 HEAD 短哈希 |
 
 > ocr 是纯 CLI（命令名 `ocr`），非常驻 MCP server，更新无文件锁问题（与 openwiki 同类）。
 
 > **plugins 必须带 `--scope`**：CLI 默认 `--scope user`，而很多插件装在 `local`/`project` 作用域，不带 scope 会报 `Plugin "X" not found`。脚本从 JSON 读每项的 `scope` 一并传入。
+
+> **agent-skills 是 junction 链接的单一源**：`~/.claude/skills`、`~/.agents/skills` 里的条目指向 `~/share/agent-skills/` 下的 git 仓库，`git pull` 后链接处即时生效，无需重启。`--ff-only` 保证不产生合并提交；本地有改动或分叉的仓库会报错跳过，需用户自行处理。目录缺失或无仓库时跳过，并在输出中给出手动安装命令（clone + junction）。脚本只更新已存在的仓库，不维护「期望 skill 清单」——单个 skill 是否缺失由用户自行判断。
 
 ## 必须告知用户的两条收尾提示
 
@@ -87,10 +90,11 @@ marketplace/plugins 走 github、npm 包（openwiki/codegraph/ocr）走 npm regi
 - codegraph：`npm view @colbymchenry/codegraph version` / `codegraph --version`
 - open-code-review(ocr)：`npm view @alibaba-group/open-code-review version`（最新版）/ `npm list -g @alibaba-group/open-code-review --depth=0` / `ocr --version`
 - deepeval：`pip index versions deepeval` 或 `python -m pip install --upgrade deepeval`（最新版）/ `deepeval --version` / `npx skills ls | grep deepeval`
+- agent-skills：`git -C ~/share/agent-skills/<name> log --oneline -1`（当前版本）/ `git -C ~/share/agent-skills/<name> pull --ff-only`
 
 > Claude Code 本体：`claude --version` / `claude update`（退出会话后手动跑，不在本技能流程内）。
 
 ## 环境前提
 
-- Windows 11 + Git Bash（Unix 语法）；`claude`、`npm`、`codegraph`、`python` 均在 PATH。
+- Windows 11 + Git Bash（Unix 语法）；`claude`、`npm`、`codegraph`、`python`、`git` 均在 PATH。
 - npm 全局包目录为 `%APPDATA%\npm`（即 `~/AppData/Roaming/npm`）。
