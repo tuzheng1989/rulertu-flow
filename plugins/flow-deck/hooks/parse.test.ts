@@ -2,6 +2,8 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import {
   bannerPlan,
+  progressBar,
+  executionSteps,
   buildGitStatus,
   buildPlanReview,
   countIssues,
@@ -24,6 +26,15 @@ import {
 import type { BatchScope, GitStatus } from '../types'
 
 describe('parse', () => {
+  test('进度条处理零总数和越界值，未知阶段保留原文', () => {
+    expect(progressBar(0, 0)).toBe('──────────')
+    expect(progressBar(5, 10)).toBe('━━━━━─────')
+    expect(progressBar(12, 10)).toBe('━━━━━━━━━━')
+    expect(progressBar(-1, 10)).toBe('──────────')
+    expect(progressBar(NaN, 10)).toBe('──────────')
+    expect(executionSteps('验证')).toBe('✓ 开工  ✓ 派单  ✓ 执行  ● 验证  ○ 收口')
+    expect(executionSteps('自定义阶段')).toBe('自定义阶段')
+  })
   test('extractRound 认识 review-RN.json', () => {
     expect(extractRound('review-R1.json')).toBe(1)
     expect(extractRound('review-R12.json')).toBe(12)

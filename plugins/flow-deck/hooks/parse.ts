@@ -12,6 +12,21 @@ import type {
 /** plan-iterate 的达标线：最新轮评分不低于它且无 P0/P1 问题 */
 export const PASS_SCORE = 8.5
 
+/** 固定长度静态进度条，无动画或逐帧更新。 */
+export function progressBar(value: number, total: number, width = 10): string {
+  const ratio = total > 0 && Number.isFinite(value) && Number.isFinite(total)
+    ? Math.max(0, Math.min(1, value / total)) : 0
+  const filled = Math.round(ratio * width)
+  return '━'.repeat(filled) + '─'.repeat(width - filled)
+}
+
+export function executionSteps(phase: string): string {
+  const phases = ['开工', '派单', '执行', '验证', '收口']
+  const current = phases.indexOf(phase)
+  if (current === -1) return phase
+  return phases.map((step, index) => `${index < current || phase === '收口' ? '✓' : index === current ? '●' : '○'} ${step}`).join('  ')
+}
+
 /** 评分趋势条可用的 Unicode 方块字符，下标 0（▁）到 7（█） */
 const BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const
 

@@ -31,7 +31,7 @@ describe('pane', () => {
       requestId: 'flow',
       props: paneProps('Flow 评审仪表盘'),
     })
-    await ui.find({ text: /未发现活跃的 plan-iterate 评审/ })
+    expect(await ui.find({ text: /未发现活跃的 plan-iterate 评审/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
@@ -59,7 +59,7 @@ describe('pane', () => {
         component: 'AbovePrompt',
         props: bandProps(),
       })
-      await ui.find({ text: /demo · B2 · T1 · 执行 · 验证 12\/15/ })
+      expect(await ui.find({ text: /demo · B2 · T1 · 执行 · 验证 12\/15/ })).not.toBeUndefined()
       await ui.unmount()
     }
   })
@@ -163,16 +163,52 @@ describe('pane', () => {
       requestId: 'flow',
       props: paneProps('Flow 评审仪表盘'),
     })
-    await ui.find({ text: /▍执行 DAG（demo）/ })
-    await ui.find({ text: /← B1/ })
-    await ui.find({ type: 'Text', text: '✓ B1' })
-    await ui.find({ type: 'Text', text: '○ B2' })
+    expect(await ui.find({ text: /▍执行 DAG（demo）/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /← B1/ })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '✓ B1' })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '○ B2' })).not.toBeUndefined()
+    expect(await ui.find({ text: /1\/2 收口/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
   test('flow_deps 缺 batches 返回错误结果', async $ => {
     const result = await $.tool.call({ tool: 'mcp__flow-deck__flow_deps', plan: 'demo' })
     expect(result.isError).toBe(true)
+  })
+
+  test('没有评审或 DAG 时，上报仍显示执行卡片；宽窄面板跨表面渲染', async $ => {
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_report',
+      plan: '执行方案', batch: 'B3', phase: '验证', testsPassed: 8, testsTotal: 10,
+    })
+    for (const surface of ['terminal', 'desktop'] as const) {
+      for (const bodyColumns of [28, 80]) {
+        const ui = await $.ui.mount({
+          plugin: 'flow-deck', surface, component: 'Pane', requestId: 'flow',
+          props: { ...paneProps('Flow'), bodyColumns },
+        })
+        expect(await ui.find({ text: /当前执行 · 执行方案/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /✓ 开工.*● 验证/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /验证 .*8\/10/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /未发现活跃/ })).toBeUndefined()
+        const boxes = await ui.findAll({ type: 'Box' })
+        expect(boxes.some(box => box.props.borderStyle === 'round')).toBe(bodyColumns >= 44)
+        await ui.unmount()
+      }
+    }
+  })
+
+  test('单行横条截断长名称，不把另一批的守卫数量挂到当前上报上', async $ => {
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: '当前方案', batch: 'B2', phase: '执行' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: '旧方案', batch: 'B1', files: ['old.ts'] })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'AbovePrompt',
+      props: { ...bandProps(), maxRows: 1, bodyColumns: 24 },
+    })
+    expect(await ui.find({ text: /当前方案/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /守卫/ })).toBeUndefined()
+    expect((await ui.find({ type: 'Text' }))?.props.wrap).toBe('truncate-end')
+    await ui.unmount()
   })
 
   // 两类路径不经自动化测试，改由会话内 fixture 端到端确认：
