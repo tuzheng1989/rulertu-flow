@@ -47,11 +47,39 @@ class NormalizeTests(unittest.TestCase):
         with self.assertRaises(ReviewError):
             normalize_review({**VALID, "score": True})
 
-    def test_rejects_unknown_or_incomplete_fields(self):
-        with self.assertRaises(ReviewError):
-            normalize_review({**VALID, "extra": 1})
-        with self.assertRaises(ReviewError):
-            normalize_review({"score": 9, "issues": [], "suggestions": []})
+    def test_strips_unknown_fields_and_preserves_valid_content(self):
+        self.assertEqual(normalize_review({**VALID, "extra": 1, "passed": True}), VALID)
+
+    def test_normalizes_backend_issue_fields(self):
+        value = {
+            **VALID,
+            "issues": [{
+                "severity": "P2",
+                "title": "Missing validation",
+                "impact": "Invalid input reaches the backend",
+                "evidence": "The input handler forwards unchecked values",
+                "fix": "Validate input before calling the backend",
+            }],
+            "suggestions": ["Document supported input values"],
+        }
+        expected = {
+            **VALID,
+            "issues": [{
+                "severity": "P2",
+                "title": "Missing validation",
+                "detail": "Invalid input reaches the backend",
+                "suggestion": "Validate input before calling the backend",
+            }],
+            "suggestions": ["Document supported input values"],
+        }
+        self.assertEqual(normalize_review(value), expected)
+
+    def test_rejects_incomplete_fields(self):
+        for field in ("overall_quality", "score", "issues"):
+            with self.subTest(missing=field):
+                value = {key: item for key, item in VALID.items() if key != field}
+                with self.assertRaises(ReviewError):
+                    normalize_review(value)
 
 
 class SharedProtocolTests(unittest.TestCase):

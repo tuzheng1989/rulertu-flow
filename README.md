@@ -54,11 +54,16 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 python -m pytest plugins/copyright-skills/tests -q
 ```
 
-## 三个 Skill
+## rulertu-flow 技能
 
 - `optimization-plan`：需求需要至少两个有依赖关系的批次时，编写并定级方案。
 - `implement-plan`：执行一份已有 T0–T3 定级的分批方案。
 - `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
+- `commit`：依据实际改动起草或改写提交说明，标题写具体变化，正文按需解释原因与约束。
+- `pr`：依据最终 diff 起草或改写 PR 标题与正文，说明问题、行为变化和实际验证结果。
+- `update`：更新本机 Claude Code 工具链的外部组件。
+
+`commit` 和 `pr` 默认用中文面向项目维护者写作，用户与目标仓库的明确要求优先。二者专注于文案，实际提交、推送或创建与更新 PR 沿用会话中已有授权。可直接要求“为暂存改动写 commit message”或“为当前分支写 PR 标题和正文”。
 
 `plan-iterate` 使用对称的跨模型后端：Claude Code 宿主外调 Codex CLI，Codex 宿主外调 Claude Code `opus/high`。两个方向都使用相同 schema、8.5 分门槛、最多三轮状态机和可续接 session；真实外部调用需要用户明确授权且目标 CLI 已登录。
 
