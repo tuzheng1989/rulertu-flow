@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- rulertu-flow 版本升至 2.5.0：commit 与 pr 技能加入时漏 bump 版本号，marketplace 已拉到新文件但插件版本仍为 2.4.0，缓存副本不刷新导致技能不可见；升版触发重装后生效。
 - flow-deck 0.6.0：面板增加概览、评审评分条与分差、执行阶段轨迹、验证进度和批次收口进度；窄面板去边框，长路径截断，横条遵守可用行数并优先提示冲突。评审目录发现降为 30 秒，已知目录仍每 2 秒检查并按文件元数据缓存；Git 改为改动 5 秒 / 空闲 15 秒 / 非仓库 60 秒重试，无对应 tracked 改动时跳过 diff；快照无变化不写状态，慢查询防重入，打开 /git 异步强制刷新。新增轮询开销与宽窄面板回归测试。
 - 新增插件 `rulertu-frontend` 0.1.0：前端开发工程师代理 `frontend-dev`（界面开发、前端排障、性能优化与浏览器验收，双 manifest 双 marketplace 注册）加 6 个 z.ai 官方技能（Apache-2.0，保留 LICENSE 与 NOTICE）——网页界面开发、前端问题排查与修复、网页性能优化、网页功能与兼容性测试、前端需求与验收设计、页面交互与状态开发；接入时剥离智谱平台专属元数据（openai.yaml / marketplace.yaml / platform-metadata.json / DISTRIBUTION-CHANGES.md），agent 技能路由覆盖全部 6 个技能。
 - 修正 plan-iterate 的归一化测试：额外字段按现有兼容逻辑剥除，保留不完整输入的拒绝检查，并补充异构后端 issue 字段归一化用例。
