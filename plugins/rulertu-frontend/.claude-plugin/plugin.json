@@ -1,0 +1,8 @@
+{
+  "name": "rulertu-frontend",
+  "description": "前端开发工程师：界面开发、前端排障、性能优化与浏览器验收",
+  "version": "0.1.0",
+  "author": { "name": "rulertu" },
+  "homepage": "https://github.com/tuzheng1989/rulertu-flow",
+  "repository": "https://github.com/tuzheng1989/rulertu-flow"
+}

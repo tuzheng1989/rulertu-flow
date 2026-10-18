@@ -27,6 +27,11 @@
       "name": "flow-deck",
       "source": "./plugins/flow-deck",
       "description": "工作流与仓库状态仪表盘：plan-iterate 评审进度实时面板、执行守卫与 git 更改状态"
+    },
+    {
+      "name": "rulertu-frontend",
+      "source": "./plugins/rulertu-frontend",
+      "description": "前端开发工程师：界面开发、前端排障、性能优化与浏览器验收"
     }
   ]
 }

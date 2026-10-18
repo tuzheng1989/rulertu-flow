@@ -1,0 +1,26 @@
+{
+  "name": "rulertu-frontend",
+  "version": "0.1.0",
+  "description": "前端开发工程师：界面开发、前端排障、性能优化与浏览器验收",
+  "author": {
+    "name": "rulertu",
+    "url": "https://github.com/tuzheng1989"
+  },
+  "homepage": "https://github.com/tuzheng1989/rulertu-flow",
+  "repository": "https://github.com/tuzheng1989/rulertu-flow",
+  "agents": "./agents/",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Rulertu Frontend",
+    "shortDescription": "前端开发工程师：界面开发、排障、性能优化与浏览器验收",
+    "longDescription": "提供前端开发工程师代理与配套技能：在现有项目中完成界面开发、修复前端功能、网页性能优化和网页功能与兼容性测试。",
+    "developerName": "rulertu",
+    "category": "Developer Tools",
+    "capabilities": ["Frontend", "Debugging", "Testing"],
+    "defaultPrompt": [
+      "用 frontend-dev 为这个项目实现新页面。",
+      "用 frontend-dev 排查并修复这个前端功能异常。",
+      "用 frontend-dev 优化页面加载与交互性能。"
+    ]
+  }
+}

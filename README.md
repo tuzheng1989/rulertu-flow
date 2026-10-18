@@ -21,7 +21,7 @@ Claude Code：
 
 ## 选择性与安装范围
 
-marketplace 内四个插件（`rulertu-flow` / `work-skills` / `agent-skills` / `copyright-skills`）互相独立，按需单独安装，同时支持用户全局与项目级两种范围。
+marketplace 内六个插件（`rulertu-flow` / `work-skills` / `agent-skills` / `copyright-skills` / `flow-deck` / `rulertu-frontend`）互相独立，按需单独安装，同时支持用户全局与项目级两种范围。
 
 Claude Code：安装时用 `--scope` 指定范围——`user`（写入 `~/.claude/settings.json`，所有项目可用，默认）、`project`（写入项目 `.claude/settings.json`，随仓库共享给团队）、`local`（写入 `.claude/settings.local.json`，仅本机本项目）：
 
@@ -53,6 +53,12 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 ```sh
 python -m pytest plugins/copyright-skills/tests -q
 ```
+
+## rulertu-frontend
+
+前端开发工程师插件：`frontend-dev` 代理（在现有项目中完成界面开发、前端排障、性能优化与浏览器验收，Claude Code 侧经 `rulertu-frontend:frontend-dev` 调用）加 6 个配套技能——`build-web-interface-cn`（网页界面开发）、`troubleshoot-frontend-functionality-cn`（前端问题排查与修复）、`optimize-web-performance-cn`（网页性能优化）、`test-browser-experience-cn`（网页功能与兼容性测试）、`interface-requirement-contract-cn`（前端需求与验收设计）、`interaction-state-implementation-cn`（页面交互与状态开发）。
+
+技能来自 z.ai 官方技能包（Apache-2.0），各技能目录保留 LICENSE 与 NOTICE。
 
 ## rulertu-flow 技能
 
