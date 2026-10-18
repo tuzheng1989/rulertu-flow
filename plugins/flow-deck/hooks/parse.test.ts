@@ -22,10 +22,35 @@ import {
   parseReviewJson,
   parseStateJson,
   sparkline,
+  selectTaskView,
 } from './parse'
 import type { BatchScope, GitStatus } from '../types'
 
 describe('parse', () => {
+  test('当前任务筛选不把历史评审、执行、边界或路线图当成活动任务', () => {
+    const current = buildPlanReview('当前迭代', 'plans/.plan-iterate/当前迭代', '{"round":2}', [
+      { round: 1, text: '{"score":7,"issues":[]}' },
+      { round: 2, text: '{"score":9,"issues":[]}' },
+    ])
+    const history = buildPlanReview('旧评审', 'plans/.plan-iterate/旧评审', '{"round":1}', [])
+    const data = {
+      plans: [current, history],
+      report: { plan: '实施', batch: 'B1', phase: '执行', updatedAt: 1 },
+      scope: { plan: '实施', batch: 'B2', files: ['a.ts'] },
+      graph: { plan: '实施', batches: [{ batch: 'B1', dependsOn: [] }] },
+    }
+    const empty = { plans: [], report: null, scope: null, graph: null }
+    expect(selectTaskView(null, data)).toEqual(empty)
+    expect(selectTaskView({ kind: 'iterate', plan: '当前迭代' }, data)).toEqual({ ...empty, plans: [current] })
+    expect(selectTaskView({ kind: 'implement', plan: '实施', batch: 'B1' }, data)).toEqual({
+      ...empty, report: data.report, graph: data.graph,
+    })
+    expect(selectTaskView({ kind: 'implement', plan: '其他方案' }, data)).toEqual(empty)
+    expect(selectTaskView({ kind: 'implement', plan: '实施', batch: 'B1' }, {
+      ...data, report: { ...data.report, phase: '收口' },
+    }).report).toBeNull()
+  })
+
   test('进度条处理零总数和越界值，未知阶段保留原文', () => {
     expect(progressBar(0, 0)).toBe('──────────')
     expect(progressBar(5, 10)).toBe('━━━━━─────')

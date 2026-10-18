@@ -23,6 +23,33 @@ function bandProps() {
 }
 
 describe('pane', () => {
+  test('只有路线图声明时提示无当前任务，不显示实施面板', async $ => {
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_deps', plan: '待实施方案',
+      batches: [{ batch: 'B1', dependsOn: [] }],
+    })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow',
+      props: paneProps('Flow'),
+    })
+    expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /执行 DAG/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('批次收口后撤下执行卡片和边界，提示无当前任务', async $ => {
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B1', files: ['a.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '执行' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '收口' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow',
+      props: paneProps('Flow'),
+    })
+    expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /当前执行|◇ 边界/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
   test('空状态给出提示文案', async $ => {
     const ui = await $.ui.mount({
       plugin: 'flow-deck',
@@ -31,7 +58,7 @@ describe('pane', () => {
       requestId: 'flow',
       props: paneProps('Flow 评审仪表盘'),
     })
-    expect(await ui.find({ text: /未发现活跃的 plan-iterate 评审/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
@@ -156,6 +183,7 @@ describe('pane', () => {
       batch: 'B1',
       phase: '收口',
     })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '执行' })
     const ui = await $.ui.mount({
       plugin: 'flow-deck',
       surface: 'terminal',
@@ -166,7 +194,7 @@ describe('pane', () => {
     expect(await ui.find({ text: /▍执行 DAG（demo）/ })).not.toBeUndefined()
     expect(await ui.find({ text: /← B1/ })).not.toBeUndefined()
     expect(await ui.find({ type: 'Text', text: '✓ B1' })).not.toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: '○ B2' })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '● B2' })).not.toBeUndefined()
     expect(await ui.find({ text: /1\/2 收口/ })).not.toBeUndefined()
     await ui.unmount()
   })
@@ -190,7 +218,7 @@ describe('pane', () => {
         expect(await ui.find({ text: /当前执行 · 执行方案/ })).not.toBeUndefined()
         expect(await ui.find({ text: /✓ 开工.*● 验证/ })).not.toBeUndefined()
         expect(await ui.find({ text: /验证 .*8\/10/ })).not.toBeUndefined()
-        expect(await ui.find({ text: /未发现活跃/ })).toBeUndefined()
+        expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).toBeUndefined()
         const boxes = await ui.findAll({ type: 'Box' })
         expect(boxes.some(box => box.props.borderStyle === 'round')).toBe(bodyColumns >= 44)
         await ui.unmount()
@@ -198,9 +226,9 @@ describe('pane', () => {
     }
   })
 
-  test('单行横条截断长名称，不把另一批的守卫数量挂到当前上报上', async $ => {
-    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: '当前方案', batch: 'B2', phase: '执行' })
+  test('切换方案后单行横条撤下旧上报，并截断长名称', async $ => {
     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: '旧方案', batch: 'B1', files: ['old.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: '当前方案', batch: 'B2', phase: '执行' })
     const ui = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'AbovePrompt',
       props: { ...bandProps(), maxRows: 1, bodyColumns: 24 },
@@ -209,6 +237,72 @@ describe('pane', () => {
     expect(await ui.find({ text: /守卫/ })).toBeUndefined()
     expect((await ui.find({ type: 'Text' }))?.props.wrap).toBe('truncate-end')
     await ui.unmount()
+  })
+
+  test('实施切迭代、结束、再实施时，终端和桌面只展示当前任务', async $ => {
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_deps', plan: '旧实施',
+      batches: [{ batch: 'B1', dependsOn: [] }],
+    })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: '旧实施', batch: 'B1', files: ['a.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: '旧实施', batch: 'B1', phase: '执行' })
+    const started = await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'iterate', plan: '当前迭代' })
+    expect(started.result).toBe('当前任务：方案迭代 · 当前迭代')
+    for (const surface of ['terminal', 'desktop'] as const) {
+      for (const bodyColumns of [28, 80]) {
+        const ui = await $.ui.mount({
+          plugin: 'flow-deck', surface, component: 'Pane', requestId: 'flow',
+          props: { ...paneProps('Flow'), bodyColumns },
+        })
+        expect(await ui.find({ text: /FLOW \/ 方案迭代 · 当前迭代/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /等待评审结果落盘/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /当前执行|执行 DAG|◇ 边界|旧实施/ })).toBeUndefined()
+        await ui.unmount()
+      }
+    }
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'idle' })
+    const idle = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow', props: paneProps('Flow'),
+    })
+    expect(await idle.find({ text: /当前无方案迭代或实施任务/ })).not.toBeUndefined()
+    await idle.unmount()
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: '新实施', batch: 'B2' })
+    const implementing = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow', props: paneProps('Flow'),
+    })
+    expect(await implementing.find({ text: /FLOW \/ 方案实施 · 新实施/ })).not.toBeUndefined()
+    expect(await implementing.find({ text: /等待阶段进度上报/ })).not.toBeUndefined()
+    expect(await implementing.find({ text: /当前迭代|旧实施|执行 DAG/ })).toBeUndefined()
+    await implementing.unmount()
+  })
+
+  test('flow_task 拒绝无效声明，并保留当前任务', async $ => {
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'iterate', plan: 'demo' })
+    for (const input of [{ kind: 'other' }, { kind: 'implement' }, { kind: 'iterate', plan: ' ' }]) {
+      const result = await $.tool.call({ tool: 'mcp__flow-deck__flow_task', ...input })
+      expect(result.isError).toBe(true)
+    }
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow', props: paneProps('Flow'),
+    })
+    expect(await ui.find({ text: /FLOW \/ 方案迭代 · demo/ })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('迭代开始后旧实施边界不再拦截文件编辑', { options: { guardMode: 'deny' } }, async ($, on) => {
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    on('session.start', async ($, e, next) => {
+      void next
+      return { cwd: 'C:\\repo' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: '旧实施', batch: 'B1', files: ['a.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'iterate', plan: '新方案' })
+    const result = await $.tool.call({ tool: 'Edit', file_path: 'plans/new.md', old_string: 'a', new_string: 'b' })
+    expect(result.result).toBe('reached-bottom')
   })
 
   // 两类路径不经自动化测试，改由会话内 fixture 端到端确认：

@@ -23,6 +23,13 @@ export type PlanReview = {
   passed: boolean
 }
 
+/** 当前会话任务，与历史评审及执行记录分开保存 */
+export type FlowTask = {
+  kind: 'iterate' | 'implement'
+  plan: string
+  batch?: string
+}
+
 /** 一条 implement-plan 执行进度上报（源自 flow_report 工具调用） */
 export type ExecutionReport = {
   /** 方案名（方案文档文件名去扩展名） */
@@ -114,6 +121,8 @@ declare module 'claude-code' {
       notified: string[]
       /** 首次扫描已把存量评审静默标记为已通知 */
       baselined: boolean
+      /** 当前会话正在进行的任务；历史文件、依赖声明不会激活任务 */
+      currentTask: FlowTask | null
       /** 本会话最近一次执行上报；无则 null */
       execution: ExecutionReport | null
       /** 当前批次改动边界；未声明则 null（守卫放行） */

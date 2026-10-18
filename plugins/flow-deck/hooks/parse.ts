@@ -3,6 +3,7 @@ import type {
   BatchScope,
   DepGraph,
   ExecutionReport,
+  FlowTask,
   GitFileState,
   GitStatus,
   PlanReview,
@@ -11,6 +12,27 @@ import type {
 
 /** plan-iterate 的达标线：最新轮评分不低于它且无 P0/P1 问题 */
 export const PASS_SCORE = 8.5
+
+type FlowData = {
+  plans: PlanReview[]
+  report: ExecutionReport | null
+  scope: BatchScope | null
+  graph: DepGraph | null
+}
+
+/** 面板与横条共用当前任务口径；存量记录不能激活任务。 */
+export function selectTaskView(task: FlowTask | null, data: FlowData): FlowData {
+  const implementing = task?.kind === 'implement'
+  const matchesBatch = (value: { plan: string; batch: string } | null) =>
+    implementing && value !== null && value.plan === task.plan &&
+    (task.batch === undefined || value.batch === task.batch)
+  return {
+    plans: task?.kind === 'iterate' ? data.plans.filter(plan => plan.name === task.plan) : [],
+    report: matchesBatch(data.report) && data.report?.phase !== '收口' ? data.report : null,
+    scope: matchesBatch(data.scope) ? data.scope : null,
+    graph: implementing && data.graph?.plan === task.plan ? data.graph : null,
+  }
+}
 
 /** 固定长度静态进度条，无动画或逐帧更新。 */
 export function progressBar(value: number, total: number, width = 10): string {

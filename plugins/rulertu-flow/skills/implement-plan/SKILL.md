@@ -13,6 +13,8 @@ description: 执行含 T0-T3 定级的分批实施计划。当用户要求执行
 
 ## 进度上报
 
+会话有 `mcp__flow-deck__flow_task` 时，每批开工检查前用 `kind: "implement"`、`plan`、`batch` 声明当前任务。正常收口由 `flow_report` 自动撤下面板；实施失败停止、暂停或取消时调用 `kind: "idle"`。无该工具时静默跳过，恢复实施时重新声明。
+
 会话中存在 `mcp__flow-deck__flow_report` 工具时，每批的开工、派单、执行、验证、收口各阶段完成即调用上报：`plan`（方案名）、`batch`（批次标识）、`phase`（阶段）必填，`tLevel`、`testsPassed`/`testsTotal`、`evidenceDir` 按实填写。工具不存在时静默跳过，不补报、不重试。上报只是进度展示，不替代任何验证义务。
 
 会话中存在 `mcp__flow-deck__flow_batch` 工具时，每批派单完成后调用一次，把委派单的改动锚点展开为本批允许改动的文件清单（`plan`、`batch`、`files`）声明边界；此后对边界外文件的编辑会被守卫提醒或拦截，确需改动时先更新边界再动工。工具不存在时静默跳过，边界声明不改变任何验证义务。

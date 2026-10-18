@@ -11,14 +11,15 @@ import {
   parseDepGraph,
   parseExecution,
   progressBar,
+  selectTaskView,
   executionSteps,
   sparkline,
 } from './parse'
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
 import type {
   BatchScope,
-  DepGraph,
   ExecutionReport,
+  FlowTask,
   GitFileState,
   GitStatus,
   PlanReview,
@@ -36,6 +37,7 @@ const plans = atom({ plugin: 'flow-deck', key: 'plans' } as const, [])
 const notified = atom({ plugin: 'flow-deck', key: 'notified' } as const, [])
 const baselined = atom({ plugin: 'flow-deck', key: 'baselined' } as const, false)
 const execution = atom({ plugin: 'flow-deck', key: 'execution' } as const, null)
+const currentTask = atom({ plugin: 'flow-deck', key: 'currentTask' } as const, null)
 const batchScope = atom({ plugin: 'flow-deck', key: 'batchScope' } as const, null)
 const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
 const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
@@ -72,7 +74,9 @@ export type GuardAction =
 /** 读取边界并作出守卫判定；未声明边界或 cwd 未就绪时放行（fail-open） */
 async function decideGuard($: EngineInterface, tool: string, file_path: unknown): Promise<GuardAction> {
   const scope: BatchScope | null = await read($, batchScope)
-  if (scope === null || sessionCwd === '') return { action: 'pass' }
+  const task = await read($, currentTask)
+  if (scope === null || sessionCwd === '' || task?.kind !== 'implement' ||
+      task.plan !== scope.plan || (task.batch !== undefined && task.batch !== scope.batch)) return { action: 'pass' }
   const decision = guardDecision(scope, tool, { file_path }, sessionCwd)
   if (decision.kind === 'pass') return { action: 'pass' }
   return { action: guardMode, path: decision.path, batch: scope.batch }
@@ -101,6 +105,15 @@ async function readLastExecution($: EngineInterface): Promise<ExecutionReport | 
   } catch {
     return null
   }
+}
+
+async function readTaskView($: EngineInterface) {
+  return selectTaskView(await read($, currentTask), {
+    plans: await read($, plans),
+    report: await read($, execution),
+    scope: await read($, batchScope),
+    graph: await read($, deps),
+  })
 }
 
 /** 跑一个 git 子命令；非零退出（含非 git 仓库的 128）或超时返回 null */
@@ -138,7 +151,8 @@ async function poll($: EngineInterface): Promise<void> {
   }
   // 首轮扫描只做基线（存量轮次静默入账），避免新会话把历史评审全部重播
   const first = !(await read($, baselined))
-  const lastFresh = fresh.at(-1) ?? null
+  const task = await read($, currentTask)
+  const lastFresh = fresh.filter(one => task?.kind === 'iterate' && one.plan.name === task.plan).at(-1) ?? null
   if (first) {
     await update($, baselined, () => true)
   } else if (lastFresh !== null) {
@@ -151,9 +165,8 @@ async function poll($: EngineInterface): Promise<void> {
     $.ui.toast(`「${plan.name}」R${round.round} 评审完成：${round.score} 分 · ${counts}${mark}`)
   }
 
-  // 达标即撤：横条只留给未达标方案（达标瞬间 toast 已播报，常驻无增量价值）；
-  // 面板不受影响，仍展示全部方案与轮次历史
-  const lastPlan = bannerPlan(found)
+  // 历史评审仅作数据来源，不据此认定当前正在迭代。
+  const lastPlan = bannerPlan(task?.kind === 'iterate' ? found.filter(plan => plan.name === task.plan) : [])
   const summary = lastPlan === null ? undefined : summarize(lastPlan)
   if (changed) $.ui.log(`flow-deck 扫描完成：${found.length} 个方案`, { to: 'debug' })
   if (summary !== lastStatus) {
@@ -168,14 +181,35 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     sessionCwd = e.cwd
     lastStatus = undefined
+    await update($, currentTask, () => null)
+    await update($, execution, () => null)
+    await update($, batchScope, () => null)
+    await update($, plans, () => [])
+    await update($, notified, () => [])
+    await update($, baselined, () => false)
+    await update($, progress, () => ({}))
+    await update($, deps, () => null)
     planTimer?.cancel()
     gitTimer?.cancel()
     scanPlans = createPlanScanner({
       list: path => path === undefined ? $.fs.list() : $.fs.list(path),
       read: path => $.fs.read(path),
     })
-    await $.command.register({ name: 'flow', description: '打开 rulertu-flow 评审仪表盘' })
+    await $.command.register({ name: 'flow', description: '开关当前方案迭代或实施任务面板' })
     await $.command.register({ name: 'git', description: '打开 git 仓库状态面板' })
+    await $.tool.register({
+      name: 'flow_task',
+      description: '声明当前工作流任务：iterate 方案迭代，implement 方案实施，idle 结束、暂停或取消。历史评审和路线图不会自动激活面板。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', enum: ['iterate', 'implement', 'idle'] },
+          plan: { type: 'string', description: '方案名；iterate 使用 .plan-iterate 下的目录名，idle 时可省略' },
+          batch: { type: 'string', description: '实施批次（可选）' },
+        },
+        required: ['kind'],
+      },
+    })
     await $.tool.register({
       name: 'flow_report',
       description:
@@ -277,10 +311,10 @@ export const register: Register = (on, options) => {
     const isUp = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
     if (isUp) {
       await $.ui.close({ id: PANE_ID })
-      return { text: '已关闭评审仪表盘。' }
+      return { text: '已关闭工作流面板。' }
     }
-    await $.ui.open({ id: PANE_ID, title: 'Flow 评审仪表盘' })
-    return { text: '已打开评审仪表盘。' }
+    await $.ui.open({ id: PANE_ID, title: 'Flow 当前任务' })
+    return { text: '已打开工作流面板。' }
   })
 
   on('command.run', { command: 'git' }, async $ => {
@@ -296,6 +330,25 @@ export const register: Register = (on, options) => {
     return { text: '已打开 git 仓库状态面板。' }
   })
 
+  on('tool.call', { tool: 'mcp__flow-deck__flow_task' }, async ($, e) => {
+    if (e.kind !== 'iterate' && e.kind !== 'implement' && e.kind !== 'idle') {
+      return { result: 'kind 必须为 iterate、implement 或 idle', isError: true }
+    }
+    if (e.kind !== 'idle' && (typeof e.plan !== 'string' || e.plan.trim() === '')) {
+      return { result: '活动任务必须提供 plan', isError: true }
+    }
+    const task: FlowTask | null = e.kind === 'idle' ? null : {
+      kind: e.kind, plan: e.plan as string,
+      ...(typeof e.batch === 'string' && e.batch !== '' ? { batch: e.batch } : {}),
+    }
+    await update($, execution, () => null)
+    await update($, batchScope, () => null)
+    await update($, currentTask, () => task)
+    lastStatus = undefined
+    $.ui.status(undefined)
+    return { result: task === null ? '当前任务已结束' : `当前任务：${task.kind === 'iterate' ? '方案迭代' : '方案实施'} · ${task.plan}` }
+  })
+
   on('tool.call', { tool: 'mcp__flow-deck__flow_report' }, async ($, e) => {
     const report = parseExecution(e)
     if (report === null) {
@@ -307,6 +360,15 @@ export const register: Register = (on, options) => {
       ...prev,
       [`${stamped.plan}#${stamped.batch}`]: stamped.phase,
     }))
+    await update($, currentTask, () => stamped.phase === '收口' ? null : {
+      kind: 'implement', plan: stamped.plan, batch: stamped.batch,
+    })
+    const scope = await read($, batchScope)
+    if (stamped.phase === '收口' || (scope !== null && (scope.plan !== stamped.plan || scope.batch !== stamped.batch))) {
+      await update($, batchScope, () => null)
+    }
+    lastStatus = undefined
+    $.ui.status(undefined)
     try {
       await $.store.set(EXECUTION_STORE_KEY, stamped)
     } catch (error) {
@@ -321,6 +383,9 @@ export const register: Register = (on, options) => {
       return { result: 'plan、batch 为必填字符串，files 为非空字符串数组', isError: true }
     }
     await update($, batchScope, () => scope)
+    await update($, currentTask, () => ({ kind: 'implement', plan: scope.plan, batch: scope.batch }))
+    lastStatus = undefined
+    $.ui.status(undefined)
     return { result: `批次边界已声明：${scope.batch} 共 ${scope.files.length} 个文件` }
   })
 
@@ -352,22 +417,20 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
-    const list = await read($, plans)
-    const graph: DepGraph | null = await read($, deps)
+    const task = await read($, currentTask)
+    const { plans: list, graph, report, scope } = await readTaskView($)
     const progressMap: Record<string, string> = await read($, progress)
-    const report = await read($, execution)
-    const scope = await read($, batchScope)
     const wide = e.props.bodyColumns >= 44
     const nodes = graph === null ? [] : depStatuses(graph, progressMap)
     const done = nodes.filter(node => node.status === 'done').length
     const passed = list.filter(plan => plan.passed).length
     const visiblePlans = [...list].sort((a, b) => Number(a.passed) - Number(b.passed))
 
-    if (list.length === 0 && graph === null && report === null && scope === null) {
+    if (task === null) {
       return (
         <Box flexDirection="column">
-          <Text>未发现活跃的 plan-iterate 评审或波次依赖声明。</Text>
-          <Text dimColor>运行 plan-iterate / optimization-plan 后自动出现；/flow 可随时打开本面板。</Text>
+          <Text>当前无方案迭代或实施任务。</Text>
+          <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
         </Box>
       )
     }
@@ -375,12 +438,15 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
-          <Text bold color="cyan">FLOW / 工作流概览</Text>
-          <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passed} · 已达标 {passed}{graph === null ? '' : ` · 批次 ${done}/${nodes.length}`}</Text>
+          <Text bold color="cyan">FLOW / {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
+          {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passed} · 已达标 {passed}</Text>}
+          {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
         </Box>
+        {task.kind === 'iterate' && list.length === 0 && <Text dimColor>方案迭代进行中，等待评审结果落盘。</Text>}
+        {task.kind === 'implement' && report === null && <Text dimColor>实施任务已开始，等待阶段进度上报。</Text>}
         {report !== null && (
           <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor="cyan" paddingX={wide ? 1 : 0}>
-            <Text bold color={report.phase === '收口' ? 'green' : 'cyan'} wrap="truncate-end">{report.phase === '收口' ? '✓' : '●'} 当前执行 · {report.plan}</Text>
+            <Text bold color="cyan" wrap="truncate-end">● 当前执行 · {report.plan}</Text>
             <Text wrap="truncate-end">{report.batch}{report.tLevel === undefined ? '' : ` · ${report.tLevel}`} · {report.phase}</Text>
             <Text dimColor wrap="truncate-end">{executionSteps(report.phase)}</Text>
             {report.testsTotal !== undefined && (
@@ -541,8 +607,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     if (e.props.maxRows < 1) return next(e)
-    const report = await read($, execution)
-    const scope = await read($, batchScope)
+    const { report, scope } = await readTaskView($)
     const git = await read($, gitStatus)
     // 工作区干净且与上游同步时不占横条
     const gitLine = git !== null && !isGitQuiet(git) ? git : null
@@ -556,7 +621,7 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         {showFlow && report !== null && (
           <Text wrap="truncate-end">
-            <Text color={report.phase === '收口' ? 'green' : 'cyan'}>{report.phase === '收口' ? '✓' : '●'} flow </Text>
+            <Text color="cyan">● flow </Text>
             <Text>{describeExecution(report)}</Text>
             {scope !== null && scope.plan === report.plan && scope.batch === report.batch && <Text dimColor> · 守卫 {scope.files.length} 文件</Text>}
           </Text>
