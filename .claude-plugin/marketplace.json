@@ -26,7 +26,7 @@
     {
       "name": "flow-deck",
       "source": "./plugins/flow-deck",
-      "description": "工作流与仓库状态仪表盘：plan-iterate 评审进度实时面板、执行守卫与 git 更改状态"
+      "description": "工作流、仓库与子代理状态仪表盘：评审进度、执行守卫、git 更改与子代理运行状态"
     },
     {
       "name": "rulertu-frontend",

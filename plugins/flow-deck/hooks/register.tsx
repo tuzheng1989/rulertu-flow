@@ -16,6 +16,7 @@ import {
   sparkline,
 } from './parse'
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
+import { agentStatus, agentSummary, createAgentPoller } from './agents'
 import type {
   BatchScope,
   ExecutionReport,
@@ -27,6 +28,7 @@ import type {
 
 const PANE_ID = 'flow'
 const GIT_PANE_ID = 'flow-git'
+const AGENTS_PANE_ID = 'flow-agents'
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
@@ -42,6 +44,7 @@ const batchScope = atom({ plugin: 'flow-deck', key: 'batchScope' } as const, nul
 const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
 const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
 const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
+const agents = atom({ plugin: 'flow-deck', key: 'agents' } as const, { agents: [], loaded: false, error: false })
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
@@ -53,6 +56,7 @@ let guardMode: 'warn' | 'deny' = 'warn'
 let sessionCwd = ''
 let scanPlans: ReturnType<typeof createPlanScanner> | undefined
 let refreshGit: (() => Promise<void>) | undefined
+let refreshAgents: (() => Promise<void>) | undefined
 let planTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 let gitTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 
@@ -189,6 +193,7 @@ export const register: Register = (on, options) => {
     await update($, baselined, () => false)
     await update($, progress, () => ({}))
     await update($, deps, () => null)
+    await update($, agents, () => ({ agents: [], loaded: false, error: false }))
     planTimer?.cancel()
     gitTimer?.cancel()
     scanPlans = createPlanScanner({
@@ -197,6 +202,7 @@ export const register: Register = (on, options) => {
     })
     await $.command.register({ name: 'flow', description: '开关当前方案迭代或实施任务面板' })
     await $.command.register({ name: 'git', description: '打开 git 仓库状态面板' })
+    await $.command.register({ name: 'flow-agents', description: '开关当前会话的子代理运行状态面板' })
     await $.tool.register({
       name: 'flow_task',
       description: '声明当前工作流任务：iterate 方案迭代，implement 方案实施，idle 结束、暂停或取消。历史评审和路线图不会自动激活面板。',
@@ -299,9 +305,22 @@ export const register: Register = (on, options) => {
     refreshGit = singleFlight(async () => {
       await gitPoller(Date.now(), true)
     })
+    const refreshAgentList = createAgentPoller(() => $.agent.list(), async snapshot => {
+      await update($, agents, () => snapshot)
+    })
+    refreshAgents = refreshAgentList
+    const refreshAgentPane = async () => {
+      try {
+        if ((await $.ui.panes()).some(pane => pane.id === AGENTS_PANE_ID)) await refreshAgentList()
+      } catch (error) {
+        $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
+      }
+    }
     void refreshPlans()
     void tickGit()
-    planTimer = $.clock.every(POLL_MS, refreshPlans)
+    planTimer = $.clock.every(POLL_MS, async () => {
+      await Promise.all([refreshPlans(), refreshAgentPane()])
+    })
     gitTimer = $.clock.every(GIT_POLL_MS, tickGit)
     return next(e)
   })
@@ -328,6 +347,19 @@ export const register: Register = (on, options) => {
     })
     await $.ui.open({ id: GIT_PANE_ID, title: 'Git 仓库状态' })
     return { text: '已打开 git 仓库状态面板。' }
+  })
+
+  on('command.run', { command: 'flow-agents' }, async $ => {
+    const isUp = (await $.ui.panes()).some(pane => pane.id === AGENTS_PANE_ID)
+    if (isUp) {
+      await $.ui.close({ id: AGENTS_PANE_ID })
+      return { text: '已关闭子代理运行状态面板。' }
+    }
+    await $.ui.open({ id: AGENTS_PANE_ID, title: '子代理运行状态' })
+    void refreshAgents?.().catch(error => {
+      $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
+    })
+    return { text: '已打开子代理运行状态面板。' }
   })
 
   on('tool.call', { tool: 'mcp__flow-deck__flow_task' }, async ($, e) => {
@@ -431,6 +463,7 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           <Text>当前无方案迭代或实施任务。</Text>
           <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
+          <Text dimColor>/flow-agents 查看当前会话的子代理运行状态。</Text>
         </Box>
       )
     }
@@ -506,7 +539,36 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         )}
-        <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · 自动刷新</Text>
+        <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · /flow-agents 子代理</Text>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: AGENTS_PANE_ID }, async ($, e) => {
+    const { Box, Text } = $.ui.resolve(e)
+    const snapshot = await read($, agents)
+    const wide = e.props.bodyColumns >= 44
+    const names = new Map(snapshot.agents.map(agent => [agent.id, agent.name || agent.description || agent.id]))
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold color="cyan" wrap="truncate-end">AGENTS / 子代理运行状态</Text>
+        {snapshot.error && <Text color="yellow" wrap="truncate-end">刷新失败，自动重试；{snapshot.loaded ? '以下为上次快照，状态可能已过期。' : '暂未取得子代理状态。'}</Text>}
+        {!snapshot.loaded && !snapshot.error && <Text dimColor>正在读取当前会话的子代理…</Text>}
+        {snapshot.loaded && <Text wrap="truncate-end">{agentSummary(snapshot.agents)}</Text>}
+        {snapshot.loaded && snapshot.agents.length === 0 && <Text dimColor>当前会话暂无子代理。</Text>}
+        {snapshot.agents.map(agent => {
+          const status = agentStatus(agent.status)
+          return (
+            <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} paddingX={wide ? 1 : 0}>
+              <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
+              <Text dimColor wrap="truncate-middle">{agent.type} · {agent.id}</Text>
+              {agent.description !== '' && <Text wrap="truncate-end">任务：{agent.description}</Text>}
+              {agent.parentId !== undefined && <Text dimColor wrap="truncate-middle">↳ 父代理：{names.get(agent.parentId) ?? agent.parentId}</Text>}
+              {agent.spawnedBy !== undefined && <Text dimColor wrap="truncate-end">来源插件：{agent.spawnedBy}</Text>}
+            </Box>
+          )
+        })}
+        <Text dimColor wrap="truncate-end">/flow-agents 关闭 · 每 2 秒刷新 · 当前会话</Text>
       </Box>
     )
   })

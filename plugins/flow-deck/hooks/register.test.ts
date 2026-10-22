@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
+import type { AgentSnapshot } from '../types'
 
 function paneProps(title: string) {
   return {
@@ -23,6 +24,130 @@ function bandProps() {
 }
 
 describe('pane', () => {
+  test('打开时立即读宿主清单并自动刷新，关闭后停止查询，新会话清空快照', async ($, on) => {
+    const clock = mock.clock(on)
+    let open = false
+    let calls = 0
+    let status = 'running'
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: open ? [{ id: 'flow-agents', title: 'Agents', isShown: true, isFocused: false, isPlaced: true }] : [] }))
+    on('ui.open', { id: 'flow-agents' }, () => {
+      open = true
+      return { value: { isPlaced: true } }
+    })
+    on('ui.close', { id: 'flow-agents' }, () => {
+      open = false
+      return { value: undefined }
+    })
+    on('agent.list', () => {
+      calls++
+      return { value: [{ id: 'a1', name: 'executor', type: 'runner', description: '实现面板', status }] }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.advance(2000)
+    expect(calls).toBe(0)
+    await $.command.run({ command: 'flow-agents' })
+    await clock.settle()
+    expect(calls).toBe(1)
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow-agents',
+      props: paneProps('Agents'),
+    })
+    expect(await ui.find({ text: /● 运行中 · executor/ })).not.toBeUndefined()
+    status = 'completed'
+    await clock.advance(2000)
+    expect(calls).toBe(2)
+    expect(await ui.find({ text: /✓ 已完成 · executor/ })).not.toBeUndefined()
+    await $.command.run({ command: 'flow-agents' })
+    await clock.advance(4000)
+    expect(calls).toBe(2)
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    expect(await ui.find({ text: /executor/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('/flow-agents 可以重复开关，关闭后再次打开', async ($, on) => {
+    let open = false
+    let opened = 0
+    let closed = 0
+    on('ui.panes', () => ({ value: open ? [{ id: 'flow-agents', title: '子代理运行状态', isShown: true, isFocused: false, isPlaced: true }] : [] }))
+    on('ui.open', { id: 'flow-agents' }, () => {
+      open = true
+      opened++
+      return { value: { isPlaced: true } }
+    })
+    on('ui.close', { id: 'flow-agents' }, () => {
+      open = false
+      closed++
+      return { value: undefined }
+    })
+    expect((await $.command.run({ command: 'flow-agents' })).text).toBe('已打开子代理运行状态面板。')
+    expect((await $.command.run({ command: 'flow-agents' })).text).toBe('已关闭子代理运行状态面板。')
+    expect((await $.command.run({ command: 'flow-agents' })).text).toBe('已打开子代理运行状态面板。')
+    expect(opened).toBe(2)
+    expect(closed).toBe(1)
+  })
+
+  test('子代理面板区分加载中、空清单、刷新失败和过期快照', async ($, on) => {
+    let snapshot: AgentSnapshot = { agents: [], loaded: false, error: false }
+    on('state.set', { plugin: 'flow-deck', key: 'agents' }, ($, e, next) => next({ ...e, value: snapshot }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    for (const [loaded, error, pattern] of [
+      [false, false, /正在读取当前会话/],
+      [true, false, /当前会话暂无子代理/],
+      [false, true, /暂未取得子代理状态/],
+      [true, true, /上次快照，状态可能已过期/],
+    ] as const) {
+      snapshot = { agents: [], loaded, error }
+      await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+      const ui = await $.ui.mount({
+        plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow-agents',
+        props: paneProps('Agents'),
+      })
+      expect(await ui.find({ text: pattern })).not.toBeUndefined()
+      await ui.unmount()
+    }
+  })
+
+  test('子代理状态、任务与父代理关系在终端和桌面宽窄面板中可见', async ($, on) => {
+    const snapshot: AgentSnapshot = {
+      loaded: true, error: false,
+      agents: [
+        { id: 'a1', name: 'executor', type: 'runner', description: '实现面板', status: 'running' },
+        { id: 'a2', type: 'reviewer', description: '检查边界', status: 'failed', parentId: 'a1', spawnedBy: 'workflow' },
+        { id: 'a3', type: 'runner', description: '定向测试', status: 'completed' },
+        { id: 'a4', type: 'runner', description: '取消任务', status: 'killed' },
+        { id: 'a5', type: 'runner', description: '等待任务', status: 'queued', parentId: 'missing-parent' },
+      ],
+    }
+    on('state.set', { plugin: 'flow-deck', key: 'agents' }, ($, e, next) => next({ ...e, value: snapshot }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    for (const surface of ['terminal', 'desktop'] as const) {
+      for (const bodyColumns of [28, 80]) {
+        const ui = await $.ui.mount({
+          plugin: 'flow-deck', surface, component: 'Pane', requestId: 'flow-agents',
+          props: { ...paneProps('Agents'), bodyColumns },
+        })
+        for (const text of [/运行中 1 · 完成 1 · 失败 1 · 停止 1 · 其他 1/, /● 运行中 · executor/,
+          /✗ 失败 · 检查边界/, /✓ 已完成/, /■ 已停止/, /○ queued/, /任务：实现面板/,
+          /父代理：executor/, /父代理：missing-parent/, /来源插件：workflow/]) {
+          expect(await ui.find({ text })).not.toBeUndefined()
+        }
+        const boxes = await ui.findAll({ type: 'Box' })
+        expect(boxes.some(box => box.props.borderStyle === 'round')).toBe(bodyColumns >= 44)
+        await ui.unmount()
+      }
+    }
+  })
+
   test('只有路线图声明时提示无当前任务，不显示实施面板', async $ => {
     await $.tool.call({
       tool: 'mcp__flow-deck__flow_deps', plan: '待实施方案',

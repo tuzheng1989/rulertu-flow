@@ -23,6 +23,25 @@ export type PlanReview = {
   passed: boolean
 }
 
+/** $.agent.list() 的展示字段；manifest 类型契约必须自包含 */
+export type SubagentInfo = {
+  id: string
+  description: string
+  type: string
+  status: string
+  parentId?: string
+  spawnedBy?: string
+  name?: string
+}
+
+/** 宿主当前会话的子代理清单及读取状态 */
+export type AgentSnapshot = {
+  agents: SubagentInfo[]
+  loaded: boolean
+  /** 查询失败时保留上次清单；面板需提示状态可能已过期 */
+  error: boolean
+}
+
 /** 当前会话任务，与历史评审及执行记录分开保存 */
 export type FlowTask = {
   kind: 'iterate' | 'implement'
@@ -133,6 +152,8 @@ declare module 'claude-code' {
       deps: DepGraph | null
       /** 最近一次 git 仓库状态快照；非 git 仓库或尚未取数则 null */
       git: GitStatus | null
+      /** 宿主当前会话的子代理状态，仅打开面板时查询 */
+      agents: AgentSnapshot
     }
   }
 }
