@@ -154,6 +154,10 @@ declare module 'claude-code' {
       git: GitStatus | null
       /** 宿主当前会话的子代理状态，仅打开面板时查询 */
       agents: AgentSnapshot
+      /** 跨会话恢复的上次执行摘要（源自 $.store），空态面板的面包屑；无则 null */
+      lastRun: ExecutionReport | null
+      /** 执行停滞提示：距上次上报的分钟数（超过阈值）；未停滞或无执行则 null */
+      stall: number | null
     }
   }
 }

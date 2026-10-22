@@ -3,7 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   bannerPlan,
   progressBar,
-  executionSteps,
+  phaseProgress,
   buildGitStatus,
   buildPlanReview,
   countIssues,
@@ -57,8 +57,13 @@ describe('parse', () => {
     expect(progressBar(12, 10)).toBe('━━━━━━━━━━')
     expect(progressBar(-1, 10)).toBe('──────────')
     expect(progressBar(NaN, 10)).toBe('──────────')
-    expect(executionSteps('验证')).toBe('✓ 开工  ✓ 派单  ✓ 执行  ● 验证  ○ 收口')
-    expect(executionSteps('自定义阶段')).toBe('自定义阶段')
+  })
+
+  test('phaseProgress 映射五阶段序号，未知阶段无序号', () => {
+    expect(phaseProgress('开工')).toEqual({ current: '开工', index: 1, total: 5 })
+    expect(phaseProgress('执行')).toEqual({ current: '执行', index: 3, total: 5 })
+    expect(phaseProgress('收口')).toEqual({ current: '收口', index: 5, total: 5 })
+    expect(phaseProgress('自定义阶段')).toEqual({ current: '自定义阶段', index: 0, total: 0 })
   })
   test('extractRound 认识 review-RN.json', () => {
     expect(extractRound('review-R1.json')).toBe(1)

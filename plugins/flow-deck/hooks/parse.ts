@@ -42,11 +42,18 @@ export function progressBar(value: number, total: number, width = 10): string {
   return '━'.repeat(filled) + '─'.repeat(width - filled)
 }
 
-export function executionSteps(phase: string): string {
+/** 五阶段序进度：index 从 1 计（完成比例 index/total）；未知阶段无序号（total 0，渲染退化为纯文字） */
+export type PhaseProgress = {
+  current: string
+  index: number
+  total: number
+}
+
+/** 执行上报的极简进度条数据：`progressBar(index, total)` 即条，右侧 `current · index/total` */
+export function phaseProgress(phase: string): PhaseProgress {
   const phases = ['开工', '派单', '执行', '验证', '收口']
-  const current = phases.indexOf(phase)
-  if (current === -1) return phase
-  return phases.map((step, index) => `${index < current || phase === '收口' ? '✓' : index === current ? '●' : '○'} ${step}`).join('  ')
+  const index = phases.indexOf(phase)
+  return { current: phase, index: index === -1 ? 0 : index + 1, total: index === -1 ? 0 : phases.length }
 }
 
 /** 评分趋势条可用的 Unicode 方块字符，下标 0（▁）到 7（█） */

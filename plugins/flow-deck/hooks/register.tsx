@@ -10,9 +10,9 @@ import {
   parseBatchScope,
   parseDepGraph,
   parseExecution,
+  phaseProgress,
   progressBar,
   selectTaskView,
-  executionSteps,
   sparkline,
 } from './parse'
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
@@ -28,12 +28,13 @@ import type {
 
 const PANE_ID = 'flow'
 const GIT_PANE_ID = 'flow-git'
-const AGENTS_PANE_ID = 'flow-agents'
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
 const MAX_GIT_FILES = 15
 const EXECUTION_STORE_KEY = 'lastExecution'
+/** 执行上报停滞阈值：超过该时长未续报视为疑似停滞 */
+const STALL_MS = 30 * 60_000
 
 const plans = atom({ plugin: 'flow-deck', key: 'plans' } as const, [])
 const notified = atom({ plugin: 'flow-deck', key: 'notified' } as const, [])
@@ -45,6 +46,8 @@ const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
 const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
 const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
 const agents = atom({ plugin: 'flow-deck', key: 'agents' } as const, { agents: [], loaded: false, error: false })
+const lastRun = atom({ plugin: 'flow-deck', key: 'lastRun' } as const, null)
+const stall = atom({ plugin: 'flow-deck', key: 'stall' } as const, null)
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
@@ -57,6 +60,8 @@ let sessionCwd = ''
 let scanPlans: ReturnType<typeof createPlanScanner> | undefined
 let refreshGit: (() => Promise<void>) | undefined
 let refreshAgents: (() => Promise<void>) | undefined
+/** 面板「刷新」按钮的全部数据重取；session.start 装配后可用 */
+let refreshAll: (() => void) | undefined
 let planTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 let gitTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 
@@ -118,6 +123,16 @@ async function readTaskView($: EngineInterface) {
     scope: await read($, batchScope),
     graph: await read($, deps),
   })
+}
+
+/** 心跳停滞检测：实施中且未收口的上报超过 STALL_MS 未续报时记分钟数；状态变化才写，避免无谓重绘 */
+async function refreshStall($: EngineInterface): Promise<void> {
+  const task = await read($, currentTask)
+  const report = await read($, execution)
+  const age = report === null || report.phase === '收口' ? 0 : Date.now() - report.updatedAt
+  const minutes = task?.kind === 'implement' && age >= STALL_MS ? Math.floor(age / 60_000) : null
+  if ((await read($, stall)) === minutes) return
+  await update($, stall, () => minutes)
 }
 
 /** 跑一个 git 子命令；非零退出（含非 git 仓库的 128）或超时返回 null */
@@ -194,15 +209,16 @@ export const register: Register = (on, options) => {
     await update($, progress, () => ({}))
     await update($, deps, () => null)
     await update($, agents, () => ({ agents: [], loaded: false, error: false }))
+    await update($, stall, () => null)
     planTimer?.cancel()
     gitTimer?.cancel()
     scanPlans = createPlanScanner({
       list: path => path === undefined ? $.fs.list() : $.fs.list(path),
       read: path => $.fs.read(path),
     })
-    await $.command.register({ name: 'flow', description: '开关当前方案迭代或实施任务面板' })
+    await $.command.register({ name: 'flow', description: '开关当前方案迭代或实施任务面板（含子代理运行状态）' })
     await $.command.register({ name: 'git', description: '打开 git 仓库状态面板' })
-    await $.command.register({ name: 'flow-agents', description: '开关当前会话的子代理运行状态面板' })
+    await $.command.register({ name: 'flow-agents', description: '打开工作流面板（子代理状态在面板内，已开时不再重复打开）' })
     await $.tool.register({
       name: 'flow_task',
       description: '声明当前工作流任务：iterate 方案迭代，implement 方案实施，idle 结束、暂停或取消。历史评审和路线图不会自动激活面板。',
@@ -284,6 +300,7 @@ export const register: Register = (on, options) => {
       },
     })
     const last = await readLastExecution($)
+    await update($, lastRun, () => last)
     if (last !== null) $.ui.toast(`上次执行：${describeExecution(last)}`)
     const refreshPlans = singleFlight(async () => {
       try {
@@ -311,15 +328,20 @@ export const register: Register = (on, options) => {
     refreshAgents = refreshAgentList
     const refreshAgentPane = async () => {
       try {
-        if ((await $.ui.panes()).some(pane => pane.id === AGENTS_PANE_ID)) await refreshAgentList()
+        if ((await $.ui.panes()).some(pane => pane.id === PANE_ID)) await refreshAgentList()
       } catch (error) {
         $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
       }
     }
     void refreshPlans()
     void tickGit()
+    refreshAll = () => {
+      void refreshPlans()
+      void refreshGit?.()
+      void refreshAgents?.()
+    }
     planTimer = $.clock.every(POLL_MS, async () => {
-      await Promise.all([refreshPlans(), refreshAgentPane()])
+      await Promise.all([refreshPlans(), refreshAgentPane(), refreshStall($)])
     })
     gitTimer = $.clock.every(GIT_POLL_MS, tickGit)
     return next(e)
@@ -333,7 +355,10 @@ export const register: Register = (on, options) => {
       return { text: '已关闭工作流面板。' }
     }
     await $.ui.open({ id: PANE_ID, title: 'Flow 当前任务' })
-    return { text: '已打开工作流面板。' }
+    void refreshAgents?.().catch(error => {
+      $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
+    })
+    return { text: '已打开工作流面板（含子代理状态）。' }
   })
 
   on('command.run', { command: 'git' }, async $ => {
@@ -350,16 +375,14 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'flow-agents' }, async $ => {
-    const isUp = (await $.ui.panes()).some(pane => pane.id === AGENTS_PANE_ID)
-    if (isUp) {
-      await $.ui.close({ id: AGENTS_PANE_ID })
-      return { text: '已关闭子代理运行状态面板。' }
-    }
-    await $.ui.open({ id: AGENTS_PANE_ID, title: '子代理运行状态' })
+    // 幂等打开：子代理状态已并入工作流面板，重复打开不误关（toggle 由 /flow 负责）
+    const isUp = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
+    if (isUp) return { text: '工作流面板已打开，子代理状态在面板内。' }
+    await $.ui.open({ id: PANE_ID, title: 'Flow 当前任务' })
     void refreshAgents?.().catch(error => {
       $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
     })
-    return { text: '已打开子代理运行状态面板。' }
+    return { text: '已打开工作流面板（含子代理状态）。' }
   })
 
   on('tool.call', { tool: 'mcp__flow-deck__flow_task' }, async ($, e) => {
@@ -448,40 +471,82 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     const task = await read($, currentTask)
     const { plans: list, graph, report, scope } = await readTaskView($)
     const progressMap: Record<string, string> = await read($, progress)
+    const snapshot = await read($, agents)
+    const crumbs = await read($, lastRun)
+    const stallMinutes = await read($, stall)
     const wide = e.props.bodyColumns >= 44
     const nodes = graph === null ? [] : depStatuses(graph, progressMap)
     const done = nodes.filter(node => node.status === 'done').length
-    const passed = list.filter(plan => plan.passed).length
-    const visiblePlans = [...list].sort((a, b) => Number(a.passed) - Number(b.passed))
+    const passing = list.filter(plan => plan.passed)
+    // 无事不扰：达标方案折叠为一行，未达标排前并逐个展示
+    const activePlans = [...list].sort((a, b) => Number(a.passed) - Number(b.passed)).filter(plan => !plan.passed)
+    const names = new Map(snapshot.agents.map(agent => [agent.id, agent.name || agent.description || agent.id]))
+
+    const agentsSection = (
+      <Box flexDirection="column" gap={1}>
+        <Box>
+          <Text bold wrap="truncate-end">▍子代理{snapshot.loaded ? ` · ${agentSummary(snapshot.agents)}` : ''}</Text>
+          <Button key="flow-refresh" hotkey="r" plain onPress={() => refreshAll?.()}>刷新</Button>
+        </Box>
+        {snapshot.error && <Text color="yellow" wrap="truncate-end">刷新失败，自动重试；{snapshot.loaded ? '以下为上次快照，状态可能已过期。' : '暂未取得子代理状态。'}</Text>}
+        {!snapshot.loaded && !snapshot.error && <Text dimColor>正在读取当前会话的子代理…</Text>}
+        {snapshot.loaded && snapshot.agents.length === 0 && <Text dimColor>当前会话暂无子代理。</Text>}
+        {snapshot.agents.map(agent => {
+          const status = agentStatus(agent.status)
+          return (
+            <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} paddingX={wide ? 1 : 0}>
+              <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
+              <Text dimColor wrap="truncate-middle">{agent.type} · {agent.id}</Text>
+              {agent.description !== '' && <Text wrap="truncate-end">任务：{agent.description}</Text>}
+              {agent.parentId !== undefined && <Text dimColor wrap="truncate-middle">↳ 父代理：{names.get(agent.parentId) ?? agent.parentId}</Text>}
+              {agent.spawnedBy !== undefined && <Text dimColor wrap="truncate-end">来源插件：{agent.spawnedBy}</Text>}
+            </Box>
+          )
+        })}
+      </Box>
+    )
 
     if (task === null) {
       return (
-        <Box flexDirection="column">
-          <Text>当前无方案迭代或实施任务。</Text>
-          <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
-          <Text dimColor>/flow-agents 查看当前会话的子代理运行状态。</Text>
+        <Box flexDirection="column" gap={1}>
+          <Box flexDirection="column">
+            <Text>当前无方案迭代或实施任务。</Text>
+            <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
+            {crumbs !== null && <Text dimColor wrap="truncate-end">上次执行：{describeExecution(crumbs)}</Text>}
+          </Box>
+          {agentsSection}
+          <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · 面板内按 r 刷新</Text>
         </Box>
       )
     }
 
+    const phase = report === null ? null : phaseProgress(report.phase)
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
           <Text bold color="cyan">FLOW / {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
-          {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passed} · 已达标 {passed}</Text>}
+          {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
           {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
         </Box>
         {task.kind === 'iterate' && list.length === 0 && <Text dimColor>方案迭代进行中，等待评审结果落盘。</Text>}
         {task.kind === 'implement' && report === null && <Text dimColor>实施任务已开始，等待阶段进度上报。</Text>}
-        {report !== null && (
+        {report !== null && phase !== null && (
           <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor="cyan" paddingX={wide ? 1 : 0}>
             <Text bold color="cyan" wrap="truncate-end">● 当前执行 · {report.plan}</Text>
             <Text wrap="truncate-end">{report.batch}{report.tLevel === undefined ? '' : ` · ${report.tLevel}`} · {report.phase}</Text>
-            <Text dimColor wrap="truncate-end">{executionSteps(report.phase)}</Text>
+            {phase.total > 0 && (
+              <Text wrap="truncate-end">
+                <Text color="green">{progressBar(phase.index, phase.total)}</Text>
+                <Text> </Text>
+                <Text color={phase.index >= phase.total ? 'green' : 'yellow'} bold>{phase.current} · {phase.index}/{phase.total}</Text>
+              </Text>
+            )}
+            {phase.total === 0 && <Text dimColor wrap="truncate-end">{phase.current}</Text>}
+            {stallMinutes !== null && <Text color="yellow" wrap="truncate-end">⚠ 疑似停滞 · 距上次上报 {stallMinutes} 分钟</Text>}
             {report.testsTotal !== undefined && (
               <Text color={report.testsTotal > 0 && report.testsPassed === report.testsTotal ? 'green' : 'yellow'} wrap="truncate-end">
                 验证 {progressBar(report.testsPassed ?? 0, report.testsTotal)} {report.testsPassed ?? 0}/{report.testsTotal}
@@ -491,10 +556,10 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         {scope !== null && <Text dimColor wrap="truncate-end">◇ 边界 · {scope.plan} / {scope.batch} · {scope.files.length} 文件 · {guardMode}</Text>}
-        {list.length > 0 && (
+        {activePlans.length > 0 && (
           <Text bold>▍plan-iterate 评审 · 8.5 分且无 P0/P1 达标</Text>
         )}
-        {visiblePlans.map(plan => {
+        {activePlans.map(plan => {
           const latest = plan.rounds.at(-1) ?? null
           const previous = plan.rounds.at(-2) ?? null
           const delta = latest === null || previous === null ? null : latest.score - previous.score
@@ -525,10 +590,20 @@ export const register: Register = (on, options) => {
             </Box>
           )
         })}
+        {passing.length > 0 && <Text color="green" wrap="truncate-end">✓ 已达标 {passing.length} 个方案（已折叠）</Text>}
         {graph !== null && (
           <Box flexDirection="column" gap={1}>
             <Text bold wrap="truncate-end">▍执行 DAG（{graph.plan}）</Text>
-            <Text color="cyan" wrap="truncate-end">{progressBar(done, nodes.length)} {done}/{nodes.length} 收口 · {nodes.filter(node => node.status === 'active').length} 进行中</Text>
+            <Text color="cyan" wrap="truncate-end">
+              {nodes.map(node => (
+                <Text key={node.batch}
+                  color={node.status === 'done' ? 'green' : node.status === 'active' ? 'yellow' : undefined}
+                  dimColor={node.status === 'pending'}>
+                  {node.status === 'done' ? '■' : node.status === 'active' ? '▣' : '□'}
+                </Text>
+              ))}
+              {' '}{done}/{nodes.length} 收口 · {nodes.filter(node => node.status === 'active').length} 进行中
+            </Text>
             {nodes.map((node, index) => (
               <Box key={node.batch} flexDirection="column">
                 <Text dimColor={node.status === 'pending'} color={node.status === 'done' ? 'green' : node.status === 'active' ? 'yellow' : undefined} wrap="truncate-end">
@@ -539,36 +614,8 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         )}
-        <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · /flow-agents 子代理</Text>
-      </Box>
-    )
-  })
-
-  on('ui.render', { component: 'Pane', requestId: AGENTS_PANE_ID }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
-    const snapshot = await read($, agents)
-    const wide = e.props.bodyColumns >= 44
-    const names = new Map(snapshot.agents.map(agent => [agent.id, agent.name || agent.description || agent.id]))
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold color="cyan" wrap="truncate-end">AGENTS / 子代理运行状态</Text>
-        {snapshot.error && <Text color="yellow" wrap="truncate-end">刷新失败，自动重试；{snapshot.loaded ? '以下为上次快照，状态可能已过期。' : '暂未取得子代理状态。'}</Text>}
-        {!snapshot.loaded && !snapshot.error && <Text dimColor>正在读取当前会话的子代理…</Text>}
-        {snapshot.loaded && <Text wrap="truncate-end">{agentSummary(snapshot.agents)}</Text>}
-        {snapshot.loaded && snapshot.agents.length === 0 && <Text dimColor>当前会话暂无子代理。</Text>}
-        {snapshot.agents.map(agent => {
-          const status = agentStatus(agent.status)
-          return (
-            <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} paddingX={wide ? 1 : 0}>
-              <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
-              <Text dimColor wrap="truncate-middle">{agent.type} · {agent.id}</Text>
-              {agent.description !== '' && <Text wrap="truncate-end">任务：{agent.description}</Text>}
-              {agent.parentId !== undefined && <Text dimColor wrap="truncate-middle">↳ 父代理：{names.get(agent.parentId) ?? agent.parentId}</Text>}
-              {agent.spawnedBy !== undefined && <Text dimColor wrap="truncate-end">来源插件：{agent.spawnedBy}</Text>}
-            </Box>
-          )
-        })}
-        <Text dimColor wrap="truncate-end">/flow-agents 关闭 · 每 2 秒刷新 · 当前会话</Text>
+        {agentsSection}
+        <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · 面板内按 r 刷新</Text>
       </Box>
     )
   })
