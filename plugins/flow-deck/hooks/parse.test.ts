@@ -207,10 +207,17 @@ describe('parse', () => {
       kind: 'pass',
     })
     expect(guardDecision(scope, 'Write', { file_path: 'LIB\\B.TS' }, cwd)).toEqual({ kind: 'pass' })
-    // 越界：保留调用方原样路径供提示
+    // 越界：保留调用方原样路径供提示，key 为归一化小写路径
     expect(guardDecision(scope, 'Edit', { file_path: 'C:\\repo\\other\\c.ts' }, cwd)).toEqual({
       kind: 'outOfScope',
       path: 'C:\\repo\\other\\c.ts',
+      key: 'other/c.ts',
+    })
+    // 同一文件异写法（分隔符/大小写）与上面 key 相同，path 保留原样
+    expect(guardDecision(scope, 'Write', { file_path: 'C:/REPO/OTHER/C.TS' }, cwd)).toEqual({
+      kind: 'outOfScope',
+      path: 'C:/REPO/OTHER/C.TS',
+      key: 'other/c.ts',
     })
     // file_path 缺失或空放行
     expect(guardDecision(scope, 'Edit', {}, cwd)).toEqual({ kind: 'pass' })

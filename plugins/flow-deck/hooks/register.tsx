@@ -42,6 +42,7 @@ const baselined = atom({ plugin: 'flow-deck', key: 'baselined' } as const, false
 const execution = atom({ plugin: 'flow-deck', key: 'execution' } as const, null)
 const currentTask = atom({ plugin: 'flow-deck', key: 'currentTask' } as const, null)
 const batchScope = atom({ plugin: 'flow-deck', key: 'batchScope' } as const, null)
+const guardWarned = atom({ plugin: 'flow-deck', key: 'guardWarned' } as const, [])
 const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
 const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
 const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
@@ -66,19 +67,22 @@ let planTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 let gitTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 
 /** 越界拦截的 deny 文案 */
-function guardDenyMessage(path: string, batch: string): string {
-  return `flow-deck：${path} 在批次 ${batch} 边界外，已按 guardMode=deny 拦截。确需改动请先调用 flow_batch 更新边界。`
+function guardDenyMessage(hit: GuardHit): string {
+  return `${hit.tool} ${hit.path} 在批次 ${hit.batch} 边界外，已按 guardMode=deny 拦截。确需改动请先调用 flow_batch 更新边界。`
 }
 
 /** 越界放行的 warn 文案 */
-function guardWarnMessage(path: string, batch: string): string {
-  return `⚠ flow-deck：${path} 在批次 ${batch} 边界外，已放行（guardMode=warn）`
+function guardWarnMessage(hit: GuardHit): string {
+  return `⚠ ${hit.tool} ${hit.path} 在批次 ${hit.batch} 边界外，已放行（guardMode=warn）`
 }
 
-/** 守卫动作：pass 放行；deny/warn 附越界路径与所属批次 */
+/** 守卫动作：pass 放行；deny/warn 附工具名、越界路径、批次与去重键 */
 export type GuardAction =
   | { action: 'pass' }
-  | { action: 'deny' | 'warn'; path: string; batch: string }
+  | { action: 'deny' | 'warn'; tool: string; path: string; batch: string; key: string }
+
+/** deny/warn 判定携带的越界信息（消息组装与去重共用） */
+type GuardHit = Extract<GuardAction, { action: 'deny' | 'warn' }>
 
 /** 读取边界并作出守卫判定；未声明边界或 cwd 未就绪时放行（fail-open） */
 async function decideGuard($: EngineInterface, tool: string, file_path: unknown): Promise<GuardAction> {
@@ -88,7 +92,15 @@ async function decideGuard($: EngineInterface, tool: string, file_path: unknown)
       task.plan !== scope.plan || (task.batch !== undefined && task.batch !== scope.batch)) return { action: 'pass' }
   const decision = guardDecision(scope, tool, { file_path }, sessionCwd)
   if (decision.kind === 'pass') return { action: 'pass' }
-  return { action: guardMode, path: decision.path, batch: scope.batch }
+  return { action: guardMode, tool, path: decision.path, batch: scope.batch, key: decision.key }
+}
+
+/** warn 越界提醒按归一化路径去重：同批同文件（含跨 Edit/Write）只提醒一次，批次重声明时清空 */
+async function warnOnce($: EngineInterface, hit: GuardHit): Promise<void> {
+  const seen = await read($, guardWarned)
+  if (seen.includes(hit.key)) return
+  await update($, guardWarned, prev => [...prev, hit.key].slice(-200))
+  $.ui.log(guardWarnMessage(hit))
 }
 
 /** 一个方案的一行状态文案（statusline 与 toast 共用的口径） */
@@ -205,6 +217,7 @@ export const register: Register = (on, options) => {
     await update($, batchScope, () => null)
     await update($, plans, () => [])
     await update($, notified, () => [])
+    await update($, guardWarned, () => [])
     await update($, baselined, () => false)
     await update($, progress, () => ({}))
     await update($, deps, () => null)
@@ -438,6 +451,8 @@ export const register: Register = (on, options) => {
       return { result: 'plan、batch 为必填字符串，files 为非空字符串数组', isError: true }
     }
     await update($, batchScope, () => scope)
+    // 边界变了越界集合随之变化，应允许再次提醒
+    await update($, guardWarned, () => [])
     await update($, currentTask, () => ({ kind: 'implement', plan: scope.plan, batch: scope.batch }))
     lastStatus = undefined
     $.ui.status(undefined)
@@ -454,19 +469,19 @@ export const register: Register = (on, options) => {
   })
 
   // 引擎要求钩子处于文件顶层或内联；Edit/Write 入参类型不同，守卫判定已下沉
-  // decideGuard 纯函数，这里内联两份薄壳
+  // decideGuard 纯函数，warn 去重共享 warnOnce，这里内联两份薄壳
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
     const verdict = await decideGuard($, e.tool, e.file_path)
     if (verdict.action === 'pass') return next(e)
-    if (verdict.action === 'deny') return { deny: guardDenyMessage(verdict.path, verdict.batch) }
-    $.ui.log(guardWarnMessage(verdict.path, verdict.batch))
+    if (verdict.action === 'deny') return { deny: guardDenyMessage(verdict) }
+    await warnOnce($, verdict)
     return next(e)
   })
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
     const verdict = await decideGuard($, e.tool, e.file_path)
     if (verdict.action === 'pass') return next(e)
-    if (verdict.action === 'deny') return { deny: guardDenyMessage(verdict.path, verdict.batch) }
-    $.ui.log(guardWarnMessage(verdict.path, verdict.batch))
+    if (verdict.action === 'deny') return { deny: guardDenyMessage(verdict) }
+    await warnOnce($, verdict)
     return next(e)
   })
 

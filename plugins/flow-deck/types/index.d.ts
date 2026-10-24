@@ -146,6 +146,8 @@ declare module 'claude-code' {
       execution: ExecutionReport | null
       /** 当前批次改动边界；未声明则 null（守卫放行） */
       batchScope: BatchScope | null
+      /** 已越界提醒过的归一化路径键，同批同文件不重复告警；批次重声明或新会话时清空 */
+      guardWarned: string[]
       /** 各批次最新阶段，键 <plan>#<batch>，flow_report 逐批累积 */
       progress: Record<string, string>
       /** 当前方案的波次依赖图；未声明则 null */

@@ -425,8 +425,39 @@ describe('pane', () => {
     expect(result.result).toBe('reached-bottom')
   })
 
-  // warn 模式的越界提醒不做自动化：$.ui.log 在测试引擎是无实现的 dispatch
-  // （同 $.ui.open），其判定逻辑与 deny 共用 guardDecision 纯函数（已覆盖）。
+  // warn 模式越界提醒的去重行为：ui.log 是无实现的 dispatch，mock 成计数器；
+  // 消息字段名未证实，先 JSON.stringify 兜底匹配（断言子串不含反斜杠）。
+  test('warn 模式越界提醒按文件去重，重新声明边界后再次提醒', async ($, on) => {
+    const logs: string[] = []
+    on('ui.log', ($, e) => {
+      logs.push(JSON.stringify(e))
+      return { value: undefined }
+    })
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    on('session.start', async ($, e, next) => {
+      void next
+      return { cwd: 'C:\\repo' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    // 界内编辑不产生告警
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts', old_string: 'x', new_string: 'y' })
+    expect(logs.filter(t => t.includes('边界外')).length).toBe(0)
+    // 首次越界提醒；同文件异写法与跨工具再次编辑静默；异文件各自提醒
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\other\\c.ts', old_string: 'x', new_string: 'y' })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\OTHER\\C.TS', old_string: 'x', new_string: 'y' })
+    await $.tool.call({ tool: 'Write', file_path: 'C:\\repo\\other\\c.ts', content: 'z' })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\other\\d.ts', old_string: 'x', new_string: 'y' })
+    expect(logs.filter(t => t.includes('边界外')).length).toBe(2)
+    expect(logs.some(t => t.includes('⚠ Edit') && t.includes('B2'))).toBe(true)
+    // flow_batch 重新声明边界后同文件恢复提醒
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\other\\c.ts', old_string: 'x', new_string: 'y' })
+    expect(logs.filter(t => t.includes('边界外')).length).toBe(3)
+  })
 
   test('flow_deps 声明后面板绘制执行 DAG 区块与分色总览条', async $ => {
     const declared = await $.tool.call({

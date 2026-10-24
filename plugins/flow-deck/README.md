@@ -9,7 +9,7 @@ Claude Code 的工作流、Git 与子代理状态面板。Codex manifest 仅提�
 - 子代理状态并入工作流面板：面板底部的常驻区块显示当前会话的运行中 / 已完成 / 失败 / 已停止数量，以及每个代理的名称、任务描述、类型、ID、父代理和来源插件；运行中优先，保留宿主未知状态的原文，避免把等待或空闲误判为完成。`/flow-agents` 幂等打开工作流面板（已开时提示而不关闭），保留宿主自带的 `/agents` 管理入口。引擎的面板为标签页模型：同刻只显示一个面板，其余为标签页（Tab 切换）；面板位置由宿主决定——全屏 transcript 且终端不窄于 110 列时停靠在消息旁，否则内联在输入框上方（inline 高度可拖拽调整并被记住）。
 - 输入区上方最多占两行，遵守宿主可用行数；仅容一行时冲突优先，其次当前执行。达标评审仍从 statusline 撤下，通过 toast 通知。
 
-`flow_task` 声明当前任务（`kind: iterate | implement | idle`，活动任务必填 `plan`，实施可附 `batch`）；plan-iterate 与 implement-plan 技能在开始和结束时同步任务。`flow_report` 的未收口阶段、`flow_batch` 声明也会激活对应实施批次；批次收口或 `idle` 后撤下执行显示与边界守卫。暂停、取消或失败停止时上报 `idle`，恢复时重新声明任务。
+`flow_task` 声明当前任务（`kind: iterate | implement | idle`，活动任务必填 `plan`，实施可附 `batch`）；plan-iterate 与 implement-plan 技能在开始和结束时同步任务。`flow_report` 的未收口阶段、`flow_batch` 声明也会激活对应实施批次；批次收口或 `idle` 后撤下执行显示与边界守卫。暂停、取消或失败停止时上报 `idle`，恢复时重新声明任务。warn 越界提醒按文件去重，同批同文件只提醒一次（批次重新声明后重置），文案含触发工具名。
 
 历史评审文件、`flow_deps` 路线图和跨会话执行记录不激活任务；新会话从无任务状态开始，上次执行仅通过 toast 提醒。依赖图只在实施对应方案时显示。更新时同时更新 flow-deck 与 rulertu-flow，以加载配套的任务上报规则。
 

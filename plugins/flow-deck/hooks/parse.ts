@@ -173,9 +173,10 @@ export function normalizePath(path: string, cwd: string): string {
 
 export type GuardDecision =
   | { kind: 'pass' }
-  | { kind: 'outOfScope'; path: string }
+  | { kind: 'outOfScope'; path: string; key: string }
 
-/** 判定一次文件写入是否越出批次边界；未声明边界或非文件写入工具一律放行 */
+/** 判定一次文件写入是否越出批次边界；未声明边界或非文件写入工具一律放行。
+ *  key 为去重用归一化小写路径，与界内比较同口径；path 保留调用方原样路径供提示 */
 export function guardDecision(
   scope: BatchScope | null,
   tool: string,
@@ -188,7 +189,7 @@ export function guardDecision(
   if (typeof record.file_path !== 'string' || record.file_path === '') return { kind: 'pass' }
   const keys = new Set(scope.files.map(file => normalizePath(file, cwd).toLowerCase()))
   const target = normalizePath(record.file_path, cwd).toLowerCase()
-  return keys.has(target) ? { kind: 'pass' } : { kind: 'outOfScope', path: record.file_path }
+  return keys.has(target) ? { kind: 'pass' } : { kind: 'outOfScope', path: record.file_path, key: target }
 }
 
 /** 校验并归一化 flow_deps 波次依赖声明，不符返回 null */
