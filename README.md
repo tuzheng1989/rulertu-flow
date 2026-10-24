@@ -34,7 +34,7 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 ## work-skills
 
-17 个工作型技能：深度研究（`deep-research`，多源搜索通道）、战略分析、头脑风暴、费曼教学、灵感节拍器、长文写作、去 AI 味改写（`humanizer`）、书籍转技能（`book-to-skill`）、文档转换（`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`）、公司调研，以及 deep-research 依赖的搜索通道（`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`）。
+20 个工作型技能：文章互动导读（`article-guide`，选项式确定起点、分块讲解、按需搜索与保存学习进度）、深度研究（`deep-research`，多源搜索通道）、战略分析、头脑风暴、费曼教学、灵感节拍器、长文写作、去 AI 味改写（`humanizer`）、书籍转技能（`book-to-skill`）、论文转代码（`paper-to-code`）、录屏自动精简（`screen-condense`）、文档转换（`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`）、公司调研，以及 deep-research 依赖的搜索通道（`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`）。
 
 依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。
 
