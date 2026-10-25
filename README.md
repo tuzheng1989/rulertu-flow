@@ -40,7 +40,9 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 ## agent-skills
 
-6 个 Agent 工程技能：`ai-agent-design`（《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件，原书插图不随插件分发）、`agent-evaluator`（Agent 评测 Harness 构建）、`deepagents`（LangChain DeepAgents 使用指南）、`agent-retrieval`（确定性 BM25 + 向量双路 RRF 融合检索库使用指南：接入分层与契约排查）、`deepagents-update`（技能文档与 Python 包同步）、`model-info`（模型参数查询）。
+8 个 Agent 工程技能：`ai-agent-design`（《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件，原书插图不随插件分发）、`proactive-agent-design`（主动型 Agent 6A 架构设计、评审诊断与主动行为评测：设计九问、分段介入与四份交付模板）、`agent-evaluator`（Agent 评测 Harness 构建）、`deepagents`（LangChain DeepAgents 使用指南）、`agent-retrieval`（确定性 BM25 + 向量双路 RRF 融合检索库使用指南：接入分层与契约排查）、`deepagents-update`（技能文档与 Python 包同步）、`model-info`（模型参数查询）、`rhetra`（调用级 Flow Harness 使用指南）。
+
+Claude Code 可用 `/agent-skills:proactive-agent-design` 调用，例如“设计一个持续发现项目风险的助手”或“评审现有 Agent 为什么反复打扰用户”。技能通过九问逐步形成决策，缺失信息保留待定；论文校准与【导读】【共创】来源分开标注。
 
 ## copyright-skills
 

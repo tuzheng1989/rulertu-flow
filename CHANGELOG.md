@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- agent-skills 1.3.0：新增 `proactive-agent-design`，提供主动型 Agent 的 6A 架构设计、评审诊断和主动行为评测三个入口，含设计九问、六环知识卡、边界与领域卡、四份交付模板及来源校准记录。校准 Awareness 运行时架构和三层评测图号，保留【导读】【共创】分级；双 manifest 同步升版，README 技能清单补齐现有 `rhetra` 后共 8 个。
+
 - work-skills 1.4.0：新增 `article-guide`（文章互动导读——选项式确定熟悉度与学习目标、知识地图与推荐路线、分块讲解与讨论、按需搜索延展、学习笔记与续学断点），附笔记与续学约定参考文档；根 README 技能清单同步为 20 个。双 manifest 版本对齐 1.4.0。
 
 - flow-deck 0.8.1：批次守卫 warn 提醒降噪——文案附触发工具名（Edit/Write）并去掉与宿主渲染前缀重复的"flow-deck："字样；越界提醒按归一化路径去重，同批同文件（含跨 Edit/Write）只提醒一次，`flow_batch` 重新声明边界或新会话时重置去重。deny 拦截不去重，每次越界照常拦截。新增 warn 去重与重置及 key 归一化测试。
