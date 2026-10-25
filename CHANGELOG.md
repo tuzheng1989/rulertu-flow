@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- rulertu-flow 2.6.0：commit/pr 技能内联路由——description 与正文新增「触发与提醒」节，写明两个触发场景（会话内任何 `git commit`、PR 创建或更新的文案先经技能起草；完成其他任务需要提交时主动提醒）；implement-plan 波次收口与 optimization-plan 方案定稿环节挂技能指针。新增 PreToolUse 提交守卫 hook（`hooks/commit-router.js`）：识别 `git commit` 与 `gh pr create/edit`，transcript 未见对应技能加载时经 `additionalContext` 向模型提醒一次，已加载或已提醒过则静默，任何异常 fail-open 放行不拦截；附命令识别与判定测试（`node --test hooks/`）。
 - agent-skills 1.3.0：新增 `proactive-agent-design`，提供主动型 Agent 的 6A 架构设计、评审诊断和主动行为评测三个入口，含设计九问、六环知识卡、边界与领域卡、四份交付模板及来源校准记录。校准 Awareness 运行时架构和三层评测图号，保留【导读】【共创】分级；双 manifest 同步升版，README 技能清单补齐现有 `rhetra` 后共 8 个。
 
 - work-skills 1.4.0：新增 `article-guide`（文章互动导读——选项式确定熟悉度与学习目标、知识地图与推荐路线、分块讲解与讨论、按需搜索延展、学习笔记与续学断点），附笔记与续学约定参考文档；根 README 技能清单同步为 20 个。双 manifest 版本对齐 1.4.0。

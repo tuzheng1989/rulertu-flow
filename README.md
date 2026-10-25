@@ -73,6 +73,8 @@ python -m pytest plugins/copyright-skills/tests -q
 
 `commit` 和 `pr` 默认用中文面向项目维护者写作，用户与目标仓库的明确要求优先。二者专注于文案，实际提交、推送或创建与更新 PR 沿用会话中已有授权。可直接要求“为暂存改动写 commit message”或“为当前分支写 PR 标题和正文”。
 
+两个技能同时承担会话内的文案路由：任何 `git commit`、PR 创建或更新的文案先经对应技能起草，完成其他任务需要提交时主动提醒。插件附带 PreToolUse 守卫（`hooks/commit-router.js`），在 transcript 未见技能加载时向模型提醒一次，不拦截提交。
+
 `plan-iterate` 使用对称的跨模型后端：Claude Code 宿主外调 Codex CLI，Codex 宿主外调 Claude Code `opus/high`。两个方向都使用相同 schema、8.5 分门槛、最多三轮状态机和可续接 session；真实外部调用需要用户明确授权且目标 CLI 已登录。
 
 ## 测试职责
