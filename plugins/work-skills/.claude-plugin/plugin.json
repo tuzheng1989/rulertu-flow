@@ -1,8 +1,10 @@
 {
   "name": "work-skills",
-  "description": "工作型技能合集：文章导读、深度研究、战略分析、文档转换与思维工具",
-  "version": "1.4.0",
-  "author": { "name": "rulertu" },
+  "description": "工作型技能合集：文章导读、深度研究、战略分析、文档转换、工作周报与思维工具",
+  "version": "1.5.0",
+  "author": {
+    "name": "rulertu"
+  },
   "homepage": "https://github.com/tuzheng1989/rulertu-flow",
   "repository": "https://github.com/tuzheng1989/rulertu-flow"
 }
