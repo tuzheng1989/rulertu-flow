@@ -1,7 +1,7 @@
 ---
 name: weekly-report
 description: 个人工作周报生成。汇总一周内 Claude Code / Codex 会话与 Git 提交，产出以目标和成果为主的口语化周报。当用户要求生成周报、总结本周工作、或说"写周报"时使用。
-version: 1.1.0
+version: 1.2.0
 author: rulertu
 metadata:
   work-skills:
@@ -39,6 +39,10 @@ python {baseDir}/scripts/collect.py --repos D:/work -o data.json   # 指定仓�
 - 只提取 assistant **纯文本块**，工具调用 JSON/附件/api-request 天然排除——上下文爆炸的根源是工具日志，不是会话本身。每会话约 1.5KB，实测一周全部活跃会话共 ~35KB。
 - Codex 摘要附 `total_tokens`/`turns` 工作量指标。
 - 未匹配到全量文件的老会话自动降级为轻量层，不报错。
+
+**工作台项目特殊处理**（`WORKBENCH_PROJECTS`，当前含 `evoCenter`）：
+
+工作台型项目每个会话对应**独立一件事**（不像常规项目是同一件事的迭代），因此按 sessionId 拆分输出：`{"evoCenter": {"<sessionId>": {items, summary}}}`，每会话自带 recap/outcome，Agent 无需再猜测哪些输入属于同一件事。新增工作台项目改 `collect.py` 顶部的 `WORKBENCH_PROJECTS` 集合即可。
 
 **两阶段分工**：脚本只管"采集到什么"（原始数据 JSON），Agent 负责"这些数据意味着什么"——四源合并去重是语义判断（同一工作在多工具里操作过很常见），脚本做不了。
 

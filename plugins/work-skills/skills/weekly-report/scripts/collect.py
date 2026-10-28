@@ -41,6 +41,10 @@ DEFAULT_REPOS_ROOT = Path("D:/runspace")
 CONTENT_MAX_CHARS = 300   # 会话输入截断长度，足够 Agent 理解意图
 COMMIT_MSG_MAX = 200
 
+# 工作台型项目：每个会话对应独立一件事，按会话拆分输出（按需增删）
+WORKBENCH_PROJECTS = {"evoCenter"}
+TITLE_MAX_CHARS = 80       # 工作台会话标题：首条有效输入截断
+
 # --summarize 深度摘要的预算（每会话，字符）
 DEEP_HEAD_CHARS = 400     # T1 首条 assistant 复述（天然 recap）
 DEEP_TAIL_CHARS = 800     # T1 尾部成果（最终交付陈述）
@@ -114,12 +118,17 @@ def collect_claude(start_dt, end_dt):
                     continue
                 dt = datetime.fromtimestamp(ts)
                 pname = Path(proj).name
-                by_project.setdefault(pname, []).append({
+                entry = {
                     "date": dt.strftime("%Y-%m-%d"),
                     "time": dt.strftime("%H:%M"),
                     "content": display[:CONTENT_MAX_CHARS],
-                })
+                }
                 sid = data.get("sessionId")
+                if pname in WORKBENCH_PROJECTS and sid:
+                    # 工作台项目：每会话一件事，按会话拆分，保留会话边界
+                    by_project.setdefault(pname, {}).setdefault(sid, []).append(entry)
+                else:
+                    by_project.setdefault(pname, []).append(entry)
                 if sid:
                     by_project_sessions.setdefault(pname, {}).setdefault(sid, 0)
                     by_project_sessions[pname][sid] += 1
@@ -393,21 +402,35 @@ def log(msg):
 def attach_deep_summaries(claude, claude_sessions, codex, codex_full_sids):
     """--summarize 模式：按 sessionId join 到全量会话文件，挂载深度摘要。
 
-    摘要按「输入条数最多的会话优先」逐个挂载，直到每项目预算用尽；
     未匹配到全量文件的会话保持现状（轻量层），不报错。
     """
-    # Claude：摘要直接挂到项目级，格式 {"sessionId前8": {...}}
     for pname, sids in claude_sessions.items():
-        ordered = sorted(sids.items(), key=lambda kv: -kv[1])
+        proj = claude.get(pname)
+        if isinstance(proj, dict) and "items" in proj:
+            # 已是摘要结构，摘要补充进 session_summaries
+            summaries = proj.setdefault("session_summaries", {})
+            for sid in sids:
+                if sid[:8] not in summaries:
+                    s = summarize_claude_session(sid)
+                    if s:
+                        summaries[sid[:8]] = s
+            continue
         summaries = {}
-        for sid, _n in ordered:
+        for sid in sids:
             s = summarize_claude_session(sid)
             if s:
                 summaries[sid[:8]] = s
         if summaries:
-            if pname in claude:
-                claude[pname] = {"items": claude[pname], "session_summaries": summaries}
-            else:
+            if isinstance(proj, list):
+                # 普通项目：条目列表 + 摘要
+                claude[pname] = {"items": proj, "session_summaries": summaries}
+            elif isinstance(proj, dict):
+                # 工作台项目：{完整sid: [entries]} 摘要挂进对应会话组（键长不同，前缀匹配）
+                for sid in sids:
+                    s = summaries.get(sid[:8])
+                    if s and sid in proj:
+                        proj[sid] = {"items": proj[sid], "summary": s}
+            elif proj is None:
                 claude[pname] = {"items": [], "session_summaries": summaries}
 
     # Codex：摘要挂到会话组级
@@ -447,9 +470,15 @@ def main():
     if args.summarize:
         attach_deep_summaries(claude, claude_sessions, codex, codex_full_sids)
 
-    # 摘要模式下组结构变为 {items, session_summaries/summary}，统一计条数
+    # 摘要/工作台模式下组结构变为 dict，统一计条数
     def group_len(v):
-        return len(v["items"]) if isinstance(v, dict) else len(v)
+        if isinstance(v, dict):
+            if "items" in v:
+                return len(v["items"])
+            # 工作台 {sid: entries 或 {items, summary}}
+            return sum(len(x["items"]) if isinstance(x, dict) else len(x)
+                       for x in v.values())
+        return len(v)
 
     total_claude = sum(group_len(v) for v in claude.values())
     total_codex = sum(group_len(v) for v in codex.values())
