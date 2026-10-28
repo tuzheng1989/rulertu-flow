@@ -7,7 +7,7 @@
 | 插件 | 定位 |
 |------|------|
 | `rulertu-flow` | 工作流引擎：T0–T3 风险分级的方案编写、分批实施与独立验证，配 commit/PR 文案技能与提交守卫 |
-| `work-skills` | 21 个日常工作技能：阅读研究、思维工具、写作改写、文档转换、工作周报 |
+| `work-skills` | 21 个日常工作技能：阅读研究、思维工具、写作改写、文档转换、工作总结 |
 | `agent-skills` | 8 个 Agent 工程技能：Agent 设计知识包、主动型 Agent 架构、评测、DeepAgents、检索指南 |
 | `copyright-skills` | 5 个知识产权申报技能：软著材料生成与合规预审、专利分析与交底书 |
 | `rulertu-frontend` | 前端开发工程师代理 + 6 个配套技能（z.ai 官方技能包，Apache-2.0） |
@@ -76,7 +76,7 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 - **思维工具**：`brainstorm`（纯发散头脑风暴，负责**广度**——可能性地图横向铺开，只发散不收敛）、`inspiration-pacemaker`（深度下钻引擎，负责**深度**——对单一想法纵向钻透到领域专家级洞察）、`feynman-tutor`（费曼式教学）
 - **写作与转化**：`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
 - **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
-- **工作周报**：`weekly-report`（汇总一周 Claude Code / Codex 会话与 Git 提交，产出以目标和成果为主的口语化周报）
+- **工作总结**：`work-summary`（汇总指定周期的工作记录，支持日报、周报、月报及更长周期的分尺度融合）
 - **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`
 
 依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。

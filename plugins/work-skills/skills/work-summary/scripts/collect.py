@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-周报数据采集脚本 —— 采集原始数据，输出结构化 JSON 到 stdout。
-合并、去重、改写、成稿由 Agent（weekly-report 技能）完成。
+工作总结数据采集脚本 —— 采集原始数据，输出结构化 JSON 到 stdout。
+合并、去重、改写、成稿由 Agent（work-summary 技能）完成。
 
 数据来源：
   1. Claude Code 会话记录 (~/.claude/history.jsonl)
@@ -14,7 +14,8 @@ Hermes 会话（session_search）无法脚本化，由 Agent 侧补充。
 用法：
   python collect.py                          # 默认周期（上周一12:00~本周一12:00），默认 D:/runspace
   python collect.py --repos D:/work          # 指定仓库根目录
-  python collect.py --days 7                 # 最近 7 天（自然日，替代默认周窗口）
+  python collect.py --days 7                 # 最近 7 个 24 小时
+  python collect.py --start 2026-01-01 --end 2026-02-01  # 左闭右开，本地时间
   python collect.py -o report-data.json      # 写文件而非 stdout
 
 输出：JSON 到 stdout（--output-file 指定时写文件），日志到 stderr。
@@ -93,7 +94,7 @@ def collect_claude(start_dt, end_dt):
     """~/.claude/history.jsonl：timestamp(毫秒)/project/display，按项目分组。"""
     if not CLAUDE_HISTORY.exists():
         log(f"Claude Code 历史不存在: {CLAUDE_HISTORY}")
-        return {}
+        return {}, {}
 
     start_ts, end_ts = start_dt.timestamp(), end_dt.timestamp()
     by_project = {}
@@ -108,7 +109,7 @@ def collect_claude(start_dt, end_dt):
                 if "timestamp" not in data:
                     continue
                 ts = data["timestamp"] / 1000
-                if not (start_ts <= ts <= end_ts):
+                if not (start_ts <= ts < end_ts):
                     continue
                 proj = data.get("project", "")
                 if not proj:
@@ -149,7 +150,7 @@ def collect_codex(start_dt, end_dt):
     """
     if not CODEX_HISTORY.exists():
         log(f"Codex 历史不存在: {CODEX_HISTORY}")
-        return {}
+        return {}, set()
 
     # 标题索引：session_id -> thread_name
     titles = {}
@@ -174,7 +175,7 @@ def collect_codex(start_dt, end_dt):
             try:
                 data = json.loads(line)
                 ts = data.get("ts")
-                if ts is None or not (start_ts <= ts <= end_ts):
+                if ts is None or not (start_ts <= ts < end_ts):
                     continue
                 text = (data.get("text") or "").strip()
                 if len(text) <= 5 or text in TRIVIAL_INPUTS:
@@ -359,29 +360,25 @@ def collect_git(start_dt, end_dt, repos_root):
         log(f"仓库根目录不存在: {repos_root}")
         return commits_by_project
 
-    since = start_dt.strftime("%Y-%m-%d %H:%M:%S")
-    until = end_dt.strftime("%Y-%m-%d %H:%M:%S")
-
     for proj_dir in sorted(repos_root.iterdir()):
         if not proj_dir.is_dir() or not (proj_dir / ".git").exists():
             continue
         try:
             result = subprocess.run(
                 ["git", "-C", str(proj_dir),
-                 "log", "--since", since, "--until", until,
-                 "--pretty=format:%h|%ad|%s",
+                 "log", "--pretty=format:%h|%at|%ad|%s",
                  "--date=format:%Y-%m-%d %H:%M"],
                 capture_output=True, text=True, timeout=15,
             )
             if result.returncode == 0 and result.stdout.strip():
                 commits = []
                 for line in result.stdout.strip().split("\n"):
-                    parts = line.split("|", 2)
-                    if len(parts) == 3:
+                    parts = line.split("|", 3)
+                    if len(parts) == 4 and start_dt.timestamp() <= int(parts[1]) < end_dt.timestamp():
                         commits.append({
                             "hash": parts[0],
-                            "date": parts[1],
-                            "message": parts[2][:COMMIT_MSG_MAX],
+                            "date": parts[2],
+                            "message": parts[3][:COMMIT_MSG_MAX],
                         })
                 if commits:
                     commits_by_project[proj_dir.name] = commits
@@ -444,18 +441,31 @@ def attach_deep_summaries(claude, claude_sessions, codex, codex_full_sids):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="周报数据采集")
+    parser = argparse.ArgumentParser(description="工作总结数据采集")
     parser.add_argument("--repos", type=Path, default=DEFAULT_REPOS_ROOT,
                         help="Git 仓库根目录（默认 D:/runspace）")
     parser.add_argument("--days", type=int, default=None,
-                        help="最近 N 天（自然日窗口）；不指定则用默认周窗口")
+                        help="最近 N 个 24 小时；不指定则用默认周窗口")
+    parser.add_argument("--start", help="起点（本地时间 ISO 日期或日期时间，含）")
+    parser.add_argument("--end", help="终点（本地时间 ISO 日期或日期时间，不含）")
     parser.add_argument("--summarize", action="store_true",
                         help="深度摘要：按 sessionId 关联全量会话文件，抽取 recap/成果/里程碑（默认关闭）")
     parser.add_argument("-o", "--output-file", type=Path, default=None,
                         help="写入文件（默认输出到 stdout）")
     args = parser.parse_args()
 
-    if args.days:
+    if bool(args.start) != bool(args.end) or (args.days is not None and args.start):
+        parser.error("--start 和 --end 须同时指定，且不能与 --days 一起使用")
+    if args.days is not None and args.days <= 0:
+        parser.error("--days 必须大于零")
+    if args.start:
+        try:
+            start_dt, end_dt = datetime.fromisoformat(args.start), datetime.fromisoformat(args.end)
+            if start_dt.tzinfo is not None or end_dt.tzinfo is not None or start_dt >= end_dt:
+                raise ValueError
+        except ValueError:
+            parser.error("时间须为本地 ISO 日期或日期时间，且 start 早于 end")
+    elif args.days is not None:
         start_dt, end_dt = days_range(args.days)
     else:
         start_dt, end_dt = week_range()
@@ -490,7 +500,7 @@ def main():
     log(f"Git 提交: {total_git} 条 / {len(git)} 项目")
 
     output = {
-        "week_range": {
+        "time_range": {
             "start": start_dt.strftime("%Y-%m-%d %H:%M"),
             "end": end_dt.strftime("%Y-%m-%d %H:%M"),
             "report_date": report_date,
@@ -504,7 +514,7 @@ def main():
         "claude_code_sessions": claude,
         "codex_sessions": codex,
         "git_commits": git,
-        "_notes": "hermes_sessions 需 Agent 用 session_search 补充；codex 项目归属需结合内容判断",
+        "_notes": "时间窗口左闭右开；深度摘要来自整个会话，可能含窗口外内容，须核验时间；hermes_sessions 需 Agent 用 session_search 补充；codex 项目归属需结合内容判断",
     }
 
     text = json.dumps(output, ensure_ascii=False, indent=2)
