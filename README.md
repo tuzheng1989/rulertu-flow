@@ -130,27 +130,3 @@ python -m pytest plugins/copyright-skills/tests -q
 
 详见 [plugins/flow-deck/README.md](plugins/flow-deck/README.md)。
 
-## 工程细节
-
-### 测试职责
-
-Executor 在红绿循环运行锚点测试，子任务收尾运行受影响模块、必要集成测试以及类型和静态检查。Auditor 默认采信主控已抽查的证据，只对一至两条高风险或可疑测试复跑。所有写入任务停止后，波次收口统一运行一次全量测试、构建和项目红线。
-
-修改测试运行器、构建系统、依赖锁文件或全局配置，或者修改跨模块公共契约/共享测试设施且无法建立可信定向范围时，可提前触发全量测试，回报必须记录依据。失败能定位到批次就退回对应 Executor；归属不明则阻断波次并独立诊断。只有绿色基线或独立复现可证明既有失败，flaky 最多定向复跑一次。
-
-### 角色模型路由
-
-Claude Code 保留插件内的静态分级：Executor 使用 Sonnet，Auditor 与 Advisor 使用 Opus。Codex 使用固定路由：Executor=`gpt-5.6-terra`/`medium`，Auditor=`gpt-5.6-sol`/`high`，Advisor=`gpt-5.6-sol`/`xhigh`。Executor 只继承最近三轮上下文，Auditor/Advisor 使用独立上下文；固定模型不可用时阻断，不静默继承或替换。两种宿主的模型标识彼此独立。
-
-### 从 1.x 升级
-
-2.0 将插件从仓库根迁移到 `plugins/rulertu-flow`，属于破坏性安装契约变更。先卸载旧插件和旧 marketplace 条目，拉取 2.0 后重新添加 marketplace、安装插件，并开启新会话刷新 Skill 缓存。旧 plan-iterate 的 `session.txt` 会在下一轮成功评审后迁移为 `state.json`。
-
-### 本地验证
-
-```sh
-python scripts/validate_repo.py
-python -m unittest discover -s plugins/rulertu-flow/tests -v
-```
-
-真实外部方案评审只在目标 CLI 已登录且用户明确授权后执行。
