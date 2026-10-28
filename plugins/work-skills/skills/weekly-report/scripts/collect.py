@@ -21,6 +21,7 @@ Hermes 会话（session_search）无法脚本化，由 Agent 侧补充。
 """
 
 import argparse
+import glob
 import json
 import subprocess
 import sys
@@ -34,10 +35,21 @@ from pathlib import Path
 CLAUDE_HISTORY = Path.home() / ".claude" / "history.jsonl"
 CODEX_HISTORY = Path.home() / ".codex" / "history.jsonl"
 CODEX_SESSION_INDEX = Path.home() / ".codex" / "session_index.jsonl"
+CODEX_PROJECTS = Path.home() / ".codex" / "sessions"
 DEFAULT_REPOS_ROOT = Path("D:/runspace")
 
 CONTENT_MAX_CHARS = 300   # 会话输入截断长度，足够 Agent 理解意图
 COMMIT_MSG_MAX = 200
+
+# --summarize 深度摘要的预算（每会话，字符）
+DEEP_HEAD_CHARS = 400     # T1 首条 assistant 复述（天然 recap）
+DEEP_TAIL_CHARS = 800     # T1 尾部成果（最终交付陈述）
+DEEP_TAIL_COUNT = 3       # 尾部取最后 N 条 assistant 文本，避开"Q1 请定夺"式追问
+DEEP_MID_COUNT = 3        # T2 中段里程碑锚点数
+DEEP_MID_CHARS = 300      # T2 每条锚点截断
+# 成果关键词：中段只采样含里程碑信号的 assistant 块
+OUTCOME_KEYWORDS = ("完成", "交付", "通过", "达标", "定稿", "实现", "修复", "验证",
+                    "FAIL", "PASS", "全过", "上线", "合入", "迁移", "重构", "发布")
 
 # 无意义的会话输入，过滤掉
 TRIVIAL_INPUTS = {
@@ -81,6 +93,7 @@ def collect_claude(start_dt, end_dt):
 
     start_ts, end_ts = start_dt.timestamp(), end_dt.timestamp()
     by_project = {}
+    by_project_sessions = {}  # 项目 -> {sessionId: 会话内输入条数}
 
     with open(CLAUDE_HISTORY, encoding="utf-8") as f:
         for line in f:
@@ -100,14 +113,19 @@ def collect_claude(start_dt, end_dt):
                 if len(display) <= 5 or display in TRIVIAL_INPUTS:
                     continue
                 dt = datetime.fromtimestamp(ts)
-                by_project.setdefault(Path(proj).name, []).append({
+                pname = Path(proj).name
+                by_project.setdefault(pname, []).append({
                     "date": dt.strftime("%Y-%m-%d"),
                     "time": dt.strftime("%H:%M"),
                     "content": display[:CONTENT_MAX_CHARS],
                 })
+                sid = data.get("sessionId")
+                if sid:
+                    by_project_sessions.setdefault(pname, {}).setdefault(sid, 0)
+                    by_project_sessions[pname][sid] += 1
             except Exception:
                 continue
-    return by_project
+    return by_project, by_project_sessions
 
 
 # ============================================================
@@ -138,6 +156,7 @@ def collect_codex(start_dt, end_dt):
 
     start_ts, end_ts = start_dt.timestamp(), end_dt.timestamp()
     by_session = {}
+    full_sids = set()
 
     with open(CODEX_HISTORY, encoding="utf-8") as f:
         for line in f:
@@ -153,6 +172,8 @@ def collect_codex(start_dt, end_dt):
                     continue
                 sid = data.get("session_id", "")
                 key = sid[:8] if sid else f"codex-{len(by_session)}"
+                if sid:
+                    full_sids.add(sid)
                 dt = datetime.fromtimestamp(ts)
                 entry = {
                     "date": dt.strftime("%Y-%m-%d"),
@@ -177,7 +198,145 @@ def collect_codex(start_dt, end_dt):
         result[key] = group["items"]
         if titles_in:
             result[key + "#meta"] = [{"title": titles_in[0]}]
-    return result
+    return result, full_sids
+
+
+# ============================================================
+# 深度摘要：从会话全量文件抽取 recap + 结尾成果 + 中段锚点
+# ============================================================
+
+def _first_longest(texts, n, min_len=100):
+    """尾部取法：最后 n 条里选最长的一条作为成果陈述。
+
+    会话结尾不一定是成果（可能是"Q1 请定夺"式追问），
+    尾部若干条中最长的通常就是交付摘要。
+    """
+    tail = [t for t in texts[-n:] if t.strip()]
+    if not tail:
+        return None
+    best = max(tail, key=len)
+    return best if len(best) >= min_len else tail[-1]
+
+
+def _pick_midstones(texts, count):
+    """中段采样：优先含成果关键词的 assistant 块，不足则等距补齐。"""
+    candidates = []
+    for i, t in enumerate(texts):
+        if any(k in t for k in OUTCOME_KEYWORDS):
+            candidates.append((i, t))
+    if len(candidates) > count:
+        # 关键词命中过多时等距抽 count 条，避免全挤在前半段
+        step = len(candidates) / count
+        candidates = [candidates[int(i * step)] for i in range(count)]
+    picked = {i: t[:DEEP_MID_CHARS] for i, t in candidates[:count]}
+    # 等距补齐到 count 条
+    if len(picked) < count and texts:
+        rest = [(i, t) for i, t in enumerate(texts) if i not in picked]
+        need = count - len(picked)
+        if rest:
+            step = len(rest) / need
+            for j in range(need):
+                i, t = rest[int(j * step)]
+                picked[i] = t[:DEEP_MID_CHARS]
+    return [picked[i] for i in sorted(picked)]
+
+
+def _make_summary(head, tail, midstones, extra=None):
+    """组装深度摘要对象。head/tail/midstones 均为纯文本或 None。"""
+    out = {}
+    if head:
+        out["recap"] = head[:DEEP_HEAD_CHARS]   # 会话开头的任务复述（天然 recap）
+    if midstones:
+        out["milestones"] = midstones           # 中段里程碑锚点
+    if tail:
+        out["outcome"] = tail[:DEEP_TAIL_CHARS] # 会话结尾的最终成果陈述
+    if extra:
+        out.update(extra)
+    return out
+
+
+def summarize_claude_session(session_id):
+    """读 ~/.claude/projects/*/<sessionId>.jsonl，抽取 assistant 纯文本块。
+
+    只提取 type:"text" 块——工具调用 JSON、附件、api-request 等体积大头
+    全部天然排除，这是控制上下文规模的关键。
+    """
+    pattern = str(Path.home() / ".claude" / "projects" / "*" / f"{session_id}.jsonl")
+    matches = glob.glob(pattern)
+    if not matches:
+        return None
+    texts = []
+    try:
+        with open(matches[0], encoding="utf-8") as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                if d.get("type") != "assistant":
+                    continue
+                content = d.get("message", {}).get("content", [])
+                if isinstance(content, list):
+                    for blk in content:
+                        if isinstance(blk, dict) and blk.get("type") == "text":
+                            t = (blk.get("text") or "").strip()
+                            if t:
+                                texts.append(t)
+    except Exception as e:
+        log(f"读取 Claude 会话 {session_id[:8]} 失败: {e}")
+        return None
+    if not texts:
+        return None
+    return _make_summary(texts[0], _first_longest(texts, DEEP_TAIL_COUNT),
+                         _pick_midstones(texts, DEEP_MID_COUNT))
+
+
+def summarize_codex_session(session_id):
+    """读 ~/.codex/sessions/**/rollout-*.jsonl（文件名含 session_id）。
+
+    同一 session 的 rollout 文件可能跨多天存在（会话恢复），全部合并处理。
+    顺带汇总 token_usage_record 作为工作量指标。
+    """
+    pattern = str(CODEX_PROJECTS / "**" / f"rollout-*{session_id}*.jsonl")
+    matches = sorted(glob.glob(pattern, recursive=True))
+    if not matches:
+        return None
+    texts, total_tokens, turn_count = [], 0, 0
+    for path in matches:
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        d = json.loads(line)
+                    except Exception:
+                        continue
+                    p = d.get("payload", {})
+                    ptype = p.get("type")
+                    if d.get("type") == "event_msg" and ptype == "agent_message":
+                        t = (p.get("message") or "").strip()
+                        if t:
+                            texts.append(t)
+                    elif (d.get("type") == "response_item" and ptype == "message"
+                          and p.get("role") == "assistant"):
+                        # 部分版本 rollout 不写 event_msg/agent_message，正文在此
+                        for c in p.get("content", []):
+                            if isinstance(c, dict) and c.get("text"):
+                                t = (c["text"] or "").strip()
+                                if t:
+                                    texts.append(t)
+                    elif d.get("type") == "token_usage_record":
+                        usage = p.get("usage") or {}
+                        total_tokens += (usage.get("input_tokens", 0)
+                                         + usage.get("output_tokens", 0))
+                        turn_count += 1
+        except Exception as e:
+            log(f"读取 Codex 会话 {session_id[:8]} 失败: {e}")
+            continue
+    if not texts:
+        return None
+    extra = {"total_tokens": total_tokens, "turns": turn_count} if turn_count else None
+    return _make_summary(texts[0], _first_longest(texts, DEEP_TAIL_COUNT),
+                         _pick_midstones(texts, DEEP_MID_COUNT), extra)
 
 
 # ============================================================
@@ -231,12 +390,44 @@ def log(msg):
     print(msg, file=sys.stderr)
 
 
+def attach_deep_summaries(claude, claude_sessions, codex, codex_full_sids):
+    """--summarize 模式：按 sessionId join 到全量会话文件，挂载深度摘要。
+
+    摘要按「输入条数最多的会话优先」逐个挂载，直到每项目预算用尽；
+    未匹配到全量文件的会话保持现状（轻量层），不报错。
+    """
+    # Claude：摘要直接挂到项目级，格式 {"sessionId前8": {...}}
+    for pname, sids in claude_sessions.items():
+        ordered = sorted(sids.items(), key=lambda kv: -kv[1])
+        summaries = {}
+        for sid, _n in ordered:
+            s = summarize_claude_session(sid)
+            if s:
+                summaries[sid[:8]] = s
+        if summaries:
+            if pname in claude:
+                claude[pname] = {"items": claude[pname], "session_summaries": summaries}
+            else:
+                claude[pname] = {"items": [], "session_summaries": summaries}
+
+    # Codex：摘要挂到会话组级
+    for sid in codex_full_sids:
+        key = sid[:8]
+        if key not in codex:
+            continue
+        s = summarize_codex_session(sid)
+        if s:
+            codex[key] = {"items": codex[key], "summary": s}
+
+
 def main():
     parser = argparse.ArgumentParser(description="周报数据采集")
     parser.add_argument("--repos", type=Path, default=DEFAULT_REPOS_ROOT,
                         help="Git 仓库根目录（默认 D:/runspace）")
     parser.add_argument("--days", type=int, default=None,
                         help="最近 N 天（自然日窗口）；不指定则用默认周窗口")
+    parser.add_argument("--summarize", action="store_true",
+                        help="深度摘要：按 sessionId 关联全量会话文件，抽取 recap/成果/里程碑（默认关闭）")
     parser.add_argument("-o", "--output-file", type=Path, default=None,
                         help="写入文件（默认输出到 stdout）")
     args = parser.parse_args()
@@ -249,12 +440,19 @@ def main():
 
     log(f"周期: {start_dt:%Y-%m-%d %H:%M} — {end_dt:%Y-%m-%d %H:%M}")
 
-    claude = collect_claude(start_dt, end_dt)
-    codex = collect_codex(start_dt, end_dt)
+    claude, claude_sessions = collect_claude(start_dt, end_dt)
+    codex, codex_full_sids = collect_codex(start_dt, end_dt)
     git = collect_git(start_dt, end_dt, args.repos)
 
-    total_claude = sum(len(v) for v in claude.values())
-    total_codex = sum(len(v) for v in codex.values())
+    if args.summarize:
+        attach_deep_summaries(claude, claude_sessions, codex, codex_full_sids)
+
+    # 摘要模式下组结构变为 {items, session_summaries/summary}，统一计条数
+    def group_len(v):
+        return len(v["items"]) if isinstance(v, dict) else len(v)
+
+    total_claude = sum(group_len(v) for v in claude.values())
+    total_codex = sum(group_len(v) for v in codex.values())
     total_git = sum(len(v) for v in git.values())
     all_projects = sorted(set(list(claude.keys()) + list(git.keys())))
 

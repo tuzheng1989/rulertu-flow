@@ -1,7 +1,7 @@
 ---
 name: weekly-report
 description: 个人工作周报生成。汇总一周内 Claude Code / Codex 会话与 Git 提交，产出以目标和成果为主的口语化周报。当用户要求生成周报、总结本周工作、或说"写周报"时使用。
-version: 1.0.0
+version: 1.1.0
 author: rulertu
 metadata:
   work-skills:
@@ -19,6 +19,7 @@ metadata:
 ```bash
 python {baseDir}/scripts/collect.py                 # 默认周窗口（上周一12:00~本周一12:00），仓库根 D:/runspace
 python {baseDir}/scripts/collect.py --days 7        # 最近 7 天自然日窗口
+python {baseDir}/scripts/collect.py --days 7 --summarize   # 深度摘要模式（推荐周报用）
 python {baseDir}/scripts/collect.py --repos D:/work -o data.json   # 指定仓库根、写文件
 ```
 
@@ -28,6 +29,16 @@ python {baseDir}/scripts/collect.py --repos D:/work -o data.json   # 指定仓�
 | Codex 会话 | ✅ `~/.codex/history.jsonl` + `session_index.jsonl` | 会话聚合 + thread_name 标题；项目归属需 Agent 判断 |
 | Git 提交 | ✅ 遍历 `--repos` 目录树 | 每仓库 `git log --since/--until` |
 | Hermes 会话 | ❌ Agent 用 session_search 补充 | 脚本无法访问，按 `started_at` 过滤本周窗口 |
+
+**`--summarize` 深度摘要**（解决"上下文爆炸 vs 字符截断丢工作"的矛盾）：
+
+- 按 `sessionId` 关联到全量会话文件（Claude `~/.claude/projects/*/`、Codex `~/.codex/sessions/**/`），每会话抽三层：
+  - `recap`：会话**首条** assistant 文本（模型自己写的任务复述，天然 recap）
+  - `outcome`：**尾部 2~3 条中最长**的 assistant 文本（最终成果陈述；取最长是为了避开"Q1 请定夺"式追问结尾）
+  - `milestones`：中段含成果关键词（完成/交付/通过/FAIL…）的 assistant 块等距采样 3 条
+- 只提取 assistant **纯文本块**，工具调用 JSON/附件/api-request 天然排除——上下文爆炸的根源是工具日志，不是会话本身。每会话约 1.5KB，实测一周全部活跃会话共 ~35KB。
+- Codex 摘要附 `total_tokens`/`turns` 工作量指标。
+- 未匹配到全量文件的老会话自动降级为轻量层，不报错。
 
 **两阶段分工**：脚本只管"采集到什么"（原始数据 JSON），Agent 负责"这些数据意味着什么"——四源合并去重是语义判断（同一工作在多工具里操作过很常见），脚本做不了。
 
