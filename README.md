@@ -1,6 +1,25 @@
 # Rulertu Flow 2.0
 
-面向 Codex 与 Claude Code 的团队 marketplace 插件，用 T0–T3 风险分级组织方案、实施和独立验证。
+面向 Claude Code 与 Codex 双宿主的个人插件市场（marketplace），包含六个互相独立的插件：从 T0–T3 风险分级的工作流引擎，到 Agent 工程、知识产权申报、前端开发与日常工作技能。按需选装，互不依赖。
+
+## 插件一览
+
+| 插件 | 定位 |
+|------|------|
+| `rulertu-flow` | 工作流引擎：T0–T3 风险分级的方案编写、分批实施与独立验证，配 commit/PR 文案技能与提交守卫 |
+| `work-skills` | 21 个日常工作技能：阅读研究、思维工具、写作改写、文档转换、工作周报 |
+| `agent-skills` | 8 个 Agent 工程技能：Agent 设计知识包、主动型 Agent 架构、评测、DeepAgents、检索指南 |
+| `copyright-skills` | 5 个知识产权申报技能：软著材料生成与合规预审、专利分析与交底书 |
+| `rulertu-frontend` | 前端开发工程师代理 + 6 个配套技能（z.ai 官方技能包，Apache-2.0） |
+| `flow-deck` | 工作流可视化仪表盘：评审进度、批次守卫、依赖 DAG、git 状态与子代理监控 |
+
+## 特色
+
+- **T0–T3 风险分级**：方案按风险定级决定验证强度——低风险批次定向测试即可收口，高风险批次触发全量回归；`optimization-plan` 写方案、`implement-plan` 执行、`plan-iterate` 独立评审，三者构成完整闭环。
+- **四角色模型路由**：主控协调之下，Executor / Auditor / Advisor 各绑定固定模型与上下文策略（Claude Code 与 Codex 各自独立配置），固定模型不可用时阻断而非静默降级。
+- **双宿主**：同一 marketplace 同时服务 Claude Code 与 Codex，插件双 manifest 分发；`plan-iterate` 评审甚至跨模型对称互调——Claude Code 宿主外调 Codex CLI，反之亦然。
+- **commit/PR 文案路由**：会话内任何提交与 PR 文案先经 `commit` / `pr` 技能起草，PreToolUse 守卫（`hooks/commit-router.js`）在技能未加载时向模型提醒一次，不拦截提交。
+- **流程可视化**：`flow-deck` 以 mod 形式对工作流零侵入地可视化——评审进度横条、批次边界守卫（`flow_batch`）、波次依赖 DAG、git 改动面板与子代理监控。
 
 ## 安装
 
@@ -21,7 +40,7 @@ Claude Code：
 
 ## 选择性与安装范围
 
-marketplace 内六个插件（`rulertu-flow` / `work-skills` / `agent-skills` / `copyright-skills` / `flow-deck` / `rulertu-frontend`）互相独立，按需单独安装，同时支持用户全局与项目级两种范围。
+六个插件互相独立，按需单独安装，同时支持用户全局与项目级两种范围。
 
 Claude Code：安装时用 `--scope` 指定范围——`user`（写入 `~/.claude/settings.json`，所有项目可用，默认）、`project`（写入项目 `.claude/settings.json`，随仓库共享给团队）、`local`（写入 `.claude/settings.local.json`，仅本机本项目）：
 
@@ -32,21 +51,59 @@ claude plugin install agent-skills@rulertu-flow --scope project # 项目级共�
 
 Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/marketplace.json` 随仓库分发（项目级，克隆即得）；把本仓库加到 `~/.agents/plugins/` 则为个人全局。所有条目均为 `policy.installation: "AVAILABLE"` 按需选装，装后可在 `~/.codex/config.toml` 逐插件启停。
 
-## work-skills
+## rulertu-flow：工作流引擎
 
-20 个工作型技能：文章互动导读（`article-guide`，选项式确定起点、分块讲解、按需搜索与保存学习进度）、深度研究（`deep-research`，多源搜索通道）、战略分析、头脑风暴、费曼教学、灵感节拍器、长文写作、去 AI 味改写（`humanizer`）、书籍转技能（`book-to-skill`）、论文转代码（`paper-to-code`）、录屏自动精简（`screen-condense`）、文档转换（`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`）、公司调研，以及 deep-research 依赖的搜索通道（`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`）。
+六个技能：
+
+- `optimization-plan`：需求需要至少两个有依赖关系的批次时，编写并定级方案。
+- `implement-plan`：执行一份已有 T0–T3 定级的分批方案。
+- `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
+- `commit`：依据实际改动起草或改写提交说明，标题写具体变化，正文按需解释原因与约束。
+- `pr`：依据最终 diff 起草或改写 PR 标题与正文，说明问题、行为变化和实际验证结果。
+- `update`：更新本机 Claude Code 工具链的外部组件。
+
+`commit` 和 `pr` 默认用中文面向项目维护者写作，用户与目标仓库的明确要求优先。二者专注于文案，实际提交、推送或创建与更新 PR 沿用会话中已有授权。可直接要求"为暂存改动写 commit message"或"为当前分支写 PR 标题和正文"。
+
+两个技能同时承担会话内的文案路由：任何 `git commit`、PR 创建或更新的文案先经对应技能起草，完成其他任务需要提交时主动提醒。插件附带 PreToolUse 守卫（`hooks/commit-router.js`），在 transcript 未见技能加载时向模型提醒一次，不拦截提交。
+
+`plan-iterate` 使用对称的跨模型后端：Claude Code 宿主外调 Codex CLI，Codex 宿主外调 Claude Code `opus/high`。两个方向都使用相同 schema、8.5 分门槛、最多三轮状态机和可续接 session；真实外部调用需要用户明确授权且目标 CLI 已登录。
+
+## work-skills：日常工作技能
+
+21 个技能，按用途分组：
+
+- **阅读与研究**：`article-guide`（文章互动导读：选项式确定起点、分块讲解、按需搜索与保存学习进度）、`deep-research`（深度研究，多源搜索通道）、`company-research`（公司调研）、`strategic-analysis`（战略分析）
+- **思维工具**：`brainstorm`（纯发散头脑风暴，负责**广度**——可能性地图横向铺开，只发散不收敛）、`inspiration-pacemaker`（深度下钻引擎，负责**深度**——对单一想法纵向钻透到领域专家级洞察）、`feynman-tutor`（费曼式教学）
+- **写作与转化**：`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
+- **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
+- **工作周报**：`weekly-report`（汇总一周 Claude Code / Codex 会话与 Git 提交，产出以目标和成果为主的口语化周报）
+- **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`
 
 依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。
 
-## agent-skills
+## agent-skills：Agent 工程
 
-8 个 Agent 工程技能：`ai-agent-design`（《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件，原书插图不随插件分发）、`proactive-agent-design`（主动型 Agent 6A 架构设计、评审诊断与主动行为评测：设计九问、分段介入与四份交付模板）、`agent-evaluator`（Agent 评测 Harness 构建）、`deepagents`（LangChain DeepAgents 使用指南）、`agent-retrieval`（确定性 BM25 + 向量双路 RRF 融合检索库使用指南：接入分层与契约排查）、`deepagents-update`（技能文档与 Python 包同步）、`model-info`（模型参数查询）、`rhetra`（调用级 Flow Harness 使用指南）。
+8 个技能：
 
-Claude Code 可用 `/agent-skills:proactive-agent-design` 调用，例如“设计一个持续发现项目风险的助手”或“评审现有 Agent 为什么反复打扰用户”。技能通过九问逐步形成决策，缺失信息保留待定；论文校准与【导读】【共创】来源分开标注。
+- `ai-agent-design`：《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件（原书插图不随插件分发）
+- `proactive-agent-design`：主动型 Agent 6A 架构设计、评审诊断与主动行为评测——设计九问、分段介入与四份交付模板
+- `agent-evaluator`：Agent 评测 Harness 构建
+- `deepagents`：LangChain DeepAgents 使用指南（`deepagents-update` 负责同步其文档与 Python 包）
+- `agent-retrieval`：确定性 BM25 + 向量双路 RRF 融合检索库使用指南：接入分层与契约排查
+- `model-info`：模型参数查询
+- `rhetra`：调用级 Flow Harness 使用指南
 
-## copyright-skills
+Claude Code 可用 `/agent-skills:proactive-agent-design` 调用，例如"设计一个持续发现项目风险的助手"或"评审现有 Agent 为什么反复打扰用户"。技能通过九问逐步形成决策，缺失信息保留待定；论文校准与【导读】【共创】来源分开标注。
 
-5 个知识产权申报技能：`software-copyright-cn`（从代码仓库生成软著申报全套材料——登记表底稿、带图说明书、源代码 docx，附渲染实测与提交前校验）、`copyright-code-review`（提交前源代码合规预审：AI 特征注释、敏感信息、第三方权属、材料一致性，分级问题清单 + 审批修复）、`copy-polisher`（申报文稿与源码注释去 AI 味改稿/检测）、`patent-analysis`（发明专利点挖掘与三性预筛）、`patent-drafting`（专利技术交底书撰写）。
+## copyright-skills：知识产权申报
+
+5 个技能：
+
+- `software-copyright-cn`：从代码仓库生成软著申报全套材料——登记表底稿、带图说明书、源代码 docx，附渲染实测与提交前校验
+- `copyright-code-review`：提交前源代码合规预审——AI 特征注释、敏感信息、第三方权属、材料一致性，分级问题清单 + 审批修复
+- `copy-polisher`：申报文稿与源码注释去 AI 味改稿/检测
+- `patent-analysis`：发明专利点挖掘与三性预筛
+- `patent-drafting`：专利技术交底书撰写
 
 源代码口径（2026-09-08）：提交文档保留注释与空行（中文功能注释是审查要点），行数达标按代码行统计——3,000 行阈值、前/后 1,500 段截取、登记表源程序量全部代码行口径，manifest 双轨可核。支持一份项目按模块真实边界拆多份软著批量申报：`batch_validate.py` 在构建前做唯一归属、每份满 3,000 代码行、条目两两查重三道校验，同代码换名称的批量申报不做。
 
@@ -56,38 +113,40 @@ Claude Code 可用 `/agent-skills:proactive-agent-design` 调用，例如“设�
 python -m pytest plugins/copyright-skills/tests -q
 ```
 
-## rulertu-frontend
+## rulertu-frontend：前端开发
 
 前端开发工程师插件：`frontend-dev` 代理（在现有项目中完成界面开发、前端排障、性能优化与浏览器验收，Claude Code 侧经 `rulertu-frontend:frontend-dev` 调用）加 6 个配套技能——`build-web-interface-cn`（网页界面开发）、`troubleshoot-frontend-functionality-cn`（前端问题排查与修复）、`optimize-web-performance-cn`（网页性能优化）、`test-browser-experience-cn`（网页功能与兼容性测试）、`interface-requirement-contract-cn`（前端需求与验收设计）、`interaction-state-implementation-cn`（页面交互与状态开发）。
 
 技能来自 z.ai 官方技能包（Apache-2.0），各技能目录保留 LICENSE 与 NOTICE。
 
-## rulertu-flow 技能
+## flow-deck：工作流仪表盘
 
-- `optimization-plan`：需求需要至少两个有依赖关系的批次时，编写并定级方案。
-- `implement-plan`：执行一份已有 T0–T3 定级的分批方案。
-- `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
-- `commit`：依据实际改动起草或改写提交说明，标题写具体变化，正文按需解释原因与约束。
-- `pr`：依据最终 diff 起草或改写 PR 标题与正文，说明问题、行为变化和实际验证结果。
-- `update`：更新本机 Claude Code 工具链的外部组件。
+对 rulertu-flow 工作流零侵入的可视化（mod 形态，仅 Claude Code 生效）：
 
-`commit` 和 `pr` 默认用中文面向项目维护者写作，用户与目标仓库的明确要求优先。二者专注于文案，实际提交、推送或创建与更新 PR 沿用会话中已有授权。可直接要求“为暂存改动写 commit message”或“为当前分支写 PR 标题和正文”。
+- `/flow` 面板：评审轮次与评分趋势、执行阶段进度、波次依赖 DAG（按批三态着色）、git 改动面板、子代理运行状态
+- 批次边界守卫：每批派单后经 `flow_batch` 声明允许改动的文件集合，越界 Edit/Write 按 `guardMode` 提醒或拦截
+- 执行期进度上报：`flow_report` 各阶段上报，输入框横条实时显示批次/T 级/验证进度，跨会话可恢复
+- 评审进度：`plan-iterate` 评审文件落盘即弹 toast，statusline 常驻当前评审摘要
 
-两个技能同时承担会话内的文案路由：任何 `git commit`、PR 创建或更新的文案先经对应技能起草，完成其他任务需要提交时主动提醒。插件附带 PreToolUse 守卫（`hooks/commit-router.js`），在 transcript 未见技能加载时向模型提醒一次，不拦截提交。
+详见 [plugins/flow-deck/README.md](plugins/flow-deck/README.md)。
 
-`plan-iterate` 使用对称的跨模型后端：Claude Code 宿主外调 Codex CLI，Codex 宿主外调 Claude Code `opus/high`。两个方向都使用相同 schema、8.5 分门槛、最多三轮状态机和可续接 session；真实外部调用需要用户明确授权且目标 CLI 已登录。
+## 工程细节
 
-## 测试职责
+### 测试职责
 
 Executor 在红绿循环运行锚点测试，子任务收尾运行受影响模块、必要集成测试以及类型和静态检查。Auditor 默认采信主控已抽查的证据，只对一至两条高风险或可疑测试复跑。所有写入任务停止后，波次收口统一运行一次全量测试、构建和项目红线。
 
 修改测试运行器、构建系统、依赖锁文件或全局配置，或者修改跨模块公共契约/共享测试设施且无法建立可信定向范围时，可提前触发全量测试，回报必须记录依据。失败能定位到批次就退回对应 Executor；归属不明则阻断波次并独立诊断。只有绿色基线或独立复现可证明既有失败，flaky 最多定向复跑一次。
 
-## 从 1.x 升级
+### 角色模型路由
+
+Claude Code 保留插件内的静态分级：Executor 使用 Sonnet，Auditor 与 Advisor 使用 Opus。Codex 使用固定路由：Executor=`gpt-5.6-terra`/`medium`，Auditor=`gpt-5.6-sol`/`high`，Advisor=`gpt-5.6-sol`/`xhigh`。Executor 只继承最近三轮上下文，Auditor/Advisor 使用独立上下文；固定模型不可用时阻断，不静默继承或替换。两种宿主的模型标识彼此独立。
+
+### 从 1.x 升级
 
 2.0 将插件从仓库根迁移到 `plugins/rulertu-flow`，属于破坏性安装契约变更。先卸载旧插件和旧 marketplace 条目，拉取 2.0 后重新添加 marketplace、安装插件，并开启新会话刷新 Skill 缓存。旧 plan-iterate 的 `session.txt` 会在下一轮成功评审后迁移为 `state.json`。
 
-## 本地验证
+### 本地验证
 
 ```sh
 python scripts/validate_repo.py
@@ -95,7 +154,3 @@ python -m unittest discover -s plugins/rulertu-flow/tests -v
 ```
 
 真实外部方案评审只在目标 CLI 已登录且用户明确授权后执行。
-
-## 角色模型路由
-
-Claude Code 保留插件内的静态分级：Executor 使用 Sonnet，Auditor 与 Advisor 使用 Opus。Codex 使用固定路由：Executor=`gpt-5.6-terra`/`medium`，Auditor=`gpt-5.6-sol`/`high`，Advisor=`gpt-5.6-sol`/`xhigh`。Executor 只继承最近三轮上下文，Auditor/Advisor 使用独立上下文；固定模型不可用时阻断，不静默继承或替换。两种宿主的模型标识彼此独立。
