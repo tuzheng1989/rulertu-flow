@@ -76,7 +76,7 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 - **思维工具**：`brainstorm`（纯发散头脑风暴，负责**广度**——可能性地图横向铺开，只发散不收敛）、`inspiration-pacemaker`（深度下钻引擎，负责**深度**——对单一想法纵向钻透到领域专家级洞察）、`feynman-tutor`（费曼式教学）
 - **写作与转化**：`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
 - **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
-- **工作总结**：`work-summary`（汇总指定周期的工作记录，支持日报、周报、月报及更长周期的分尺度融合）
+- **工作总结**：`work-summary`（汇总个人或团队工作记录，支持持久工作区及跨周期分尺度融合）
 - **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`
 
 依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- work-skills 2.1.0：`work-summary` 增加全局工作区、跨周期总结复用及团队模式；分别检查时间和主题覆盖，保留证据、状态、指标口径与资料缺口。新增工作区配置、候选发现和防覆盖输出脚本及针对性测试，双 manifest 同步升版。
+
 - work-skills 2.0.0：`weekly-report` 更名为 `work-summary`（旧调用名需迁移），支持日度、周度、月度、季度、半年度、年度和自定义周期。新增分窗口采集、分尺度融合与证据回查；采集器支持显式起止时间及左闭右开边界，修复数据源缺失时的返回值。双 manifest 同步升版。
 
 - rulertu-flow 2.6.0：commit/pr 技能内联路由——description 与正文新增「触发与提醒」节，写明两个触发场景（会话内任何 `git commit`、PR 创建或更新的文案先经技能起草；完成其他任务需要提交时主动提醒）；implement-plan 波次收口与 optimization-plan 方案定稿环节挂技能指针。新增 PreToolUse 提交守卫 hook（`hooks/commit-router.js`）：识别 `git commit` 与 `gh pr create/edit`，transcript 未见对应技能加载时经 `additionalContext` 向模型提醒一次，已加载或已提醒过则静默，任何异常 fail-open 放行不拦截；附命令识别与判定测试（`node --test hooks/`）。
