@@ -14,16 +14,24 @@ metadata:
 
 ## 数据源（四源合并去重）
 
-| 来源 | 位置 | 采集方式 |
+**前三源已脚本化**：`scripts/collect.py` 一次采集 Claude Code + Codex + Git，输出结构化 JSON：
+
+```bash
+python {baseDir}/scripts/collect.py                 # 默认周窗口（上周一12:00~本周一12:00），仓库根 D:/runspace
+python {baseDir}/scripts/collect.py --days 7        # 最近 7 天自然日窗口
+python {baseDir}/scripts/collect.py --repos D:/work -o data.json   # 指定仓库根、写文件
+```
+
+| 来源 | 脚本内采集 | 说明 |
 |---|---|---|
-| Claude Code 会话 | `~/.claude/history.jsonl` | 每行 JSON：`timestamp`(毫秒) / `project`(路径) / `display` / `sessionId` |
-| Codex 会话 | `~/.codex/history.jsonl` + `~/.codex/session_index.jsonl` | history 每行 `{session_id, ts(秒), text}`；index 有 `thread_name` 标题 |
-| Git 提交 | `D:/runspace/` 下所有仓库 | `git log --pretty=format:"%h\|%ad\|%s" --date=format:"%Y-%m-%d %H:%M"` |
-| Hermes 会话 | session_search 工具 | 按 `started_at` 过滤本周窗口 |
+| Claude Code 会话 | ✅ `~/.claude/history.jsonl` | 按项目分组，过滤琐碎输入，内容截断 300 字 |
+| Codex 会话 | ✅ `~/.codex/history.jsonl` + `session_index.jsonl` | 会话聚合 + thread_name 标题；项目归属需 Agent 判断 |
+| Git 提交 | ✅ 遍历 `--repos` 目录树 | 每仓库 `git log --since/--until` |
+| Hermes 会话 | ❌ Agent 用 session_search 补充 | 脚本无法访问，按 `started_at` 过滤本周窗口 |
 
-**脚本采集 + Agent 合并的两阶段架构**：有 `weekly-reports/generate_weekly_report.py`（evoCenter）时先跑脚本取 Claude Code+Git 的 JSON；没有则按上表手动采集。合并去重永远由 Agent 语义判断——同一工作在多个工具里操作过很常见。
+**两阶段分工**：脚本只管"采集到什么"（原始数据 JSON），Agent 负责"这些数据意味着什么"——四源合并去重是语义判断（同一工作在多工具里操作过很常见），脚本做不了。
 
-**周期口径**：上周一 12:00 → 本周一 12:00。时间判断用 `date` 命令核实，不信会话元数据。
+**周期口径**：默认上周一 12:00 → 本周一 12:00；用 `date` 命令核实当前时间，不信会话元数据。
 
 ## 生成规范（核心）
 
