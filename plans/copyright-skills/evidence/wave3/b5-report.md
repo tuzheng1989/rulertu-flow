@@ -11,7 +11,7 @@
 | `plugins/copyright-skills/skills/software-copyright-cn/scripts/build_source_docx.py` | 新增 `--first` 参数与前置逻辑；manifest 新增 `reordered_first` 字段 |
 | `plugins/copyright-skills/skills/software-copyright-cn/references/source-code.md` | 抽取规则 / 构建命令段 / 完成标准 改写对齐新参数 |
 | `plugins/copyright-skills/tests/test_build_source_docx` | 追加 6 个用例（仅追加，未改既有用例；新增 `import hashlib`） |
-| `plugins/copyright-skills/plans/evidence/wave3/` | 新增 b5-pytest.log（全量输出）、b5-pytest-directed.log、本摘要 |
+| `plans/copyright-skills/evidence/wave3/` | 新增 b5-pytest.log（全量输出）、b5-pytest-directed.log、本摘要 |
 
 未触碰：test_render_check.py、manual.md、check_submission.py 及其他批次文件。
 tests/README.md 未改（无新增依赖，原有运行说明仍准确）。
@@ -61,7 +61,7 @@ tests/README.md 未改（无新增依赖，原有运行说明仍准确）。
 | 红线回归（无 `--first` 两次构建 sha256 一致） | — | 由既有用例 `test_selected_sha256_stable_across_runs` 覆盖，全量运行中绿 |
 | Grep 文档断言（source-code.md） | — | 全命中，无旧表述残留 |
 
-全量 pytest 完整输出：`plugins/copyright-skills/plans/evidence/wave3/b5-pytest.log`（50 passed）。
+全量 pytest 完整输出：`plans/copyright-skills/evidence/wave3/b5-pytest.log`（50 passed）。
 
 ## 五、设计取舍与偏差
 

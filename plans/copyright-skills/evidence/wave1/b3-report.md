@@ -7,7 +7,7 @@
 - `python -m pytest plugins/copyright-skills/tests -q`
 - 退出码：0
 - 结果：29 passed，0 failed，0 skipped
-- 完整输出：`plugins/copyright-skills/plans/evidence/wave1/b3-pytest.log`
+- 完整输出：`plans/copyright-skills/evidence/wave1/b3-pytest.log`
 
 ## 新增文件与用例数
 

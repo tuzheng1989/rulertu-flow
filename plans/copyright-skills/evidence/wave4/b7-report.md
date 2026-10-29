@@ -56,7 +56,7 @@
 | `git status --porcelain` | — | 无未跟踪 pyc；本批改动均在委派单允许清单内 |
 
 - 5 个 warning 均为 PyMuPDF 的既有 DeprecationWarning（与 B5 回报一致，非本次引入）。
-- 全量 pytest 完整输出：`plugins/copyright-skills/plans/evidence/wave4/b7-pytest.log`。
+- 全量 pytest 完整输出：`plans/copyright-skills/evidence/wave4/b7-pytest.log`。
 
 ## 三、偏差与剩余问题
 

@@ -2,7 +2,7 @@
 
 日期：2026-09-03
 文件：`plugins/copyright-skills/skills/copyright-code-review/SKILL.md`（唯一改动文件）
-方案：`plugins/copyright-skills/plans/2026-09-03-review-rectification.md` §B1
+方案：`plans/copyright-skills/2026-09-03-review-rectification.md` §B1
 
 ## 逐条改动（锚点 → 改前/改后）
 

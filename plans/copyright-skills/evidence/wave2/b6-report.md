@@ -1,6 +1,6 @@
 # B6 收尾报告（登记表重定位 + 提交前校验）
 
-日期：2026-09-03 ｜ 执行者：Executor（T2 子任务）｜ 方案：`plugins/copyright-skills/plans/2026-09-03-review-rectification.md` B6
+日期：2026-09-03 ｜ 执行者：Executor（T2 子任务）｜ 方案：`plans/copyright-skills/2026-09-03-review-rectification.md` B6
 
 ## 改动文件清单
 
@@ -63,5 +63,5 @@ schema 唯一出处：`references/ownership.md:39-60`（B2 产物，本批只消
 
 ## 产物
 
-- 测试日志：`plugins/copyright-skills/plans/evidence/wave2/b6-pytest.log`
-- 本报告：`plugins/copyright-skills/plans/evidence/wave2/b6-report.md`
+- 测试日志：`plans/copyright-skills/evidence/wave2/b6-pytest.log`
+- 本报告：`plans/copyright-skills/evidence/wave2/b6-report.md`

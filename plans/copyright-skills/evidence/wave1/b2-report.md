@@ -1,6 +1,6 @@
 # B2 执行证据 · 权属材料决策表 + 主 SKILL 口径修正
 
-批次：B2（方案 `plugins/copyright-skills/plans/2026-09-03-review-rectification.md`，分级 T1）
+批次：B2（方案 `plans/copyright-skills/2026-09-03-review-rectification.md`，分级 T1）
 执行：Executor，2026-09-03，main @ 16fe209（工作树含并行批次 B1 对 copyright-code-review/SKILL.md 的改动，非本任务产出）
 
 ## 改动回报

@@ -1,7 +1,7 @@
 # B4 回报摘要
 
 执行人：Executor（B4/T2），日期 2026-09-03。
-方案：plugins/copyright-skills/plans/2026-09-03-review-rectification.md 的 B4 批次。
+方案：plans/copyright-skills/2026-09-03-review-rectification.md 的 B4 批次。
 
 ## 一、改动文件清单
 
