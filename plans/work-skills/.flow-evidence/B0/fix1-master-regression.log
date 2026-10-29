@@ -1,0 +1,4 @@
+# 主控补录（Executor 收尾被看门狗终止，回归由主控亲跑）
+$ python -m pytest tests/ -q
+exit=0
+20 passed in 17.22s

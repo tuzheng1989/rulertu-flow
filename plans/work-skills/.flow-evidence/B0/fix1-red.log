@@ -1,0 +1,77 @@
+.................FFF                                                     [100%]Running teardown with pytest sessionfinish...
+
+================================== FAILURES ===================================
+_________________________ test_stdin_isolated_devnull _________________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-96/test_stdin_isolated_devnull0'), 'snapshot...WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-96/test_stdin_isolated_devnull0/fake_codex.py'), ...}
+
+    def test_stdin_isolated_devnull(env):
+        """stdin 隔离：codex 的 stdin 必须是 DEVNULL。
+    
+        假 codex 在 read_stdin 模式下 sys.stdin.read()：stdin=DEVNULL → 立即 EOF
+        返回 "" → 正常输出；若继承父进程的未关闭管道 → 阻塞读直到 proc-timeout。
+        测试给 dual-listen 一个永不关闭的 stdin 管道，复现未隔离时的挂死。
+        """
+        p = run_listen(env, stdin_pipe=True, proc_timeout=8,
+                       fake_env={"FAKE_MODE": "read_stdin"})
+>       assert p.returncode == 0, "codex 的 stdin 未隔离为 DEVNULL，阻塞到超时：%s" % p.stderr[-500:]
+E       AssertionError: codex 的 stdin 未隔离为 DEVNULL，阻塞到超时：usage: dual-listen.py [-h] --mode MODE --snapshot SNAPSHOT --workdir WORKDIR
+E                               --task-id TASK_ID --budget-limit BUDGET_LIMIT
+E                               [--model MODEL] [--effort {max,high}]
+E                               [--prompt-file PROMPT_FILE] [--codex-bin CODEX_BIN]
+E         dual-listen.py: error: unrecognized arguments: --proc-timeout 8
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe', 'D:\\runspace\\ruler...--prompt-file PROMPT_FILE] [--codex-bin CODEX_BIN]\ndual-listen.py: error: unrecognized arguments: --proc-timeout 8\n').returncode
+
+tests\test_dual_listen.py:478: AssertionError
+_____________________ test_hang_process_tree_hard_killed ______________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-96/test_hang_process_tree_hard_ki0'), 'snaps...dowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-96/test_hang_process_tree_hard_ki0/fake_codex.py'), ...}
+
+    def test_hang_process_tree_hard_killed(env):
+        """硬超时：挂死（含持有句柄的孙进程）在 proc-timeout 后被杀整棵进程树。
+    
+        分类为 L4：重试再挂 → 连续 2 次 → 禁用、退出 3；扣次不返还；
+        stdout/stderr 落文件（非 PIPE）故清理不被句柄阻塞，尝试目录无残留。
+        """
+        t0 = time.monotonic()
+        p = run_listen(env, proc_timeout=2, fake_env={"FAKE_MODE": "hang"})
+        elapsed = time.monotonic() - t0
+>       assert p.returncode == 3
+E       AssertionError: assert 2 == 3
+E        +  where 2 = CompletedProcess(args=['C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe', 'D:\\runspace\\ruler...--prompt-file PROMPT_FILE] [--codex-bin CODEX_BIN]\ndual-listen.py: error: unrecognized arguments: --proc-timeout 2\n').returncode
+
+tests\test_dual_listen.py:492: AssertionError
+________________ test_bare_codex_name_resolves_via_cmd_and_js _________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-96/test_bare_codex_name_resolves_0'), 'snaps...dowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-96/test_bare_codex_name_resolves_0/fake_codex.py'), ...}
+
+    def test_bare_codex_name_resolves_via_cmd_and_js(env):
+        """裸命令名解析策略：优先 .exe/.com；否则借 .cmd 同目录的 codex.js 以 [node, js] 启动，
+        避免落到 npm .cmd 包装层。PATH 里只放 .cmd 包装（它被写成必败脚本）：
+        修复前 which("codex") 直接命中包装层 → 进程失败；修复后走 js 分支 → 正常。"""
+        bin_dir = env["tmp"] / "bin"
+        (bin_dir / "node_modules" / "@openai" / "codex" / "bin").mkdir(parents=True)
+        codex_js = bin_dir / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+        codex_js.write_text("// fake js 入口\n", encoding="utf-8")
+        (bin_dir / "codex.cmd").write_text("@exit /B 1\r\n", encoding="utf-8")  # 包装层必败
+        fake_node_py = env["tmp"] / "fake_node.py"
+        fake_node_py.write_text(FAKE_CODEX_SRC, encoding="utf-8")
+        (bin_dir / "node.cmd").write_text(
+            '@"%s" "%s" %%*\r\n' % (sys.executable, fake_node_py), encoding="utf-8")
+        p = run_listen(
+            env, codex_bin="codex",
+            fake_env={"FAKE_THREAD_ID": "th-js",
+                      "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"]})
+>       assert p.returncode == 0, "未走 .cmd→codex.js 分支：%s" % p.stderr[-500:]
+E       AssertionError: 未走 .cmd→codex.js 分支：
+E       assert 3 == 0
+E        +  where 3 = CompletedProcess(args=['C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe', 'D:\\runspace\\ruler...ective": "gpt-6.1-sol", "model_verified": false, "usage": null, "budget_remaining": 1, "disabled": true}\n', stderr='').returncode
+
+tests\test_dual_listen.py:521: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_dual_listen.py::test_stdin_isolated_devnull - AssertionErro...
+FAILED tests/test_dual_listen.py::test_hang_process_tree_hard_killed - Assert...
+FAILED tests/test_dual_listen.py::test_bare_codex_name_resolves_via_cmd_and_js
+3 failed, 17 passed in 10.06s

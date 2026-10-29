@@ -1,0 +1,103 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\EDY\AppData\Local\Programs\Python\Python313\python.exe
+cachedir: .pytest_cache
+rootdir: D:\runspace\rulertu-flow
+plugins: anyio-4.14.2, deepeval-4.3.1, Faker-40.28.1, langsmith-0.11.1, asyncio-1.3.0, repeat-0.9.4, rerunfailures-16.6, xdist-3.8.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/test_dual_listen.py::test_ok_path_contract FAILED                  [ 25%]
+tests/test_dual_listen.py::test_invalid_inputs_exit_2 FAILED             [ 50%]
+tests/test_dual_listen.py::test_budget_exhausted FAILED                  [ 75%]
+tests/test_dual_listen.py::test_event_fields_missing FAILED              [100%]Running teardown with pytest sessionfinish...
+
+
+================================== FAILURES ===================================
+____________________________ test_ok_path_contract ____________________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_ok_path_contract0'), 'snapshot': Win...ake': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_ok_path_contract0/fake_codex.py'), ...}
+
+    def test_ok_path_contract(env):
+        """正常路径：退出 0，结果 JSON 契约字段齐全，state 与磁盘工件落盘，tmp 目录清理。"""
+        p = run_listen(env, mode="diverge", budget=3, fake_env={"FAKE_THREAD_ID": "th-ok-1"})
+>       assert p.returncode == 0, p.stderr
+E       AssertionError: C:\Users\EDY\AppData\Local\Programs\Python\Python313\python.exe: can't open file 'D:\\runspace\\rulertu-flow\\plugins\\work-skills\\scripts\\dual-listen.py': [Errno 2] No such file or directory
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe', 'D:\\runspace\\rulertu-flow\\plugins\\work-skills\\scripts\\dual-listen.py', '--mode', 'diverge', '--snapshot', 'C:\\Users\\EDY\\AppData\\Local\\Temp\\pytest-of-EDY\\pytest-76\\test_ok_path_contract0\\snapshot.md', '--workdir', 'C:\\Users\\EDY\\AppData\\Local\\Temp\\pytest-of-EDY\\pytest-76\\test_ok_path_contract0\\work', '--task-id', 't1', '--budget-limit', '3', '--codex-bin', 'python C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_ok_path_contract0/fake_codex.py'], returncode=2, stdout='', stderr="C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe: can't open file 'D:\\\\runspace\\\\rulertu-flow\\\\plugins\\\\work-skills\\\\scripts\\\\dual-listen.py': [Errno 2] No such file or directory\n").returncode
+
+tests\test_dual_listen.py:157: AssertionError
+_________________________ test_invalid_inputs_exit_2 __________________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_invalid_inputs_exit_20'), 'snapshot'... WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_invalid_inputs_exit_20/fake_codex.py'), ...}
+
+    def test_invalid_inputs_exit_2(env):
+        """输入检查：mode 非法 / 快照不存在 → 退出码 2，不扣次。"""
+        p1 = run_listen(env, mode="nonsense")
+        assert p1.returncode == 2
+>       assert result_of(p1)["ok"] is False
+               ^^^^^^^^^^^^^
+
+tests\test_dual_listen.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_dual_listen.py:125: in result_of
+    return json.loads(proc.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\EDY\AppData\Local\Programs\Python\Python313\Lib\json\__init__.py:352: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\EDY\AppData\Local\Programs\Python\Python313\Lib\json\decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <json.decoder.JSONDecoder object at 0x0000018F3FCE7B60>, s = '', idx = 0
+
+    def raw_decode(self, s, idx=0):
+        """Decode a JSON document from ``s`` (a ``str`` beginning with
+        a JSON document) and return a 2-tuple of the Python
+        representation and the index in ``s`` where the document ended.
+    
+        This can be used to decode a JSON document from a string that may
+        have extraneous data at the end.
+    
+        """
+        try:
+            obj, end = self.scan_once(s, idx)
+        except StopIteration as err:
+>           raise JSONDecodeError("Expecting value", s, err.value) from None
+E           json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+C:\Users\EDY\AppData\Local\Programs\Python\Python313\Lib\json\decoder.py:363: JSONDecodeError
+____________________________ test_budget_exhausted ____________________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_budget_exhausted0'), 'snapshot': Win...ake': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_budget_exhausted0/fake_codex.py'), ...}
+
+    def test_budget_exhausted(env):
+        """预算耗尽：limit=1 第一次成功后，第二次不启动、退出 3、used 不变。"""
+        p1 = run_listen(env, budget=1)
+>       assert p1.returncode == 0
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe', 'D:\\runspace\\rulertu-flow\\plugins\\work-skills\\scripts\\dual-listen.py', '--mode', 'diverge', '--snapshot', 'C:\\Users\\EDY\\AppData\\Local\\Temp\\pytest-of-EDY\\pytest-76\\test_budget_exhausted0\\snapshot.md', '--workdir', 'C:\\Users\\EDY\\AppData\\Local\\Temp\\pytest-of-EDY\\pytest-76\\test_budget_exhausted0\\work', '--task-id', 't1', '--budget-limit', '1', '--codex-bin', 'python C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_budget_exhausted0/fake_codex.py'], returncode=2, stdout='', stderr="C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe: can't open file 'D:\\\\runspace\\\\rulertu-flow\\\\plugins\\\\work-skills\\\\scripts\\\\dual-listen.py': [Errno 2] No such file or directory\n").returncode
+
+tests\test_dual_listen.py:205: AssertionError
+__________________________ test_event_fields_missing __________________________
+
+env = {'tmp': WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_event_fields_missing0'), 'snapshot':...: WindowsPath('C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_event_fields_missing0/fake_codex.py'), ...}
+
+    def test_event_fields_missing(env):
+        """事件流无 thread/model/usage 字段：不判失败，如实标注未验证。"""
+        p = run_listen(env, fake_env={"FAKE_MODE": "silent_ok"})
+>       assert p.returncode == 0, p.stderr
+E       AssertionError: C:\Users\EDY\AppData\Local\Programs\Python\Python313\python.exe: can't open file 'D:\\runspace\\rulertu-flow\\plugins\\work-skills\\scripts\\dual-listen.py': [Errno 2] No such file or directory
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe', 'D:\\runspace\\rulertu-flow\\plugins\\work-skills\\scripts\\dual-listen.py', '--mode', 'diverge', '--snapshot', 'C:\\Users\\EDY\\AppData\\Local\\Temp\\pytest-of-EDY\\pytest-76\\test_event_fields_missing0\\snapshot.md', '--workdir', 'C:\\Users\\EDY\\AppData\\Local\\Temp\\pytest-of-EDY\\pytest-76\\test_event_fields_missing0\\work', '--task-id', 't1', '--budget-limit', '3', '--codex-bin', 'python C:/Users/EDY/AppData/Local/Temp/pytest-of-EDY/pytest-76/test_event_fields_missing0/fake_codex.py'], returncode=2, stdout='', stderr="C:\\Users\\EDY\\AppData\\Local\\Programs\\Python\\Python313\\python.exe: can't open file 'D:\\\\runspace\\\\rulertu-flow\\\\plugins\\\\work-skills\\\\scripts\\\\dual-listen.py': [Errno 2] No such file or directory\n").returncode
+
+tests\test_dual_listen.py:222: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_dual_listen.py::test_ok_path_contract - AssertionError: C:\...
+FAILED tests/test_dual_listen.py::test_invalid_inputs_exit_2 - json.decoder.J...
+FAILED tests/test_dual_listen.py::test_budget_exhausted - assert 2 == 0
+FAILED tests/test_dual_listen.py::test_event_fields_missing - AssertionError:...
+============================== 4 failed in 1.02s ==============================
