@@ -18,6 +18,7 @@ import {
   parseDepGraph,
   parseExecution,
   parseNumstat,
+  parseSections,
   parsePorcelain,
   parseReviewJson,
   parseStateJson,
@@ -501,5 +502,31 @@ describe('parse', () => {
       counts: null,
       lines: '−5',
     })
+  })
+
+  test('parseSections 按标题切分，围栏内 # 不算标题', () => {
+    expect(parseSections('# A\na1\n## B\nb1')).toEqual([
+      { title: 'A', level: 1, start: 1, end: 2 },
+      { title: 'B', level: 2, start: 3, end: 4 },
+    ])
+    // 开头正文与标题平级成「开头」节；纯空行开头不设节
+    expect(parseSections('p1\n\n# A\nx')).toEqual([
+      { title: '开头', level: 0, start: 1, end: 2 },
+      { title: 'A', level: 1, start: 3, end: 4 },
+    ])
+    // 围栏内的 # 不算标题，围栏行归属当节
+    expect(parseSections('# A\n```py\n# not-heading\n```\nz')).toEqual([
+      { title: 'A', level: 1, start: 1, end: 5 },
+    ])
+    expect(parseSections('# A\n~~~\n# not-heading\n~~~\nz')).toEqual([
+      { title: 'A', level: 1, start: 1, end: 5 },
+    ])
+    // 无标题非空文档整篇为「全文」节；空文本为空数组
+    expect(parseSections('a\nb')).toEqual([{ title: '全文', level: 0, start: 1, end: 2 }])
+    expect(parseSections('')).toEqual([])
+    // 无空格的 #Title 与七连 # 不是标题
+    expect(parseSections('#nospace\n##X\n####### seven\nbody')).toEqual([
+      { title: '全文', level: 0, start: 1, end: 4 },
+    ])
   })
 })

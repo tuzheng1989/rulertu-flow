@@ -415,3 +415,49 @@ export function gitSummaryParts(
   else if (status.removed > 0) lines = `−${status.removed}`
   return { counts: counts.length === 0 ? null : counts.join(' '), lines }
 }
+
+/** 文档浏览面板单节渲染的行数上限；超长节截断显示，草稿行号仍用全节范围 */
+export const DOC_SECTION_MAX_LINES = 60
+
+/** 文档浏览面板的一个节（行号 1 起且双端包含） */
+export type DocSection = {
+  /** 节标题（# 号后的文字）；文档开头正文为「开头」，无标题整篇为「全文」 */
+  title: string
+  /** 标题层级 1-6；合成节为 0 */
+  level: number
+  start: number
+  end: number
+}
+
+/** 按 markdown 标题把文档切为节。fenced code block 内的 # 不算标题（``` 与
+ *  ~~~ 行翻转围栏状态，闭栏不校验同字符同长度）。首个标题前的正文成「开头」
+ *  节（纯空白行不设节）；无标题且非空时整篇为「全文」节；空文本返回空数组。 */
+export function parseSections(text: string): DocSection[] {
+  const lines = text.split('\n')
+  const headings: { line: number; title: string; level: number }[] = []
+  let fence = false
+  for (let i = 0; i < lines.length; i++) {
+    if (/^ {0,3}(```|~~~)/.test(lines[i])) {
+      fence = !fence
+      continue
+    }
+    if (fence) continue
+    const heading = /^ {0,3}(#{1,6}) (.*)$/.exec(lines[i])
+    if (heading === null) continue
+    headings.push({ line: i + 1, title: heading[2].trim() || '(无标题)', level: heading[1].length })
+  }
+  if (headings.length === 0) {
+    if (lines.every(line => line.trim() === '')) return []
+    return [{ title: '全文', level: 0, start: 1, end: lines.length }]
+  }
+  const sections: DocSection[] = []
+  const first = headings[0].line
+  if (first > 1 && lines.slice(0, first - 1).some(line => line.trim() !== '')) {
+    sections.push({ title: '开头', level: 0, start: 1, end: first - 1 })
+  }
+  headings.forEach((heading, index) => {
+    const end = index + 1 < headings.length ? headings[index + 1].line - 1 : lines.length
+    sections.push({ title: heading.title, level: heading.level, start: heading.line, end })
+  })
+  return sections
+}

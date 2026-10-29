@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
+  DOC_SECTION_MAX_LINES,
   bannerPlan,
   depStatuses,
   gitSummaryParts,
@@ -10,6 +11,7 @@ import {
   parseBatchScope,
   parseDepGraph,
   parseExecution,
+  parseSections,
   phaseProgress,
   progressBar,
   selectTaskView,
@@ -28,6 +30,8 @@ import type {
 
 const PANE_ID = 'flow'
 const GIT_PANE_ID = 'flow-git'
+const DOC_PANE_ID = 'flow-doc'
+const DOC_TITLE = '文档浏览'
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
@@ -49,6 +53,10 @@ const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
 const agents = atom({ plugin: 'flow-deck', key: 'agents' } as const, { agents: [], loaded: false, error: false })
 const lastRun = atom({ plugin: 'flow-deck', key: 'lastRun' } as const, null)
 const stall = atom({ plugin: 'flow-deck', key: 'stall' } as const, null)
+/** 文档浏览面板装载的文档：text 为 null 表示读取失败（error 记原因） */
+const docFile = atom({ plugin: 'flow-deck', key: 'doc' } as const, null)
+/** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
+const docSection = atom({ plugin: 'flow-deck', key: 'docSection' } as const, 0)
 
 /** 上次写入 statusline 的文案；仅用于跳过重复写入（热加载后重算一次无妨） */
 let lastStatus: string | undefined
@@ -137,6 +145,19 @@ async function readTaskView($: EngineInterface) {
   })
 }
 
+/** 读取文档装入浏览面板；读失败时 text 置 null 记原因，面板内提示不崩 */
+async function loadDoc($: EngineInterface, path: string): Promise<void> {
+  let text: string | null = null
+  let error: string | undefined
+  try {
+    text = await $.fs.read(path)
+  } catch (cause) {
+    error = String(cause)
+  }
+  await update($, docFile, () => ({ path, text, ...(error === undefined ? {} : { error }) }))
+  await update($, docSection, () => 0)
+}
+
 /** 心跳停滞检测：实施中且未收口的上报超过 STALL_MS 未续报时记分钟数；状态变化才写，避免无谓重绘 */
 async function refreshStall($: EngineInterface): Promise<void> {
   const task = await read($, currentTask)
@@ -223,6 +244,8 @@ export const register: Register = (on, options) => {
     await update($, deps, () => null)
     await update($, agents, () => ({ agents: [], loaded: false, error: false }))
     await update($, stall, () => null)
+    await update($, docFile, () => null)
+    await update($, docSection, () => 0)
     planTimer?.cancel()
     gitTimer?.cancel()
     scanPlans = createPlanScanner({
@@ -232,6 +255,7 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'flow', description: '开关当前方案迭代或实施任务面板（含子代理运行状态）' })
     await $.command.register({ name: 'git', description: '打开 git 仓库状态面板' })
     await $.command.register({ name: 'flow-agents', description: '打开工作流面板（子代理状态在面板内，已开时不再重复打开）' })
+    await $.command.register({ name: 'doc', description: '开关文档浏览面板：/doc <相对路径> 打开文档，选节后可把修改请求填入输入框' })
     await $.tool.register({
       name: 'flow_task',
       description: '声明当前工作流任务：iterate 方案迭代，implement 方案实施，idle 结束、暂停或取消。历史评审和路线图不会自动激活面板。',
@@ -396,6 +420,22 @@ export const register: Register = (on, options) => {
       $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
     })
     return { text: '已打开工作流面板（含子代理状态）。' }
+  })
+
+  on('command.run', { command: 'doc' }, async ($, e) => {
+    // toggle 与装载一体：带路径打开并读文件，无路径时已开则关、未开给用法
+    const target = e.args.trim()
+    const isUp = (await $.ui.panes()).some(pane => pane.id === DOC_PANE_ID)
+    if (target !== '') {
+      await loadDoc($, target)
+      if (!isUp) await $.ui.open({ id: DOC_PANE_ID, title: DOC_TITLE })
+      return { text: `文档面板已打开：${target}` }
+    }
+    if (isUp) {
+      await $.ui.close({ id: DOC_PANE_ID })
+      return { text: '已关闭文档面板。' }
+    }
+    return { text: '用法：/doc <相对路径> 打开文档浏览面板。' }
   })
 
   on('tool.call', { tool: 'mcp__flow-deck__flow_task' }, async ($, e) => {
@@ -631,6 +671,98 @@ export const register: Register = (on, options) => {
         )}
         {agentsSection}
         <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · 面板内按 r 刷新</Text>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: DOC_PANE_ID }, async ($, e) => {
+    const { Box, Text, Button, Select } = $.ui.resolve(e)
+    const doc = await read($, docFile)
+    const wide = e.props.bodyColumns >= 44
+    if (doc === null) {
+      return (
+        <Box flexDirection="column">
+          <Text>未打开文档。</Text>
+          <Text dimColor>用法：/doc &lt;相对路径&gt; 打开要浏览的文档。</Text>
+        </Box>
+      )
+    }
+
+    const sendEdit = async () => {
+      const wanted = await read($, docSection)
+      const sections = doc.text === null ? [] : parseSections(doc.text)
+      const current = sections[Math.min(Math.max(wanted, 0), sections.length - 1)]
+      if (current === undefined) {
+        $.ui.toast('文档为空，没有可发送的节。')
+        return
+      }
+      const draft = `请修改 ${doc.path} 的「${current.title}」一节（第 ${current.start}–${current.end} 行）：`
+      try {
+        const box = await $.prompt.read()
+        await $.prompt.fill({ text: draft, mode: box.text.trim() === '' ? 'replace' : 'append' })
+      } catch (error) {
+        $.ui.log(`flow-deck 修改请求填入失败：${String(error)}`, { to: 'debug' })
+      }
+    }
+    const reload = () => {
+      void loadDoc($, doc.path).catch(error => {
+        $.ui.log(`flow-deck 文档重读失败：${String(error)}`, { to: 'debug' })
+      })
+    }
+    if (doc.text === null) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold color="red" wrap="truncate-end">DOC / {doc.path}</Text>
+          <Text color="red" wrap="truncate-end">读取失败：{doc.error ?? '未知原因'}</Text>
+          <Box>
+            <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
+          </Box>
+        </Box>
+      )
+    }
+    const sections = parseSections(doc.text)
+    if (sections.length === 0) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold color="cyan" wrap="truncate-end">DOC / {doc.path} · 空文档</Text>
+          <Text dimColor>文档没有内容：/doc &lt;另一路径&gt; 换一篇，或按 r 重读。</Text>
+          <Box>
+            <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
+          </Box>
+        </Box>
+      )
+    }
+    const wanted = await read($, docSection)
+    const index = Math.min(Math.max(wanted, 0), sections.length - 1)
+    const current = sections[index]
+    const allLines = doc.text.split('\n')
+    const body = allLines.slice(current.start - 1, current.end)
+    const truncated = body.length > DOC_SECTION_MAX_LINES
+    const shown = truncated ? body.slice(0, DOC_SECTION_MAX_LINES) : body
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold color="cyan" wrap="truncate-end">DOC / {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
+        <Select
+          key="doc-section"
+          label="节"
+          options={sections.map((section, i) => ({ value: String(i), text: `${section.title}` }))}
+          value={String(index)}
+          onSelect={value => { void update($, docSection, () => Number(value)) }}
+        />
+        <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} paddingX={wide ? 1 : 0}>
+          <Text bold wrap="truncate-end">
+            {'#'.repeat(Math.max(current.level, 1))} {current.title} · 第 {current.start}–{current.end} 行
+            {truncated ? ` · 截断显示前 ${DOC_SECTION_MAX_LINES} 行` : ''}
+          </Text>
+          {shown.map((line, i) => (
+            <Text key={current.start + i} wrap="truncate-end">{line === '' ? ' ' : line}</Text>
+          ))}
+        </Box>
+        <Box>
+          <Button key="doc-send" hotkey="e" plain onPress={() => { void sendEdit() }}>发给 Claude</Button>
+          <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
+        </Box>
+        <Text dimColor wrap="truncate-end">/doc 关闭 · e 把修改请求填入输入框（补意图后回车）</Text>
       </Box>
     )
   })

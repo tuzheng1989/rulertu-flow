@@ -611,9 +611,59 @@ describe('pane', () => {
 
   // 两类路径不经自动化测试，改由会话内 fixture 端到端确认：
   // 1. 有数据卡片的渲染（plan 卡片、git 面板、横条 git 行）——宿主规则不允许测试
-  //    模块写插件状态（$.state 调用权按 hooks.json 声明的模块静态扫描，*.test.ts
+  //    模块写插件状态（$.state 调用权在按 hooks.json 声明的模块静态扫描，*.test.ts
   //    扫描结果恒空），且 git 数据经 $.process.run 进入而测试引擎无 process 设施；
   //    数据组装已由 parse.test.ts 的 buildPlanReview / buildGitStatus 用例覆盖。
   // 2. /flow 与 /git 命令链路——测试引擎里 $.ui.open 是无实现的 dispatch，需猜测
   //    UiOpenResult 应答形状才能喂饱链路；该处理器与官方 pane 示例同构。
+
+  test('/doc 无路径时给用法提示', async ($, on) => {
+    on('ui.panes', () => ({ value: [] }))
+    const result = await $.command.run({ command: 'doc', args: '' })
+    expect(result.text).toContain('用法：/doc')
+  })
+
+  test('/doc 装载文档，选节后 e 把修改请求填入输入框', async ($, on) => {
+    const clock = mock.clock(on)
+    const files = new Map<string, string>([['docs/plan.md', '# 一\n正文一\n## 二\n正文二']])
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      return norm.includes('docs/plan.md') ? 'docs/plan.md' : norm
+    }
+    on('fs.read', ($, e) => {
+      const rel = relOf(e.path)
+      if (!files.has(rel)) throw new Error('ENOENT: ' + String(e.path))
+      return { value: files.get(rel) }
+    })
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.close', () => ({ value: undefined }))
+    let draftBox = { text: '', cursor: 0 }
+    on('prompt.read', () => ({ value: draftBox }))
+    const fills: Array<{ text: string; mode?: string }> = []
+    on('prompt.fill', ($, e) => {
+      fills.push({ text: e.text, mode: e.mode })
+      return { isFilled: true }
+    })
+    await $.command.run({ command: 'doc', args: 'docs/plan.md' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow-doc',
+      props: paneProps('文档浏览'),
+    })
+    expect(await ui.find({ text: /DOC \/ docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /# 一 · 第 1–2 行/ })).not.toBeUndefined()
+    await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: '1', requestId: 'flow-doc', surface: 'terminal' })
+    expect(await ui.find({ text: /## 二 · 第 3–4 行/ })).not.toBeUndefined()
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-send', requestId: 'flow-doc', surface: 'terminal' })
+    await clock.settle()
+    expect(fills).toHaveLength(1)
+    expect(fills[0].mode).toBe('replace')
+    expect(fills[0].text).toBe('请修改 docs/plan.md 的「二」一节（第 3–4 行）：')
+    draftBox = { text: '已有草稿', cursor: 0 }
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-send', requestId: 'flow-doc', surface: 'terminal' })
+    await clock.settle()
+    expect(fills).toHaveLength(2)
+    expect(fills[1].mode).toBe('append')
+    await ui.unmount()
+  })
 })
