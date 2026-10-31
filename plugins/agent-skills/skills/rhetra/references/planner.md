@@ -1,7 +1,7 @@
 # Planner — task 语法糖路径与 Flow 保存
 
 > 无预定义 flow 时：任务描述 → planner 临时生成 FlowDefinition → 与显式 flow
-> **完全同流**执行（零特权路径）。真实样例：`D:/runspace/rhetra-harness/examples/civil_rescue_planner.py`。
+> **完全同流**执行（零特权路径）。真实样例：仓库 `examples/civil_rescue_planner.py`。
 
 ## `run_flow(task=...)` 语法糖
 

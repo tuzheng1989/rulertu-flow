@@ -1,12 +1,12 @@
 # Flow 定义 — flow.yaml 结构与资源快照
 
-> 完整真实样例：`D:/runspace/rhetra-harness/cases/civil-rescue/flow.yaml`。
+> 完整真实样例：rhetra-harness 仓库的 `cases/civil-rescue/flow.yaml`。
 > 本文档按该案例归纳，写 flow 时以它为模板。
 
 ## 顶层骨架
 
 ```yaml
-schema_version: 1            # 恒为 1
+schema_version: 2            # 恒为 2；与冻结层 frozen_schema_version（现为 3）独立递增
 flow_id: civil-rescue-plan   # 全局标识
 flow_version: 1.0.0          # SemVer
 description: ...

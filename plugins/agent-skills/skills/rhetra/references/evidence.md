@@ -14,6 +14,22 @@
   artifacts/<sha>  # 溢出大产物（hex = ref 的 $artifact 去掉 sha256: 前缀）
 ```
 
+## 冻结契约形态（v3）
+
+`frozen.json` 的 `frozen_schema_version` 现为 **3**（flow 源的 `schema_version`
+维持 2，两层独立递增）。相对 v2 的要点：
+
+- `maintenance_grants` 的 `resource` 直存完整 resolved 形（含 `implementation`），
+  审查授权不必回查快照反查五元组。
+- `external_call_started` 事件载荷**恒带** `response_format` 留证键——业务步为
+  wire 实发的 `{"type": "json_schema", "json_schema": {...}}`，平凡 schema 步
+  为 `null` 也带键，request_hash 的覆盖面在留证侧可复核。
+
+**版本兼容**：v2 冻结产物被 v3 运行时加载即明确拒绝（报错文案指引以
+`schema_version: 2` 的 flow 源重新冻结）；存量 v2/v1 证据 bundle 核验按
+`corrupt` 分类；跨版本（v2/v3）不得比对任何 hash（v3 加键致 definition /
+frozen hash 全量漂移）。
+
 ## `verify()` 三态（机械判据，无人工裁量）
 
 | 返回 | 判据 |
@@ -95,5 +111,5 @@ fake 替身是确定性的：断言行为契约（status/结构），不断言 L
 
 ## 验收门禁参考
 
-消费方 CI 可参考 `D:/runspace/rhetra-harness/scripts/acceptance.py`（六判据
+消费方 CI 可参考 rhetra-harness 仓库的 `scripts/acceptance.py`（六判据
 机器可读门禁）与 `pytest -m smoke`（单进程离线、CI ≤10min 的 smoke 圈口径）。

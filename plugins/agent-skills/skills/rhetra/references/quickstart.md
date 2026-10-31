@@ -1,6 +1,6 @@
 # Quickstart — 安装、CLI 与最小闭环
 
-> 版本锚点：rhetra 0.1.0（2026-09）。源码 `D:/runspace/rhetra-harness/`。
+> 版本锚点：rhetra 0.1.0（2026-09）。源码：GitHub 仓库 `tuzheng1989/rhetra-harness`。
 
 ## 安装来源与导入（导入方必读）
 
@@ -32,13 +32,14 @@ pip install "rhetra[live] @ git+https://github.com/tuzheng1989/rhetra-harness.gi
 ### 渠道 2：本地路径（同机开发联调）
 
 ```bash
-pip install D:/runspace/rhetra-harness                 # 常规安装（拷贝快照）
-pip install -e D:/runspace/rhetra-harness              # editable：源码改动即时生效
-pip install -e "D:/runspace/rhetra-harness[live]"      # editable + 真实栈
+git clone https://github.com/tuzheng1989/rhetra-harness.git
+pip install ./rhetra-harness                 # 常规安装（拷贝快照）
+pip install -e ./rhetra-harness              # editable：源码改动即时生效
+pip install -e "./rhetra-harness[live]"      # editable + 真实栈
 ```
 
-EvoMAV（`D:/runspace/deepchat`）等本机消费者联调时用 editable 最省事；
-交付前切换到 git 渠道锁定 commit。
+本机消费者（如 EvoMAV）联调时用 editable 最省事；交付前切换到 git 渠道
+锁定 commit。
 
 ### 环境要求
 
@@ -51,7 +52,7 @@ EvoMAV（`D:/runspace/deepchat`）等本机消费者联调时用 editable 最省
 
 - `from rhetra import plan_flow, PlannerError` 走 PEP 562 惰性解析（访问时才
   import `rhetra.planner`）；不用 planner 的进程零 planner 导入开销。
-- `__all__`（24 符号）即 0.x 兼容承诺，别从子模块（`rhetra.api`、`rhetra.planner`
+- `__all__`（27 符号）即 0.x 兼容承诺，别从子模块（`rhetra.api`、`rhetra.planner`
   除外）deep import。
 
 ## 最小 Python 闭环
@@ -112,7 +113,7 @@ rhetra viewer  evidence --port 8765                               # 本地只读
 
 ## 可复制样例
 
-`D:/runspace/rhetra-harness/examples/`（头部 docstring 载明前置与运行方式）：
+仓库 `examples/` 目录（头部 docstring 载明前置与运行方式）：
 
 | 脚本 | 演示 |
 |------|------|

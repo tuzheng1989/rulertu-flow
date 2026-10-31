@@ -10,9 +10,9 @@ description: Rhetra-Harness Python 包使用指南（调用级 Agent Harness：�
 冻结执行契约与逐调用证据。
 
 **版本锚点**：本文档基于 rhetra 0.1.0（2026-09，M3「可导入包最小闭环」）。
-源码与可运行样例在 `D:/runspace/rhetra-harness/`；API 以其 `rhetra/__init__.py`
-的 `__all__`（24 符号）为 0.x 兼容承诺。若包行为与本文档冲突，以源码为准并
-更新本技能。
+源码与可运行样例在 GitHub 仓库 `tuzheng1989/rhetra-harness`（安装渠道见
+[[references/quickstart.md]]）；API 以其 `rhetra/__init__.py` 的 `__all__`
+（27 符号）为 0.x 兼容承诺。若包行为与本文档冲突，以源码为准并更新本技能。
 
 ## 场景识别
 
@@ -106,9 +106,9 @@ ValueError / SecretResolutionError / 证据持久化 OSError）从 `run_flow` �
 | [[references/planner.md]] | task 语法糖、plan_flow、Draft、save_flow | 场景 C |
 | [[references/evidence.md]] | Bundle 结构、verify、溢出产物、viewer、离线替身与测试纪律 | 场景 D |
 
-### 官方资源（本机）
+### 官方资源
 
-- 源码仓库：`D:/runspace/rhetra-harness/`
-- 可运行样例：`D:/runspace/rhetra-harness/examples/`（五个脚本，头部 docstring 载明前置）
-- 领域术语：`D:/runspace/rhetra-harness/CONTEXT.md`
-- 验收门禁：`D:/runspace/rhetra-harness/scripts/acceptance.py`
+- 源码仓库：GitHub `tuzheng1989/rhetra-harness`
+- 可运行样例：仓库 `examples/`（五个脚本，头部 docstring 载明前置）
+- 领域术语：仓库 `CONTEXT.md`
+- 验收门禁：仓库 `scripts/acceptance.py`
