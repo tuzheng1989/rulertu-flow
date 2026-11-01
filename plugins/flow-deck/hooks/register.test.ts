@@ -125,7 +125,7 @@ describe('pane', () => {
     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
     await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\docs/c.md' })
     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'p', batch: 'B1', files: ['docs/c.md', 'hooks/a.ts'] })
-    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件页签。')
+    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件树页签。')
     const ui = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
       props: paneProps('Deck'),
@@ -156,9 +156,9 @@ describe('pane', () => {
     })
     expect((await $.command.run({ command: 'deck', args: '' })).text).toContain('已打开面板')
     expect(opened).toBe(1)
-    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件页签。')
+    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件树页签。')
     expect(closed).toBe(0)
-    expect((await $.command.run({ command: 'deck', args: 'flow' })).text).toBe('已切到工作流页签。')
+    expect((await $.command.run({ command: 'deck', args: 'flow' })).text).toBe('已切到工作面板页签。')
     expect((await $.command.run({ command: 'deck', args: '' })).text).toBe('已关闭 flow-deck 面板。')
     expect(closed).toBe(1)
   })
@@ -446,24 +446,24 @@ describe('pane', () => {
     await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts' })
     await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts' })
     await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\readme.md' })
-    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toContain('文件页签')
+    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toContain('文件树页签')
     const ui = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
       props: paneProps('文件'),
     })
-    expect(await ui.find({ text: /▍文件 · 工作目录/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍文件树 · 工作目录/ })).not.toBeUndefined()
     expect(await ui.find({ text: /▍改动 · 2/ })).not.toBeUndefined()
     expect(await ui.find({ text: /src\/a\.ts/ })).not.toBeUndefined()
     expect(await ui.find({ text: /src\// })).not.toBeUndefined()
     // 目录行点击进入该目录
     await $.ui.press({ plugin: 'flow-deck', key: 'dir-open-src', requestId: 'deck', surface: 'terminal' })
     await clock.settle()
-    expect(await ui.find({ text: /▍文件 · src/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍文件树 · src/ })).not.toBeUndefined()
     expect(await ui.find({ text: /index\.ts/ })).not.toBeUndefined()
     // 「← 上级」回工作目录
     await $.ui.press({ plugin: 'flow-deck', key: 'dir-up', requestId: 'deck', surface: 'terminal' })
     await clock.settle()
-    expect(await ui.find({ text: /▍文件 · 工作目录/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍文件树 · 工作目录/ })).not.toBeUndefined()
     await $.ui.press({ plugin: 'flow-deck', key: 'dir-open-src', requestId: 'deck', surface: 'terminal' })
     await clock.settle()
     // 批次边界内文件标注（边界声明本身不改变目录列表）
@@ -471,10 +471,10 @@ describe('pane', () => {
     expect(await ui.find({ text: /◆ 本批/ })).not.toBeUndefined()
     // 点击改动清单文件行 → 切到文档页签并装载该文件
     await $.ui.press({ plugin: 'flow-deck', key: 'file-open-src/a.ts', requestId: 'deck', surface: 'terminal' })
-    expect(await ui.find({ text: /▍文档 · src\/a\.ts · 1 节 · 2 行/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍文件查看器 · src\/a\.ts · 1 节 · 2 行/ })).not.toBeUndefined()
     await ui.unmount()
     // /deck tree 语义为切页签：已开时不关闭；关闭统一走无参 /deck
-    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件页签。')
+    expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件树页签。')
     expect((await $.command.run({ command: 'deck', args: '' })).text).toBe('已关闭 flow-deck 面板。')
   })
 
@@ -792,7 +792,7 @@ describe('pane', () => {
           plugin: 'flow-deck', surface, component: 'Pane', requestId: 'deck',
           props: { ...paneProps('Flow'), bodyColumns },
         })
-        expect(await ui.find({ text: /▍工作流 · 方案迭代 · 当前迭代/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /▍工作面板 · 方案迭代 · 当前迭代/ })).not.toBeUndefined()
         expect(await ui.find({ text: /等待评审结果落盘/ })).not.toBeUndefined()
         expect(await ui.find({ text: /当前执行|执行 DAG|◇ 边界|旧实施/ })).toBeUndefined()
         await ui.unmount()
@@ -808,7 +808,7 @@ describe('pane', () => {
     const implementing = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck', props: paneProps('Flow'),
     })
-    expect(await implementing.find({ text: /▍工作流 · 方案实施 · 新实施/ })).not.toBeUndefined()
+    expect(await implementing.find({ text: /▍工作面板 · 方案实施 · 新实施/ })).not.toBeUndefined()
     expect(await implementing.find({ text: /等待阶段进度上报/ })).not.toBeUndefined()
     expect(await implementing.find({ text: /当前迭代|旧实施|执行 DAG/ })).toBeUndefined()
     await implementing.unmount()
@@ -823,7 +823,7 @@ describe('pane', () => {
     const ui = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck', props: paneProps('Flow'),
     })
-    expect(await ui.find({ text: /▍工作流 · 方案迭代 · demo/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍工作面板 · 方案迭代 · demo/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
@@ -855,7 +855,7 @@ describe('pane', () => {
     on('ui.panes', () => ({ value: [] }))
     on('ui.open', () => ({ value: { isPlaced: true } }))
     const result = await $.command.run({ command: 'deck', args: 'doc' })
-    expect(result.text).toContain('文档页签')
+    expect(result.text).toContain('文件查看器页签')
   })
 
   test('/doc 装载文档，选节后 e 把修改请求填入输入框', async ($, on) => {
@@ -885,7 +885,7 @@ describe('pane', () => {
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
       props: paneProps('文档浏览'),
     })
-    expect(await ui.find({ text: /▍文档 · docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍文件查看器 · docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
     // 默认全文模式：浏览行显示全文标题，Markdown 渲染整篇
     expect(await ui.find({ text: /▍全文 · 4 行/ })).not.toBeUndefined()
     const body = await ui.find({ type: 'Markdown' })
@@ -897,7 +897,7 @@ describe('pane', () => {
     expect(fills).toHaveLength(1)
     expect(fills[0].text).toBe('请修改 docs/plan.md 文件：')
     // Select 选节切到单节模式，e 锚定该节
-    await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: '1', requestId: 'deck', surface: 'terminal' })
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-sec-1', requestId: 'deck', surface: 'terminal' })
     expect(await ui.find({ text: /▍二 · 第 3–4 行/ })).not.toBeUndefined()
     const nextBody = await ui.find({ type: 'Markdown' })
     expect(nextBody?.props.text).toBe('## 二\n正文二')
@@ -912,7 +912,7 @@ describe('pane', () => {
     expect(fills).toHaveLength(3)
     expect(fills[2].mode).toBe('append')
     // 切回全文
-    await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: 'all', requestId: 'deck', surface: 'terminal' })
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-sec-all', requestId: 'deck', surface: 'terminal' })
     expect(await ui.find({ text: /▍全文 · 4 行/ })).not.toBeUndefined()
     await ui.unmount()
   })

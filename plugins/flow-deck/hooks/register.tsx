@@ -376,7 +376,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="column">
-        <Text bold color={TONE.accent}>{MARK.title}工作流 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
+        <Text bold color={TONE.accent}>{MARK.title}工作面板 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
         {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
         {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
       </Box>
@@ -485,7 +485,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
 }
 
 const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
-  const { Box, Text, Button, Select, Markdown } = $.ui.resolve(e)
+  const { Box, Text, Button, Markdown } = $.ui.resolve(e)
   const doc = await read($, docFile)
   const wide = e.props.bodyColumns >= 44
   if (doc === null) {
@@ -527,7 +527,7 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
   if (doc.text === null) {
     return (
       <Box flexDirection="column" gap={1}>
-        <Text bold color={TONE.bad} wrap="truncate-end">{MARK.title}文档 · {doc.path}</Text>
+        <Text bold color={TONE.bad} wrap="truncate-end">{MARK.title}文件查看器 · {doc.path}</Text>
         <Text color={TONE.bad} wrap="truncate-end">读取失败：{doc.error ?? '未知原因'}</Text>
         <Box>
           <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
@@ -539,7 +539,7 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
   if (sections.length === 0) {
     return (
       <Box flexDirection="column" gap={1}>
-        <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · 空文档</Text>
+        <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件查看器 · {doc.path} · 空文档</Text>
         <Text dimColor>文档没有内容：/doc &lt;另一路径&gt; 换一篇，或按 r 重读。</Text>
         <Box>
           <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
@@ -565,29 +565,21 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
     : `${MARK.title}${current.title} · 第 ${current.start}–${current.end} 行${truncated ? ` · 截断显示前 ${DOC_SECTION_MAX_LINES} 行` : ''}`
   return (
     <Box flexDirection="column" gap={1}>
-      <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
-      <Select
-        key="doc-section"
-        label="浏览"
-        options={[
-          { value: 'all', text: '全文' },
-          ...sections.map((section, i) => ({ value: String(i), text: `${section.title}` })),
-        ]}
-        value={mode === 'all' ? 'all' : String(index)}
-        onSelect={value => {
-          if (value === 'all') {
-            void update($, docMode, () => 'all')
-          } else {
+      <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件查看器 · {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
+      <Box flexWrap="wrap" gap={2}>
+        <Button key="doc-sec-all" plain dimColor={mode !== 'all'} onPress={() => { void update($, docMode, () => 'all') }}>全文</Button>
+        {sections.map((section, i) => (
+          <Button key={`doc-sec-${i}`} plain dimColor={!(mode === 'section' && index === i)} onPress={() => {
             void update($, docMode, () => 'section')
-            void update($, docSection, () => Number(value))
-          }
-        }}
-      />
+            void update($, docSection, () => i)
+          }}>{section.title}</Button>
+        ))}
+      </Box>
       <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} paddingX={wide ? 1 : 0}>
         <Text bold wrap="truncate-end">{bodyTitle}</Text>
         <Markdown key="doc-body" text={slice.join('\n')} />
       </Box>
-      <Box>
+      <Box gap={2}>
         <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>
         <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
       </Box>
@@ -621,7 +613,7 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
   }
   return (
     <Box flexDirection="column" gap={1}>
-      <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件 · {dir === null ? '工作目录' : dir}</Text>
+      <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件树 · {dir === null ? '工作目录' : dir}</Text>
       {status === null && <Text dimColor>当前目录不是 git 仓库，或状态尚未取到；自动重试中。</Text>}
       {status !== null && (
         <Box flexDirection="column">
@@ -875,7 +867,7 @@ export const register: Register = (on, options) => {
       if (arg === 'tree') await loadTree($, null)
       manualDeck = true
       if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
-      return { text: arg === 'tree' ? '已切到文件页签。' : '已切到工作流页签。' }
+      return { text: arg === 'tree' ? '已切到文件树页签。' : '已切到工作面板页签。' }
     }
     if (arg === 'doc' || arg.startsWith('doc ')) {
       const path = arg.slice(3).trim()
@@ -889,7 +881,7 @@ export const register: Register = (on, options) => {
       await update($, activeTab, () => 'doc')
       manualDeck = true
       if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
-      return { text: '已切到文档页签；装载文档用 /deck doc <相对路径>。' }
+      return { text: '已切到文件查看器页签；装载文档用 /deck doc <相对路径>。' }
     }
     return { text: '用法：/deck [flow|tree|doc [相对路径]]' }
   })
@@ -995,9 +987,9 @@ export const register: Register = (on, options) => {
     const active = await read($, activeTab)
     const tabsRow = (
       <Box gap={2}>
-        <Button key="tab-flow" hotkey="1" plain dimColor={active !== 'flow'} onPress={() => { void update($, activeTab, () => 'flow') }}>工作流</Button>
-        <Button key="tab-files" hotkey="2" plain dimColor={active !== 'files'} onPress={() => { void update($, activeTab, () => 'files') }}>文件</Button>
-        <Button key="tab-doc" hotkey="3" plain dimColor={active !== 'doc'} onPress={() => { void update($, activeTab, () => 'doc') }}>文档</Button>
+        <Button key="tab-flow" hotkey="1" plain dimColor={active !== 'flow'} onPress={() => { void update($, activeTab, () => 'flow') }}>工作面板</Button>
+        <Button key="tab-files" hotkey="2" plain dimColor={active !== 'files'} onPress={() => { void update($, activeTab, () => 'files') }}>文件树</Button>
+        <Button key="tab-doc" hotkey="3" plain dimColor={active !== 'doc'} onPress={() => { void update($, activeTab, () => 'doc') }}>文件查看器</Button>
         <Button key="view-main" plain onPress={() => { void $.ui.view({}).catch(error => {
           $.ui.log(`flow-deck 切回主对话失败：${String(error)}`, { to: 'debug' })
         }) }}>主对话</Button>
