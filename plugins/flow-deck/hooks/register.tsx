@@ -3,6 +3,7 @@ import type { EngineInterface, MatchedHook, PromptDecoration, Register } from 'c
 
 import {
   DOC_SECTION_MAX_LINES,
+  DOC_ALL_MAX_LINES,
   bannerPlan,
   collectChanges,
   depStatuses,
@@ -70,6 +71,8 @@ const stall = atom({ plugin: 'flow-deck', key: 'stall' } as const, null)
 const docFile = atom({ plugin: 'flow-deck', key: 'doc' } as const, null)
 /** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
 const docSection = atom({ plugin: 'flow-deck', key: 'docSection' } as const, 0)
+/** 文档浏览模式：all 全文阅读（默认），section 单节浏览（修改请求锚定） */
+const docMode = atom({ plugin: 'flow-deck', key: 'docMode' } as const, 'all')
 /** deck 面板当前页签；/deck 无参打开时保持上次所在页签 */
 const activeTab = atom({ plugin: 'flow-deck', key: 'activeTab' } as const, 'flow')
 /** 文件树面板当前浏览目录（相对会话工作目录）；null 表示根 */
@@ -185,6 +188,7 @@ async function loadDoc($: EngineInterface, path: string): Promise<void> {
   }
   await update($, docFile, () => ({ path, text, ...(error === undefined ? {} : { error }) }))
   await update($, docSection, () => 0)
+  await update($, docMode, () => 'all')
 }
 
 /** 记录本会话 Edit/Write 改动路径（去重保序，cap 50）；守卫钩子放行分支调用，不阻塞链路 */
@@ -494,14 +498,20 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
   }
 
   const sendEdit = async () => {
+    const mode = await read($, docMode)
     const wanted = await read($, docSection)
     const sections = doc.text === null ? [] : parseSections(doc.text)
-    const current = sections[Math.min(Math.max(wanted, 0), sections.length - 1)]
-    if (current === undefined) {
-      $.ui.toast('文档为空，没有可发送的节。')
-      return
+    let draft: string
+    if (mode === 'all') {
+      draft = `请修改 ${doc.path} 文件：`
+    } else {
+      const current = sections[Math.min(Math.max(wanted, 0), sections.length - 1)]
+      if (current === undefined) {
+        $.ui.toast('文档为空，没有可发送的节。')
+        return
+      }
+      draft = `请修改 ${doc.path} 的「${current.title}」一节（第 ${current.start}–${current.end} 行）：`
     }
-    const draft = `请修改 ${doc.path} 的「${current.title}」一节（第 ${current.start}–${current.end} 行）：`
     try {
       const box = await $.prompt.read()
       await $.prompt.fill({ text: draft, mode: box.text.trim() === '' ? 'replace' : 'append' })
@@ -538,28 +548,44 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
     )
   }
   const wanted = await read($, docSection)
+  const mode = await read($, docMode)
   const index = Math.min(Math.max(wanted, 0), sections.length - 1)
   const current = sections[index]
   const allLines = doc.text.split('\n')
-  const body = allLines.slice(current.start - 1, current.end)
-  const truncated = body.length > DOC_SECTION_MAX_LINES
-  const shown = truncated ? body.slice(0, DOC_SECTION_MAX_LINES) : body
+  // 全文模式（默认）整篇阅读，单节模式锚定修改请求；两种模式各有行数上限，Pane 内可滚动
+  const sectionLines = allLines.slice(current.start - 1, current.end)
+  const slice = mode === 'all'
+    ? (allLines.length > DOC_ALL_MAX_LINES ? allLines.slice(0, DOC_ALL_MAX_LINES) : allLines)
+    : (sectionLines.length > DOC_SECTION_MAX_LINES ? sectionLines.slice(0, DOC_SECTION_MAX_LINES) : sectionLines)
+  const truncated = mode === 'all'
+    ? allLines.length > DOC_ALL_MAX_LINES
+    : sectionLines.length > DOC_SECTION_MAX_LINES
+  const bodyTitle = mode === 'all'
+    ? `${MARK.title}全文 · ${allLines.length} 行${truncated ? ` · 截断显示前 ${DOC_ALL_MAX_LINES} 行` : ''}`
+    : `${MARK.title}${current.title} · 第 ${current.start}–${current.end} 行${truncated ? ` · 截断显示前 ${DOC_SECTION_MAX_LINES} 行` : ''}`
   return (
     <Box flexDirection="column" gap={1}>
       <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
       <Select
         key="doc-section"
-        label="节"
-        options={sections.map((section, i) => ({ value: String(i), text: `${section.title}` }))}
-        value={String(index)}
-        onSelect={value => { void update($, docSection, () => Number(value)) }}
+        label="浏览"
+        options={[
+          { value: 'all', text: '全文' },
+          ...sections.map((section, i) => ({ value: String(i), text: `${section.title}` })),
+        ]}
+        value={mode === 'all' ? 'all' : String(index)}
+        onSelect={value => {
+          if (value === 'all') {
+            void update($, docMode, () => 'all')
+          } else {
+            void update($, docMode, () => 'section')
+            void update($, docSection, () => Number(value))
+          }
+        }}
       />
       <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} paddingX={wide ? 1 : 0}>
-        <Text bold wrap="truncate-end">
-          {MARK.title}{current.title} · 第 {current.start}–{current.end} 行
-          {truncated ? ` · 截断显示前 ${DOC_SECTION_MAX_LINES} 行` : ''}
-        </Text>
-        <Markdown key="doc-body" text={shown.join('\n')} />
+        <Text bold wrap="truncate-end">{bodyTitle}</Text>
+        <Markdown key="doc-body" text={slice.join('\n')} />
       </Box>
       <Box>
         <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>
@@ -697,6 +723,7 @@ export const register: Register = (on, options) => {
     await update($, stall, () => null)
     await update($, docFile, () => null)
     await update($, docSection, () => 0)
+    await update($, docMode, () => 'all')
     await update($, treeDir, () => null)
     await update($, treeEntries, () => null)
     await update($, touched, () => [])

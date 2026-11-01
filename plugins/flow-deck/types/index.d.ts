@@ -171,6 +171,8 @@ declare module 'claude-code' {
       doc: { path: string; text: string | null; error?: string } | null
       /** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
       docSection: number
+      /** 文档浏览模式：all 全文阅读（默认），section 单节浏览（修改请求锚定） */
+      docMode: 'all' | 'section'
       /** 文件树面板当前浏览目录（相对会话工作目录）；null 表示根 */
       treeDir: string | null
       /** 文件树面板最近一次目录列表；loaded 表示已取数（含空目录） */

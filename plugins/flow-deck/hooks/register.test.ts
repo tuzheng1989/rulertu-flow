@@ -879,24 +879,34 @@ describe('pane', () => {
       props: paneProps('文档浏览'),
     })
     expect(await ui.find({ text: /▍文档 · docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
-    expect(await ui.find({ text: /▍一 · 第 1–2 行/ })).not.toBeUndefined()
+    // 默认全文模式：浏览行显示全文标题，Markdown 渲染整篇
+    expect(await ui.find({ text: /▍全文 · 4 行/ })).not.toBeUndefined()
     const body = await ui.find({ type: 'Markdown' })
     expect(body).not.toBeUndefined()
-    expect(body?.props.text).toBe('# 一\n正文一')
+    expect(body?.props.text).toBe('# 一\n正文一\n## 二\n正文二')
+    // 全文模式的 e 锚定到整篇文件
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-send', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(fills).toHaveLength(1)
+    expect(fills[0].text).toBe('请修改 docs/plan.md 文件：')
+    // Select 选节切到单节模式，e 锚定该节
     await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: '1', requestId: 'deck', surface: 'terminal' })
     expect(await ui.find({ text: /▍二 · 第 3–4 行/ })).not.toBeUndefined()
     const nextBody = await ui.find({ type: 'Markdown' })
     expect(nextBody?.props.text).toBe('## 二\n正文二')
     await $.ui.press({ plugin: 'flow-deck', key: 'doc-send', requestId: 'deck', surface: 'terminal' })
     await clock.settle()
-    expect(fills).toHaveLength(1)
-    expect(fills[0].mode).toBe('replace')
-    expect(fills[0].text).toBe('请修改 docs/plan.md 的「二」一节（第 3–4 行）：')
+    expect(fills).toHaveLength(2)
+    expect(fills[1].mode).toBe('replace')
+    expect(fills[1].text).toBe('请修改 docs/plan.md 的「二」一节（第 3–4 行）：')
     draftBox = { text: '已有草稿', cursor: 0 }
     await $.ui.press({ plugin: 'flow-deck', key: 'doc-send', requestId: 'deck', surface: 'terminal' })
     await clock.settle()
-    expect(fills).toHaveLength(2)
-    expect(fills[1].mode).toBe('append')
+    expect(fills).toHaveLength(3)
+    expect(fills[2].mode).toBe('append')
+    // 切回全文
+    await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: 'all', requestId: 'deck', surface: 'terminal' })
+    expect(await ui.find({ text: /▍全文 · 4 行/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
@@ -923,7 +933,7 @@ describe('pane', () => {
       })
       const rendered = await view.find({ type: 'Markdown' })
       expect(rendered).not.toBeUndefined()
-      expect(rendered?.props.text).toBe('# 一\n正文一')
+      expect(rendered?.props.text).toBe('# 一\n正文一\n## 二\n正文二')
       await view.unmount()
     }
   })

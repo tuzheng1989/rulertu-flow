@@ -559,6 +559,9 @@ export function gitSummaryParts(
 /** 文档浏览面板单节渲染的行数上限；超长节截断显示，草稿行号仍用全节范围 */
 export const DOC_SECTION_MAX_LINES = 60
 
+/** 文档浏览面板全文模式的行数上限（Pane 内容超高时引擎侧可滚动） */
+export const DOC_ALL_MAX_LINES = 400
+
 /** 文档浏览面板的一个节（行号 1 起且双端包含） */
 export type DocSection = {
   /** 节标题（# 号后的文字）；文档开头正文为「开头」，无标题整篇为「全文」 */
