@@ -327,7 +327,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
 
   const agentsSection = (
     <Box flexDirection="column" gap={1}>
-      <Box>
+      <Box gap={2}>
         <Text bold wrap="truncate-end">{MARK.title}子代理{snapshot.loaded ? ` · ${agentSummary(snapshot.agents)}` : ''}</Text>
         <Button key="flow-refresh" hotkey="r" plain onPress={() => refreshAll?.()}>刷新</Button>
       </Box>
