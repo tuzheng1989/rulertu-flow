@@ -919,4 +919,129 @@ describe('pane', () => {
       await view.unmount()
     }
   })
+
+  test('自动侧边栏：非全屏或 autoOpen=off 时编辑不自动开面板', async ($, on) => {
+    const clock = mock.clock(on)
+    let opened = 0
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('fs.list', () => ({ value: [] }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => {
+      opened++
+      return { value: { isPlaced: true } }
+    })
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    // AbovePrompt 未观测到全屏布局（测试引擎无 viewport）：首次编辑不得自动开
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\a.ts' })
+    await clock.settle()
+    expect(opened).toBe(0)
+  })
+
+  test('自动侧边栏：autoOpen=off 时即使全屏也不开（配置守门）', { options: { autoOpen: 'off' } }, async ($, on) => {
+    const clock = mock.clock(on)
+    let opened = 0
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('fs.list', () => ({ value: [] }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => {
+      opened++
+      return { value: { isPlaced: true } }
+    })
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\a.ts' })
+    await clock.settle()
+    expect(opened).toBe(0)
+  })
+
+  test('子代理行查看按钮把主视图切到该代理，deny 时 toast 说明', async ($, on) => {
+    const snapshot: AgentSnapshot = {
+      loaded: true, error: false,
+      agents: [{ id: 'a1', name: 'executor', type: 'runner', description: '执行批次', status: 'running' }],
+    }
+    const views: unknown[] = []
+    let denyNext = false
+    const toasts: string[] = []
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('fs.list', () => ({ value: [] }))
+    on('ui.toast', ($, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('ui.view', ($, e) => {
+      views.push(e.agentId ?? {})
+      return denyNext ? { value: { deny: 'not person-initiated' } } : { value: {} }
+    })
+    on('state.set', { plugin: 'flow-deck', key: 'agents' }, ($, e, next) => next({ ...e, value: snapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'agent-view-a1', requestId: 'deck', surface: 'terminal' })
+    expect(views).toEqual(['a1'])
+    denyNext = true
+    await $.ui.press({ plugin: 'flow-deck', key: 'agent-view-a1', requestId: 'deck', surface: 'terminal' })
+    expect(toasts.some(text => text.includes('无法查看子代理'))).toBe(true)
+    await $.ui.press({ plugin: 'flow-deck', key: 'view-main', requestId: 'deck', surface: 'terminal' })
+    expect(views.at(-1)).toEqual({})
+    await ui.unmount()
+  })
+
+  test('后台任务完成通知行：状态点、名称与耗时', async ($, on) => {
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('fs.list', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'UserMessage',
+      props: {
+        origin: { kind: 'task-notification' },
+        task: { id: 'a1', status: 'completed', durationMs: 3200 },
+        from: { name: 'executor' },
+      },
+    })
+    expect(await ui.find({ text: /✓ executor · 3\.2s/ })).not.toBeUndefined()
+    await ui.unmount()
+    const failed = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'UserMessage',
+      props: {
+        origin: { kind: 'task-notification' },
+        task: { id: 'a2', status: 'failed', durationMs: 64_000 },
+        from: { name: 'reviewer' },
+      },
+    })
+    expect(await failed.find({ text: /✗ reviewer · 1m 4s/ })).not.toBeUndefined()
+    await failed.unmount()
+  })
 })

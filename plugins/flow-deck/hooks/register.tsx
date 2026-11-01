@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, MatchedHook, Register } from 'claude-code'
+import type { EngineInterface, MatchedHook, PromptDecoration, Register } from 'claude-code'
 
 import {
   DOC_SECTION_MAX_LINES,
@@ -21,6 +21,10 @@ import {
   selectTaskView,
   sortEntries,
   sparkline,
+  spinnerWord,
+  toolMark,
+  draftDecorations,
+  humanDuration,
 } from './parse'
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
 import { agentStatus, agentSummary, createAgentPoller } from './agents'
@@ -90,6 +94,14 @@ let refreshAgents: (() => Promise<void>) | undefined
 let refreshAll: (() => void) | undefined
 let planTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 let gitTimer: ReturnType<EngineInterface['clock']['every']> | undefined
+
+/** 自动侧边栏状态（官方 diff 面板范式）：本会话只自动试一次；用户手动开关过面板则不再打扰 */
+let autoOpened = false
+let manualDeck = false
+/** 最近一次 AbovePrompt 绘制观测到的全屏布局状态（侧边栏可停靠的前提） */
+let lastFullscreen = false
+/** 自动侧边栏开关；register 时按 userConfig 覆盖 */
+let autoOpenMode: 'on' | 'off' = 'on'
 
 /** 越界拦截的 deny 文案 */
 function guardDenyMessage(hit: GuardHit): string {
@@ -187,6 +199,20 @@ async function recordTouch($: EngineInterface, file_path: unknown): Promise<void
     })
   } catch (error) {
     $.ui.log(`flow-deck 改动记录失败：${String(error)}`, { to: 'debug' })
+  }
+  // 自动侧边栏（官方 diff 面板范式）：agent 首次编辑时，若布局可停靠、用户未手动
+  // 开关过面板且本会话未试过，则不抢键盘焦点地打开一次
+  if (autoOpenMode === 'on' && !autoOpened && !manualDeck && lastFullscreen) {
+    autoOpened = true
+    try {
+      const isOpen = (await $.ui.panes()).some(pane => pane.id === DECK_PANE_ID)
+      if (!isOpen) {
+        await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: false })
+        void refreshAgents?.().catch(() => {})
+      }
+    } catch (error) {
+      $.ui.log(`flow-deck 自动侧边栏失败：${String(error)}`, { to: 'debug' })
+    }
   }
 }
 
@@ -302,7 +328,16 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
         const status = agentStatus(agent.status)
         return (
           <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
-            <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
+            <Box>
+              <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
+              <Button key={`agent-view-${agent.id}`} plain dimColor onPress={() => {
+                void $.ui.view({ agentId: agent.id }).then(result => {
+                  if ('deny' in result && result.deny !== undefined) $.ui.toast(`无法查看子代理：${result.deny}`)
+                }).catch(error => {
+                  $.ui.log(`flow-deck 查看子代理失败：${String(error)}`, { to: 'debug' })
+                })
+              }}>查看</Button>
+            </Box>
             <Text dimColor wrap="truncate-middle">{agent.type} · {agent.id}</Text>
             {agent.description !== '' && <Text wrap="truncate-end">任务：{agent.description}</Text>}
             {agent.parentId !== undefined && <Text dimColor wrap="truncate-middle">↳ 父代理：{names.get(agent.parentId) ?? agent.parentId}</Text>}
@@ -629,6 +664,7 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
 
 export const register: Register = (on, options) => {
   guardMode = options.guardMode === 'deny' ? 'deny' : 'warn'
+  autoOpenMode = options.autoOpen === 'off' ? 'off' : 'on'
 
   on('session.start', async ($, e, next) => {
     sessionCwd = e.cwd
@@ -649,6 +685,8 @@ export const register: Register = (on, options) => {
     await update($, treeDir, () => null)
     await update($, treeEntries, () => null)
     await update($, touched, () => [])
+    autoOpened = false
+    manualDeck = false
     planTimer?.cancel()
     gitTimer?.cancel()
     scanPlans = createPlanScanner({
@@ -790,8 +828,10 @@ export const register: Register = (on, options) => {
     if (arg === '') {
       if (isOpen) {
         await $.ui.close({ id: DECK_PANE_ID })
+        manualDeck = true
         return { text: '已关闭 flow-deck 面板。' }
       }
+      manualDeck = true
       await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
       void refreshAgents?.().catch(error => {
         $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
@@ -801,6 +841,7 @@ export const register: Register = (on, options) => {
     if (arg === 'flow' || arg === 'tree') {
       await update($, activeTab, () => arg === 'tree' ? 'files' : 'flow')
       if (arg === 'tree') await loadTree($, null)
+      manualDeck = true
       if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
       return { text: arg === 'tree' ? '已切到文件页签。' : '已切到工作流页签。' }
     }
@@ -809,10 +850,12 @@ export const register: Register = (on, options) => {
       if (path !== '') {
         await loadDoc($, path)
         await update($, activeTab, () => 'doc')
+        manualDeck = true
         if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
         return { text: `文档已装载：${path}` }
       }
       await update($, activeTab, () => 'doc')
+      manualDeck = true
       if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
       return { text: '已切到文档页签；装载文档用 /deck doc <相对路径>。' }
     }
@@ -923,6 +966,9 @@ export const register: Register = (on, options) => {
         <Button key="tab-flow" hotkey="1" plain dimColor={active !== 'flow'} onPress={() => { void update($, activeTab, () => 'flow') }}>工作流</Button>
         <Button key="tab-files" hotkey="2" plain dimColor={active !== 'files'} onPress={() => { void update($, activeTab, () => 'files') }}>文件</Button>
         <Button key="tab-doc" hotkey="3" plain dimColor={active !== 'doc'} onPress={() => { void update($, activeTab, () => 'doc') }}>文档</Button>
+        <Button key="view-main" plain onPress={() => { void $.ui.view({}).catch(error => {
+          $.ui.log(`flow-deck 切回主对话失败：${String(error)}`, { to: 'debug' })
+        }) }}>主对话</Button>
       </Box>
     )
     const body = active === 'files' ? await renderFilesBody($, e)
@@ -936,7 +982,108 @@ export const register: Register = (on, options) => {
     )
   })
 
+  // Spinner 行（视线常驻）：实施中报批次与阶段，迭代中报评审轮次，无任务时报运行中的子代理；
+  // 只重写 word，不碰 suffix/message（引擎继续画时长与 token），无话可说时透传
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    const task = await read($, currentTask)
+    const report = task?.kind === 'implement' ? await read($, execution) : null
+    const list = task?.kind === 'iterate' ? await read($, plans) : []
+    const plan = task?.kind === 'iterate' ? list.find(one => one.name === task.plan) : undefined
+    const running = task === null
+      ? (await read($, agents)).agents.filter(agent => agent.status === 'running')
+      : []
+    const word = spinnerWord(task, report, plan, running)
+    if (word === null) return next(e)
+    return next({ ...e, props: { ...e.props, word } })
+  })
+
+  // Edit/Write 工具行的批次合规标注（紧凑行自绘）：界内 ◆、越界放行 ⚠、拦截 ✗；
+  // ctrl+o 展开态、中断行与真实错误行透传引擎原样；判定与守卫同一口径（guardDecision）
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    const tool = e.props.tool
+    if (tool !== 'Edit' && tool !== 'Write') return next(e)
+    const scope = await read($, batchScope)
+    const task = await read($, currentTask)
+    const active = scope !== null && sessionCwd !== '' && task?.kind === 'implement' &&
+      task.plan === scope.plan && (task.batch === undefined || task.batch === scope.batch)
+    const decision = active
+      ? guardDecision(scope, tool, e.props.input, sessionCwd)
+      : ({ kind: 'pass' } as const)
+    const intercepted = decision.kind === 'outOfScope' && guardMode === 'deny'
+    if (e.props.isExpanded === true || e.props.isInterrupted === true ||
+        (e.props.isErrored === true && !intercepted)) return next(e)
+    const mark = toolMark(active, decision.kind === 'outOfScope', guardMode)
+    const input = e.props.input as { file_path?: unknown }
+    const rawPath = typeof input.file_path === 'string' ? input.file_path : ''
+    const path = sessionCwd === '' ? rawPath : normalizePath(rawPath, sessionCwd)
+    const { Box, Text } = $.ui.resolve(e)
+    const inBoundary = active && decision.kind === 'pass'
+    return (
+      <Box>
+        <Text wrap="truncate-end">
+          <Text bold>{tool}</Text>
+          {rawPath === ''
+            ? <Text dimColor> {tool === 'Edit' ? '编辑中…' : '写入中…'}</Text>
+            : <Text> {path}</Text>}
+          {inBoundary && <Text color={TONE.accent}> {MARK.pin}</Text>}
+          {mark !== null && <Text color={mark.tone === 'bad' ? TONE.bad : mark.tone === 'warn' ? TONE.warn : TONE.accent}> {mark.text}</Text>}
+          {e.props.isRunning === true && <Text dimColor> ·</Text>}
+        </Text>
+      </Box>
+    )
+  })
+
+  // 输入框守卫预览：实施中有边界时，草稿里的路径 token 实时标色（界内绿/越界黄），
+  // 把守卫从「事后拦截」提前到「打字时可见」；paint 只挂本插件的装饰，草稿一改即失效重画
+  on('prompt.edit', { origin: { kind: 'composer' } }, async ($, e, next) => {
+    const scope = await read($, batchScope)
+    const task = await read($, currentTask)
+    const active = scope !== null && sessionCwd !== '' && task?.kind === 'implement' &&
+      task.plan === scope.plan && (task.batch === undefined || task.batch === scope.batch)
+    let decorations: PromptDecoration[] = []
+    if (active) {
+      const keys = new Set(scope.files.map(file => normalizePath(file, sessionCwd).toLowerCase()))
+      decorations = draftDecorations(e.text, keys, sessionCwd).map(row => ({
+        start: row.start,
+        end: row.end,
+        color: row.inScope ? TONE.ok : TONE.warn,
+        underline: row.inScope ? undefined : true,
+      }))
+    }
+    try {
+      await $.prompt.paint({ text: e.text, decorations })
+    } catch (error) {
+      $.ui.log(`flow-deck 输入框预览失败：${String(error)}`, { to: 'debug' })
+    }
+    return next(e)
+  })
+
+  // 后台任务完成通知行（含子代理收尾）：状态点 + 名称 + 耗时；ctrl+o 展开态透传引擎原样
+  on('ui.render', { component: 'UserMessage', props: { origin: { kind: 'task-notification' } } }, async ($, e, next) => {
+    if (e.props.isExpanded === true) return next(e)
+    const task = e.props.task
+    const name = e.props.from?.name ?? task?.id ?? '后台任务'
+    const duration = task?.durationMs === undefined ? '' : ` · ${humanDuration(task.durationMs)}`
+    const status = task?.status
+    const mark = status === 'completed'
+      ? { glyph: MARK.done, color: TONE.ok as string | undefined }
+      : status === 'failed'
+        ? { glyph: MARK.bad, color: TONE.bad }
+        : { glyph: MARK.idle, color: undefined }
+    const { Box, Text } = $.ui.resolve(e)
+    return (
+      <Box>
+        <Text wrap="truncate-end">
+          <Text color={mark.color}>{mark.glyph}</Text>
+          <Text> {name}</Text>
+          {duration !== '' && <Text dimColor>{duration}</Text>}
+        </Text>
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (typeof e.viewport?.isFullscreen === 'boolean') lastFullscreen = e.viewport.isFullscreen
     if (e.props.hasSurvey) return next(e)
     if (e.props.maxRows < 1) return next(e)
     const { report, scope } = await readTaskView($)

@@ -72,6 +72,78 @@ export type ChangeRow = {
   state: ChangeState | null
 }
 
+/** Spinner 行的重写词；null 表示无话可说（钩子透传引擎原样） */
+export function spinnerWord(
+  task: FlowTask | null,
+  report: ExecutionReport | null,
+  plan: PlanReview | undefined,
+  running: readonly { name?: string; description?: string; id?: string }[],
+): string | null {
+  if (task === null) {
+    if (running.length === 0) return null
+    if (running.length === 1) {
+      const one = running[0]
+      const name = one.name || one.description || one.id
+      const desc = one.name && one.description ? ` · ${one.description}` : ''
+      // Spinner 词过长会挤压引擎附带的时长与 token 计数，截断兜底
+      return `↻ ${name}${desc}`.slice(0, 40)
+    }
+    return `↻ ${running.length} 个子代理运行中`
+  }
+  if (task.kind === 'implement') {
+    if (report === null || report.phase === '收口') return null
+    // 阶段名已是「验证」时计数直接跟在后面，避免「验证 · 验证」重复
+    const tests = report.testsTotal === undefined ? ''
+      : ` · ${report.phase === '验证' ? '' : '验证 '}${report.testsPassed ?? 0}/${report.testsTotal}`
+    return `${report.batch} · ${report.phase}${tests}`
+  }
+  if (plan === undefined) return `评审 ${task.plan}`
+  const latest = plan.rounds.at(-1) ?? null
+  return latest === null
+    ? `评审 R${plan.round} 进行中`
+    : `评审 R${latest.round} · ${latest.score} 分`
+}
+
+/** Edit/Write 工具行的批次标注；null 表示界内或无活动边界（不加标注） */
+export type ToolMark = { text: string; tone: 'accent' | 'warn' | 'bad' }
+
+export function toolMark(
+  active: boolean,
+  outOfScope: boolean,
+  guardMode: 'warn' | 'deny',
+): ToolMark | null {
+  if (!active || !outOfScope) return null
+  return guardMode === 'deny'
+    ? { text: `${'✗'} 拦截`, tone: 'bad' }
+    : { text: `${'⚠'} 越界`, tone: 'warn' }
+}
+
+/** 输入框守卫预览的一段装饰：草稿中带扩展名的路径 token 及其是否落在批次边界内 */
+export type DraftDecoration = { start: number; end: number; inScope: boolean }
+
+/** 草稿中路径样式 token（含扩展名才判定，避免误高亮普通词）的守卫预览判定；
+ *  cwd 与守卫判定同基准（token 写绝对路径时同样剥前缀），保证预览与拦截口径一致 */
+export function draftDecorations(text: string, scopeKeys: ReadonlySet<string>, cwd = ''): DraftDecoration[] {
+  const out: DraftDecoration[] = []
+  const re = /[A-Za-z0-9_.\-\\/]+\.[A-Za-z]{1,6}/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) {
+    const key = normalizePath(match[0], cwd).toLowerCase()
+    out.push({ start: match.index, end: match.index + match[0].length, inScope: scopeKeys.has(key) })
+  }
+  return out
+}
+
+/** 毫秒时长的短格式（3.2s / 1m 4s），与宿主回合行的口径相近 */
+export function humanDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0s'
+  const seconds = ms / 1000
+  if (seconds < 60) return Number.isInteger(seconds) ? `${seconds}s` : `${seconds.toFixed(1)}s`
+  // 整秒后再 divmod，避免 59.5s 以上被进位成「x m 60s」
+  const total = Math.round(seconds)
+  return `${Math.floor(total / 60)}m ${total % 60}s`
+}
+
 /** 同一路径多 git 状态时取行动意义更靠前的（冲突 > 未暂存 > 暂存 > 未跟踪） */
 const STATE_RANK: Record<ChangeState, number> = { conflict: 0, unstaged: 1, staged: 2, untracked: 3 }
 

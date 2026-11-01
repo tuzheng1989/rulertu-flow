@@ -3,6 +3,10 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   bannerPlan,
   collectChanges,
+  draftDecorations,
+  humanDuration,
+  spinnerWord,
+  toolMark,
   progressBar,
   phaseProgress,
   pipelineLinks,
@@ -29,7 +33,7 @@ import {
   sparkline,
   selectTaskView,
 } from './parse'
-import type { DepNode } from './parse'
+import type { DepNode, ExecutionReport, FlowTask, PlanReview } from './parse'
 import type { BatchScope, FsEntryLike, GitStatus } from '../types'
 
 describe('parse', () => {
@@ -99,6 +103,63 @@ describe('parse', () => {
     ]
     expect(sortEntries(entries).map(one => one.name)).toEqual(['docs', 'src', 'a.ts', 'readme.md'])
     expect(entries.map(one => one.name)).toEqual(['readme.md', 'src', 'a.ts', 'docs'])
+  })
+
+  test('spinnerWord：实施报批次阶段、迭代报评审、无任务报子代理、无话可说返回 null', () => {
+    const implement: FlowTask = { kind: 'implement', plan: 'demo', batch: 'B2' }
+    const report: ExecutionReport = {
+      plan: 'demo', batch: 'B2', phase: '验证', updatedAt: 0, testsPassed: 8, testsTotal: 12,
+    }
+    expect(spinnerWord(implement, report, undefined, [])).toBe('B2 · 验证 · 8/12')
+    expect(spinnerWord(implement, { ...report, phase: '收口' }, undefined, [])).toBeNull()
+    expect(spinnerWord(implement, null, undefined, [])).toBeNull()
+    const iterate: FlowTask = { kind: 'iterate', plan: 'demo' }
+    const plan: PlanReview = {
+      name: 'demo', dir: '.plan-iterate/demo', round: 3, rounds: [
+        { round: 2, score: 6.8, p0: 0, p1: 1, p2: 0 },
+        { round: 3, score: 7.2, p0: 0, p1: 1, p2: 1 },
+      ], passed: false,
+    }
+    expect(spinnerWord(iterate, null, plan, [])).toBe('评审 R3 · 7.2 分')
+    expect(spinnerWord(iterate, null, { ...plan, rounds: [] }, [])).toBe('评审 R3 进行中')
+    expect(spinnerWord(iterate, null, undefined, [])).toBe('评审 demo')
+    expect(spinnerWord(null, null, undefined, [
+      { name: 'executor', description: '执行批次', id: 'a1' },
+    ])).toBe('↻ executor · 执行批次')
+    expect(spinnerWord(null, null, undefined, [
+      { name: 'long-name-agent', description: '一段相当长的任务描述会撑长 Spinner 行需要截断兜底', id: 'a9' },
+    ])).toBe('↻ long-name-agent · 一段相当长的任务描述会撑长 Spinne')
+    expect(spinnerWord(null, null, undefined, [
+      { id: 'a1' }, { id: 'a2' },
+    ])).toBe('↻ 2 个子代理运行中')
+    expect(spinnerWord(null, null, undefined, [])).toBeNull()
+  })
+
+  test('toolMark：界内或无边界不加标注，越界按 guardMode 定文案', () => {
+    expect(toolMark(false, false, 'warn')).toBeNull()
+    expect(toolMark(true, false, 'warn')).toBeNull()
+    expect(toolMark(true, false, 'deny')).toBeNull()
+    expect(toolMark(true, true, 'warn')).toEqual({ text: '⚠ 越界', tone: 'warn' })
+    expect(toolMark(true, true, 'deny')).toEqual({ text: '✗ 拦截', tone: 'bad' })
+    expect(toolMark(false, true, 'warn')).toBeNull()
+  })
+
+  test('draftDecorations：带扩展名的 token 才判定，界内外分色', () => {
+    const keys = new Set(['src/in.ts', 'docs/a.md'])
+    const rows = draftDecorations('请改 src/in.ts 和 docs/b.md，顺便看看 note', keys)
+    expect(rows).toEqual([
+      { start: 3, end: 12, inScope: true },
+      { start: 15, end: 24, inScope: false },
+    ])
+    expect(draftDecorations('没有路径的一句话', keys)).toEqual([])
+  })
+
+  test('humanDuration：秒与分钟两档，非法输入归零', () => {
+    expect(humanDuration(3200)).toBe('3.2s')
+    expect(humanDuration(64_000)).toBe('1m 4s')
+    expect(humanDuration(0)).toBe('0s')
+    expect(humanDuration(-5)).toBe('0s')
+    expect(humanDuration(NaN)).toBe('0s')
   })
 
   test('统一改动清单：git 并集会话记录，会话组在前、冲突优先、路径排序', () => {
