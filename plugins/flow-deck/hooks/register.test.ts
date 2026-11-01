@@ -437,6 +437,11 @@ describe('pane', () => {
       return norm.endsWith('/src') ? 'src' : ''
     }
     on('fs.list', ($, e) => ({ value: dirs.get(relOf(e.path)) ?? [] }))
+    on('fs.read', ($, e) => {
+      const norm = typeof e.path === 'string' ? e.path.replaceAll('\\', '/') : ''
+      if (!norm.endsWith('src/a.ts')) throw new Error('ENOENT: ' + String(e.path))
+      return { value: '# 标题\n正文' }
+    })
     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
     await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts' })
     await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts' })
@@ -457,6 +462,9 @@ describe('pane', () => {
     // 批次边界内文件标注（边界声明本身不改变目录列表）
     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'p', batch: 'B1', files: ['src/index.ts'] })
     expect(await ui.find({ text: /◆ 本批/ })).not.toBeUndefined()
+    // 点击改动清单文件行 → 切到文档页签并装载该文件
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-src/a.ts', requestId: 'deck', surface: 'terminal' })
+    expect(await ui.find({ text: /▍文档 · src\/a\.ts · 1 节 · 2 行/ })).not.toBeUndefined()
     await ui.unmount()
     // /deck tree 语义为切页签：已开时不关闭；关闭统一走无参 /deck
     expect((await $.command.run({ command: 'deck', args: 'tree' })).text).toBe('已切到文件页签。')

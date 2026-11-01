@@ -216,6 +216,12 @@ async function recordTouch($: EngineInterface, file_path: unknown): Promise<void
   }
 }
 
+/** 在文档页签装载一个文件并切过去（文件页签点击文件行的入口） */
+async function openInDoc($: EngineInterface, path: string): Promise<void> {
+  await loadDoc($, path)
+  await update($, activeTab, () => 'doc')
+}
+
 /** 装载文件树目录列表；dir 为 null 表示会话工作目录根。读失败置空（面板内提示可重读）。 */
 async function loadTree($: EngineInterface, dir: string | null): Promise<void> {
   let entries: FsEntryLike[] = []
@@ -614,12 +620,11 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
         {rows.map(row => {
           const mark = row.state === null ? null : STATE_MARK[row.state]
           return (
-            <Text key={row.path} wrap="truncate-middle">
-              <Text color={row.touched ? TONE.accent : undefined} dimColor={!row.touched}>{row.touched ? MARK.run : MARK.idle}</Text>
-              <Text> {row.path}</Text>
+            <Button key={`file-open-${row.path}`} plain wrap="truncate-middle" onPress={() => { void openInDoc($, row.path) }}>
+              {`${row.touched ? MARK.run : MARK.idle} ${row.path}`}
               {mark !== null && <Text color={mark.color} dimColor={mark.dim === true}> · {mark.label}</Text>}
               {scopeSet.has(row.path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
-            </Text>
+            </Button>
           )
         })}
       </Box>
@@ -645,19 +650,29 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
         {tree?.loaded && sortEntries(tree.entries).map(entry => {
           const path = dir === null ? entry.name : `${dir}/${entry.name}`
           const mark = entry.kind === 'dir' ? null : gitMark(path)
+          const pinned = entry.kind !== 'dir' && scopeSet.has(path.toLowerCase())
+          // 目录行保持纯文本（进目录走上方 Select），文件行可点击跳到文档页签
+          if (entry.kind === 'dir') {
+            return (
+              <Text key={entry.name} wrap="truncate-middle">
+                {`${entry.name}/`}
+                {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
+              </Text>
+            )
+          }
           return (
-            <Text key={entry.name} wrap="truncate-middle">
-              {entry.kind === 'dir' ? `${entry.name}/` : entry.name}
+            <Button key={`file-open-${path}`} plain wrap="truncate-middle" onPress={() => { void openInDoc($, path) }}>
+              {entry.name}
               {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
-              {entry.kind !== 'dir' && scopeSet.has(path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
-            </Text>
+              {pinned && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
+            </Button>
           )
         })}
       </Box>
       <Box>
         <Button key="tree-reload" hotkey="r" plain onPress={() => { void loadTree($, dir) }}>重读</Button>
       </Box>
-      <Text dimColor wrap="truncate-end">/deck 关闭 · ● 本会话改动 ○ 其他改动 · r 重读目录</Text>
+      <Text dimColor wrap="truncate-end">/deck 关闭 · 点击文件跳到文档页签 · ● 本会话 ○ 其他 · r 重读目录</Text>
     </Box>
   )
 }
@@ -962,7 +977,7 @@ export const register: Register = (on, options) => {
     const { Box, Button } = $.ui.resolve(e)
     const active = await read($, activeTab)
     const tabsRow = (
-      <Box>
+      <Box gap={2}>
         <Button key="tab-flow" hotkey="1" plain dimColor={active !== 'flow'} onPress={() => { void update($, activeTab, () => 'flow') }}>工作流</Button>
         <Button key="tab-files" hotkey="2" plain dimColor={active !== 'files'} onPress={() => { void update($, activeTab, () => 'files') }}>文件</Button>
         <Button key="tab-doc" hotkey="3" plain dimColor={active !== 'doc'} onPress={() => { void update($, activeTab, () => 'doc') }}>文档</Button>
