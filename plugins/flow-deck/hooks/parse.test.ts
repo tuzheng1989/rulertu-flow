@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import {
   bannerPlan,
+  collectChanges,
   progressBar,
   phaseProgress,
   pipelineLinks,
@@ -98,6 +99,31 @@ describe('parse', () => {
     ]
     expect(sortEntries(entries).map(one => one.name)).toEqual(['docs', 'src', 'a.ts', 'readme.md'])
     expect(entries.map(one => one.name)).toEqual(['readme.md', 'src', 'a.ts', 'docs'])
+  })
+
+  test('统一改动清单：git 并集会话记录，会话组在前、冲突优先、路径排序', () => {
+    const git = buildGitStatus(parsePorcelain([
+      '## main...origin/main [ahead 1]',
+      ' M hooks/a.ts',
+      'M  hooks/b.ts',
+      '?? plans/new.md',
+      'UU plans/x.md',
+    ].join('\n')), { added: 0, removed: 0 }, { added: 0, removed: 0 }, 0)
+    const rows = collectChanges(git, [{ path: 'hooks/a.ts' }, { path: 'docs/only-session.md' }])
+    expect(rows.map(row => `${row.touched ? '●' : '○'} ${row.path} ${row.state}`)).toEqual([
+      '● docs/only-session.md null',
+      '● hooks/a.ts unstaged',
+      '○ plans/x.md conflict',
+      '○ hooks/b.ts staged',
+      '○ plans/new.md untracked',
+    ])
+  })
+
+  test('统一改动清单：git 缺失退化为会话清单，路径大小写折叠去重', () => {
+    expect(collectChanges(null, [{ path: 'A.ts' }, { path: 'a.ts' }])).toEqual([
+      { path: 'A.ts', touched: true, state: null },
+    ])
+    expect(collectChanges(null, [])).toEqual([])
   })
 
   test('phaseProgress 映射五阶段序号，未知阶段无序号', () => {

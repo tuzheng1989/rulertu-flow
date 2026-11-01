@@ -63,6 +63,53 @@ export function sortEntries(entries: readonly FsEntryLike[]): FsEntryLike[] {
     a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1)
 }
 
+/** 统一改动清单的一行：touched 为本会话 agent 改动，state 为 git 状态（无则 null） */
+export type ChangeState = 'conflict' | 'staged' | 'unstaged' | 'untracked'
+
+export type ChangeRow = {
+  path: string
+  touched: boolean
+  state: ChangeState | null
+}
+
+/** 同一路径多 git 状态时取行动意义更靠前的（冲突 > 未暂存 > 暂存 > 未跟踪） */
+const STATE_RANK: Record<ChangeState, number> = { conflict: 0, unstaged: 1, staged: 2, untracked: 3 }
+
+/** 统一改动清单：git 四组文件 ∪ 本会话记录，路径小写折叠去重（会话记录保留首见原样路径）。
+ *  git 为 null 时退化为会话清单（state 全 null）。排序：会话组在前、冲突优先、路径字典序。 */
+export function collectChanges(
+  git: GitStatus | null,
+  touched: readonly { path: string }[],
+): ChangeRow[] {
+  const byKey = new Map<string, ChangeRow>()
+  const addGit = (files: readonly GitFileState[], state: ChangeState) => {
+    for (const file of files) {
+      const key = file.path.toLowerCase()
+      const existing = byKey.get(key)
+      if (existing === undefined || existing.state === null ||
+          STATE_RANK[state] < STATE_RANK[existing.state]) {
+        byKey.set(key, { path: existing?.path ?? file.path, touched: existing?.touched ?? false, state })
+      }
+    }
+  }
+  if (git !== null) {
+    addGit(git.conflicts, 'conflict')
+    addGit(git.staged, 'staged')
+    addGit(git.unstaged, 'unstaged')
+    addGit(git.untracked, 'untracked')
+  }
+  for (const one of touched) {
+    const key = one.path.toLowerCase()
+    const existing = byKey.get(key)
+    if (existing === undefined) byKey.set(key, { path: one.path, touched: true, state: null })
+    else byKey.set(key, { ...existing, touched: true })
+  }
+  return [...byKey.values()].sort((a, b) =>
+    a.touched !== b.touched ? (a.touched ? -1 : 1)
+      : (a.state === 'conflict') !== (b.state === 'conflict') ? (a.state === 'conflict' ? -1 : 1)
+        : a.path.localeCompare(b.path))
+}
+
 /** 五阶段序进度：index 从 1 计（完成比例 index/total）；未知阶段无序号（total 0，渲染退化为纯文字） */
 export type PhaseProgress = {
   current: string

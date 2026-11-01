@@ -177,6 +177,8 @@ declare module 'claude-code' {
       treeEntries: { entries: FsEntryLike[]; loaded: boolean } | null
       /** 本会话 Edit/Write 改动记录（去重保序，上限 50，最新在末尾） */
       touched: { path: string; at: number }[]
+      /** deck 面板当前页签；/deck 无参打开时保持上次所在页签 */
+      activeTab: 'flow' | 'files' | 'doc'
     }
   }
 }

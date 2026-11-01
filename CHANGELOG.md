@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- flow-deck 0.11.0：`/deck` 统一命令与面板页签化（方案 B5 批）——五个命令收敛为一个 `/deck`（无参开关并保持页签，`/deck flow|tree|doc [路径]` 直达页签），`/flow` `/git` `/flow-agents` `/doc` `/tree` 全部退役；单一面板顶部页签行（数字热键 1/2/3 切换，Esc 回输入框，打开即持焦）；`/git` 与 `/tree` 合并为文件页签——git 头行 + 统一改动清单（git 改动 ∪ 本会话记录，`●` 本会话 / `○` 其他 / `◆ 本批` 边界标注）+ 目录浏览，原四分区退役。工作流与文档页签内容不变。新增 `collectChanges` 合并排序纯函数（会话组在前、冲突优先、路径字典序，路径小写折叠去重）与 `activeTab` 状态契约。双 manifest 同步升版 0.11.0。
+
 - flow-deck 0.10.0：界面深度原生重构（方案 `plans/flow-deck/2026-11-01-native-ui-redesign.md`，四批）——全部界面颜色从 ANSI 字面量迁移到引擎主题语义 key（`claude`/`success`/`warning`/`error`/`diffAdded`/`diffRemoved`，随 `/theme` 与换肤 mod 自动适配），符号表一词一义化（`▍` 标题、`●` 进行中、`○` 非活动，killed 由 `■` 并入 `○`），面板标题改版（`FLOW /` → `▍工作流 ·` 等）。新增两件标志可视化：执行 DAG 流水线总览条（节点+连线按下游状态着色）与评审达标刻度条（十格条内固定 `▏` 8.5 达标线）；执行卡风险定级改反色 chip（accent 底）；/doc「发给 Claude」升 primary 按钮、节内容改引擎 Markdown 渲染（标题/列表/代码块与回复同源，双表面校验通过）、节标题去 `#` 前缀统一 `▍`；评审卡与子代理卡常态暗边框、悬停提亮（全屏终端渐进增强）。新增 `/tree` 文件树面板：本会话改动清单实时记录 Edit/Write（去重保序上限 50，warn 放行同样记录），叠加 git 状态标注与批次边界 `◆ 本批` 标注，目录 Select 导航按需读取无轮询。修复 0.9.0 遗留的 `doc`/`docSection` 状态契约缺失（validate 报错）。双 manifest 同步升版 0.10.0。
 
 

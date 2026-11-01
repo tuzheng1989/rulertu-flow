@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, MatchedHook, Register } from 'claude-code'
 
 import {
   DOC_SECTION_MAX_LINES,
   bannerPlan,
+  collectChanges,
   depStatuses,
   gitSummaryParts,
   guardDecision,
@@ -24,28 +25,26 @@ import {
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
 import { agentStatus, agentSummary, createAgentPoller } from './agents'
 import { MARK, TONE } from './ui'
+import type { ChangeState } from './parse'
 import type {
   BatchScope,
   ExecutionReport,
   FlowTask,
   FsEntryLike,
-  GitFileState,
   GitStatus,
   PlanReview,
 } from '../types'
 
-const PANE_ID = 'flow'
-const GIT_PANE_ID = 'flow-git'
-const DOC_PANE_ID = 'flow-doc'
-const DOC_TITLE = '文档浏览'
-const TREE_PANE_ID = 'flow-tree'
-const TREE_TITLE = '文件'
+/** ui.render Pane 站点的事件入参（渲染辅助函数的 e 类型） */
+type PaneArgs = Parameters<MatchedHook<'ui.render', { component: 'Pane' }>>[1]
+
+const DECK_PANE_ID = 'deck'
+const DECK_TITLE = 'Deck'
 /** 本会话改动记录上限；超出挤出最旧 */
 const TOUCHED_CAP = 50
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
-const MAX_GIT_FILES = 15
 const EXECUTION_STORE_KEY = 'lastExecution'
 /** 执行上报停滞阈值：超过该时长未续报视为疑似停滞 */
 const STALL_MS = 30 * 60_000
@@ -67,6 +66,8 @@ const stall = atom({ plugin: 'flow-deck', key: 'stall' } as const, null)
 const docFile = atom({ plugin: 'flow-deck', key: 'doc' } as const, null)
 /** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
 const docSection = atom({ plugin: 'flow-deck', key: 'docSection' } as const, 0)
+/** deck 面板当前页签；/deck 无参打开时保持上次所在页签 */
+const activeTab = atom({ plugin: 'flow-deck', key: 'activeTab' } as const, 'flow')
 /** 文件树面板当前浏览目录（相对会话工作目录）；null 表示根 */
 const treeDir = atom({ plugin: 'flow-deck', key: 'treeDir' } as const, null)
 /** 文件树面板最近一次目录列表；loaded 表示已取数（含空目录） */
@@ -224,7 +225,7 @@ async function runGit($: EngineInterface, args: readonly string[]): Promise<stri
 }
 
 /** 一个 git 文件行的显示文案；rename 显示 old → new */
-function gitFileLabel(file: GitFileState): string {
+function gitFileLabel(file: { path: string; oldPath?: string }): string {
   return file.oldPath === undefined ? file.path : `${file.oldPath} → ${file.path}`
 }
 
@@ -271,6 +272,361 @@ async function poll($: EngineInterface): Promise<void> {
   }
 }
 
+const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const task = await read($, currentTask)
+  const { plans: list, graph, report, scope } = await readTaskView($)
+  const progressMap: Record<string, string> = await read($, progress)
+  const snapshot = await read($, agents)
+  const crumbs = await read($, lastRun)
+  const stallMinutes = await read($, stall)
+  const wide = e.props.bodyColumns >= 44
+  const nodes = graph === null ? [] : depStatuses(graph, progressMap)
+  const links = pipelineLinks(nodes)
+  const done = nodes.filter(node => node.status === 'done').length
+  const passing = list.filter(plan => plan.passed)
+  // 无事不扰：达标方案折叠为一行，未达标排前并逐个展示
+  const activePlans = [...list].sort((a, b) => Number(a.passed) - Number(b.passed)).filter(plan => !plan.passed)
+  const names = new Map(snapshot.agents.map(agent => [agent.id, agent.name || agent.description || agent.id]))
+
+  const agentsSection = (
+    <Box flexDirection="column" gap={1}>
+      <Box>
+        <Text bold wrap="truncate-end">{MARK.title}子代理{snapshot.loaded ? ` · ${agentSummary(snapshot.agents)}` : ''}</Text>
+        <Button key="flow-refresh" hotkey="r" plain onPress={() => refreshAll?.()}>刷新</Button>
+      </Box>
+      {snapshot.error && <Text color={TONE.warn} wrap="truncate-end">刷新失败，自动重试；{snapshot.loaded ? '以下为上次快照，状态可能已过期。' : '暂未取得子代理状态。'}</Text>}
+      {!snapshot.loaded && !snapshot.error && <Text dimColor>正在读取当前会话的子代理…</Text>}
+      {snapshot.loaded && snapshot.agents.length === 0 && <Text dimColor>当前会话暂无子代理。</Text>}
+      {snapshot.agents.map(agent => {
+        const status = agentStatus(agent.status)
+        return (
+          <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
+            <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
+            <Text dimColor wrap="truncate-middle">{agent.type} · {agent.id}</Text>
+            {agent.description !== '' && <Text wrap="truncate-end">任务：{agent.description}</Text>}
+            {agent.parentId !== undefined && <Text dimColor wrap="truncate-middle">↳ 父代理：{names.get(agent.parentId) ?? agent.parentId}</Text>}
+            {agent.spawnedBy !== undefined && <Text dimColor wrap="truncate-end">来源插件：{agent.spawnedBy}</Text>}
+          </Box>
+        )
+      })}
+    </Box>
+  )
+
+  if (task === null) {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="column">
+          <Text>当前无方案迭代或实施任务。</Text>
+          <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
+          {crumbs !== null && <Text dimColor wrap="truncate-end">上次执行：{describeExecution(crumbs)}</Text>}
+        </Box>
+        {agentsSection}
+        <Text dimColor wrap="truncate-end">/deck 关闭 · 面板内按 r 刷新</Text>
+      </Box>
+    )
+  }
+
+  const phase = report === null ? null : phaseProgress(report.phase)
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Box flexDirection="column">
+        <Text bold color={TONE.accent}>{MARK.title}工作流 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
+        {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
+        {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
+      </Box>
+      {task.kind === 'iterate' && list.length === 0 && <Text dimColor>方案迭代进行中，等待评审结果落盘。</Text>}
+      {task.kind === 'implement' && report === null && <Text dimColor>实施任务已开始，等待阶段进度上报。</Text>}
+      {report !== null && phase !== null && (
+        <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={TONE.accent} paddingX={wide ? 1 : 0}>
+          <Text bold color={TONE.accent} wrap="truncate-end">{MARK.run} 当前执行 · {report.plan}</Text>
+          <Text wrap="truncate-end">
+            {report.batch}
+            {report.tLevel !== undefined && <Text backgroundColor={TONE.accent} color="inverseText"> {report.tLevel} </Text>}
+            {' '}· {report.phase}
+          </Text>
+          {phase.total > 0 && (
+            <Text wrap="truncate-end">
+              <Text color={TONE.ok}>{progressBar(phase.index, phase.total)}</Text>
+              <Text> </Text>
+              <Text color={phase.index >= phase.total ? TONE.ok : TONE.warn} bold>{phase.current} · {phase.index}/{phase.total}</Text>
+            </Text>
+          )}
+          {phase.total === 0 && <Text dimColor wrap="truncate-end">{phase.current}</Text>}
+          {stallMinutes !== null && <Text color={TONE.warn} wrap="truncate-end">{MARK.alert} 疑似停滞 · 距上次上报 {stallMinutes} 分钟</Text>}
+          {report.testsTotal !== undefined && (
+            <Text color={report.testsTotal > 0 && report.testsPassed === report.testsTotal ? TONE.ok : TONE.warn} wrap="truncate-end">
+              验证 {progressBar(report.testsPassed ?? 0, report.testsTotal)} {report.testsPassed ?? 0}/{report.testsTotal}
+            </Text>
+          )}
+          {report.evidenceDir !== undefined && <Text dimColor wrap="truncate-middle">证据 {report.evidenceDir}</Text>}
+        </Box>
+      )}
+      {scope !== null && <Text dimColor wrap="truncate-end">{MARK.info} 边界 · {scope.plan} / {scope.batch} · {scope.files.length} 文件 · {guardMode}</Text>}
+      {activePlans.length > 0 && (
+        <Text bold>{MARK.title}plan-iterate 评审 · 8.5 分且无 P0/P1 达标</Text>
+      )}
+      {activePlans.map(plan => {
+        const latest = plan.rounds.at(-1) ?? null
+        const previous = plan.rounds.at(-2) ?? null
+        const delta = latest === null || previous === null ? null : latest.score - previous.score
+        const tone = plan.passed ? TONE.ok : latest !== null && latest.p0 > 0 ? TONE.bad : TONE.warn
+        return (
+          <Box key={plan.dir} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={tone} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
+            <Text bold color={tone} wrap="truncate-end">{plan.passed ? MARK.done : MARK.run} {plan.name}</Text>
+            <Text wrap="truncate-end">
+              <Text color={tone}>{latest === null ? '等待结果' : `${latest.score.toFixed(1)} / 10`}</Text>
+              <Text dimColor> · R{plan.round}/5 · {plan.passed ? '已达标' : '待达标'}</Text>
+            </Text>
+            {latest !== null && (
+              <Text wrap="truncate-end">
+                <Text color={tone}>{scoreGauge(latest.score)}</Text>
+                <Text dimColor> {sparkline(plan.rounds.slice(-12).map(round => round.score))}</Text>
+                {delta !== null && <Text color={delta > 0 ? TONE.ok : delta < 0 ? TONE.bad : undefined}> {delta > 0 ? '↑' : delta < 0 ? '↓' : '='}{Math.abs(delta).toFixed(1)}</Text>}
+              </Text>
+            )}
+            <Text wrap="truncate-end">
+              {latest === null && <Text dimColor>暂无已落盘的评审结果</Text>}
+              {latest !== null && latest.p0 > 0 && <Text color={TONE.bad}>P0×{latest.p0} </Text>}
+              {latest !== null && latest.p1 > 0 && <Text color={TONE.warn}>P1×{latest.p1} </Text>}
+              {latest !== null && latest.p2 > 0 && <Text dimColor>P2×{latest.p2}</Text>}
+              {latest !== null && latest.p0 === 0 && latest.p1 === 0 && latest.p2 === 0 && (
+                <Text dimColor>无问题</Text>
+              )}
+            </Text>
+          </Box>
+        )
+      })}
+      {passing.length > 0 && <Text color={TONE.ok} wrap="truncate-end">{MARK.done} 已达标 {passing.length} 个方案（已折叠）</Text>}
+      {graph !== null && (
+        <Box flexDirection="column" gap={1}>
+          <Text bold wrap="truncate-end">{MARK.title}执行 DAG（{graph.plan}）</Text>
+          <Text color={TONE.accent} wrap="truncate-end">
+            {nodes.flatMap((node, index) => {
+              const glyph = (
+                <Text key={node.batch}
+                  color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined}
+                  dimColor={node.status === 'pending'}>
+                  {node.status === 'done' ? MARK.nodeDone : node.status === 'active' ? MARK.nodeRun : MARK.nodeWait}
+                </Text>
+              )
+              if (index === nodes.length - 1) return [glyph]
+              const linkStatus = links[index]
+              const link = (
+                <Text key={`${node.batch}-link`}
+                  color={linkStatus === 'done' ? TONE.ok : linkStatus === 'active' ? TONE.warn : undefined}
+                  dimColor={linkStatus === 'pending'}>
+                  {linkStatus === 'pending' ? '╌' : '━'}
+                </Text>
+              )
+              return [glyph, link]
+            })}
+            {' '}{done}/{nodes.length} 收口 · {nodes.filter(node => node.status === 'active').length} 进行中
+          </Text>
+          {nodes.map((node, index) => (
+            <Box key={node.batch} flexDirection="column">
+              <Text dimColor={node.status === 'pending'} color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined} wrap="truncate-end">
+                {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
+              </Text>
+              <Text dimColor wrap="truncate-end">{index === nodes.length - 1 ? '└' : '│'} {progressMap[`${graph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {agentsSection}
+      <Text dimColor wrap="truncate-end">/deck 关闭 · 面板内按 r 刷新</Text>
+    </Box>
+  )
+}
+
+const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
+  const { Box, Text, Button, Select, Markdown } = $.ui.resolve(e)
+  const doc = await read($, docFile)
+  const wide = e.props.bodyColumns >= 44
+  if (doc === null) {
+    return (
+      <Box flexDirection="column">
+        <Text>未打开文档。</Text>
+        <Text dimColor>用法：/doc &lt;相对路径&gt; 打开要浏览的文档。</Text>
+      </Box>
+    )
+  }
+
+  const sendEdit = async () => {
+    const wanted = await read($, docSection)
+    const sections = doc.text === null ? [] : parseSections(doc.text)
+    const current = sections[Math.min(Math.max(wanted, 0), sections.length - 1)]
+    if (current === undefined) {
+      $.ui.toast('文档为空，没有可发送的节。')
+      return
+    }
+    const draft = `请修改 ${doc.path} 的「${current.title}」一节（第 ${current.start}–${current.end} 行）：`
+    try {
+      const box = await $.prompt.read()
+      await $.prompt.fill({ text: draft, mode: box.text.trim() === '' ? 'replace' : 'append' })
+    } catch (error) {
+      $.ui.log(`flow-deck 修改请求填入失败：${String(error)}`, { to: 'debug' })
+    }
+  }
+  const reload = () => {
+    void loadDoc($, doc.path).catch(error => {
+      $.ui.log(`flow-deck 文档重读失败：${String(error)}`, { to: 'debug' })
+    })
+  }
+  if (doc.text === null) {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold color={TONE.bad} wrap="truncate-end">{MARK.title}文档 · {doc.path}</Text>
+        <Text color={TONE.bad} wrap="truncate-end">读取失败：{doc.error ?? '未知原因'}</Text>
+        <Box>
+          <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
+        </Box>
+      </Box>
+    )
+  }
+  const sections = parseSections(doc.text)
+  if (sections.length === 0) {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · 空文档</Text>
+        <Text dimColor>文档没有内容：/doc &lt;另一路径&gt; 换一篇，或按 r 重读。</Text>
+        <Box>
+          <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
+        </Box>
+      </Box>
+    )
+  }
+  const wanted = await read($, docSection)
+  const index = Math.min(Math.max(wanted, 0), sections.length - 1)
+  const current = sections[index]
+  const allLines = doc.text.split('\n')
+  const body = allLines.slice(current.start - 1, current.end)
+  const truncated = body.length > DOC_SECTION_MAX_LINES
+  const shown = truncated ? body.slice(0, DOC_SECTION_MAX_LINES) : body
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
+      <Select
+        key="doc-section"
+        label="节"
+        options={sections.map((section, i) => ({ value: String(i), text: `${section.title}` }))}
+        value={String(index)}
+        onSelect={value => { void update($, docSection, () => Number(value)) }}
+      />
+      <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} paddingX={wide ? 1 : 0}>
+        <Text bold wrap="truncate-end">
+          {MARK.title}{current.title} · 第 {current.start}–{current.end} 行
+          {truncated ? ` · 截断显示前 ${DOC_SECTION_MAX_LINES} 行` : ''}
+        </Text>
+        <Markdown key="doc-body" text={shown.join('\n')} />
+      </Box>
+      <Box>
+        <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>
+        <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
+      </Box>
+      <Text dimColor wrap="truncate-end">/deck doc &lt;路径&gt; 换一篇 · e 把修改请求填入输入框（补意图后回车）</Text>
+    </Box>
+  )
+}
+
+const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
+  const { Box, Text, Button, Select } = $.ui.resolve(e)
+  const status: GitStatus | null = await read($, gitStatus)
+  const touchedList = await read($, touched)
+  const scope = await read($, batchScope)
+  const dir = await read($, treeDir)
+  const tree = await read($, treeEntries)
+  const scopeSet = new Set((scope?.files ?? []).map(file => normalizePath(file, sessionCwd).toLowerCase()))
+  const rows = collectChanges(status, touchedList)
+  const STATE_MARK: Record<ChangeState, { label: string; color?: string; dim?: boolean }> = {
+    conflict: { label: '冲突', color: TONE.bad },
+    staged: { label: '暂存', color: TONE.ok },
+    unstaged: { label: '改', color: TONE.warn },
+    untracked: { label: '新', dim: true },
+  }
+  const gitMark = (path: string): { label: string; color?: string } | null => {
+    if (status === null) return null
+    if (status.conflicts.some(file => file.path === path)) return { label: '冲突', color: TONE.bad }
+    if (status.staged.some(file => file.path === path)) return { label: '暂存', color: TONE.ok }
+    if (status.unstaged.some(file => file.path === path)) return { label: '改', color: TONE.warn }
+    if (status.untracked.some(file => file.path === path)) return { label: '新' }
+    return null
+  }
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件 · {dir === null ? '工作目录' : dir}</Text>
+      {status === null && <Text dimColor>当前目录不是 git 仓库，或状态尚未取到；自动重试中。</Text>}
+      {status !== null && (
+        <Box flexDirection="column">
+          <Text wrap="truncate-middle">
+            <Text bold>{status.branch}</Text>
+            {status.upstream !== null && <Text dimColor> → {status.upstream}</Text>}
+            {status.ahead > 0 && <Text color={TONE.ok}> ↑{status.ahead}</Text>}
+            {status.behind > 0 && <Text color={TONE.warn}> ↓{status.behind}</Text>}
+            {(status.added > 0 || status.removed > 0) && (
+              <Text>
+                {status.added > 0 && <Text color={TONE.added}> +{status.added}</Text>}
+                {status.removed > 0 && <Text color={TONE.removed}> −{status.removed}</Text>}
+              </Text>
+            )}
+          </Text>
+          {isGitQuiet(status) && <Text color={TONE.ok}>{MARK.done} 工作区干净{status.upstream === null ? ' · 未设置上游' : '，与上游同步'}</Text>}
+        </Box>
+      )}
+      <Box flexDirection="column">
+        <Text bold wrap="truncate-end">{MARK.title}改动{rows.length > 0 ? ` · ${rows.length}` : ''}</Text>
+        {rows.length === 0 && <Text dimColor>仓库无改动，本会话也没有文件记录。</Text>}
+        {rows.map(row => {
+          const mark = row.state === null ? null : STATE_MARK[row.state]
+          return (
+            <Text key={row.path} wrap="truncate-middle">
+              <Text color={row.touched ? TONE.accent : undefined} dimColor={!row.touched}>{row.touched ? MARK.run : MARK.idle}</Text>
+              <Text> {row.path}</Text>
+              {mark !== null && <Text color={mark.color} dimColor={mark.dim === true}> · {mark.label}</Text>}
+              {scopeSet.has(row.path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
+            </Text>
+          )
+        })}
+      </Box>
+      <Box flexDirection="column">
+        <Text bold wrap="truncate-end">{MARK.title}目录</Text>
+        {!tree?.loaded && <Text dimColor>正在读取目录…</Text>}
+        {tree?.loaded && (
+          <Select
+            key="tree-dir"
+            label="进入子目录"
+            options={[
+              { value: '', text: dir === null ? '工作目录（当前）' : '… 工作目录' },
+              ...sortEntries(tree.entries).filter(one => one.kind === 'dir').map(one => ({
+                value: dir === null ? one.name : `${dir}/${one.name}`,
+                text: `${one.name}/`,
+              })),
+            ]}
+            value=""
+            onSelect={value => { void loadTree($, value === '' ? null : value) }}
+          />
+        )}
+        {tree?.loaded && tree.entries.length === 0 && <Text dimColor>（空目录）读取失败或无内容，按 r 重读。</Text>}
+        {tree?.loaded && sortEntries(tree.entries).map(entry => {
+          const path = dir === null ? entry.name : `${dir}/${entry.name}`
+          const mark = entry.kind === 'dir' ? null : gitMark(path)
+          return (
+            <Text key={entry.name} wrap="truncate-middle">
+              {entry.kind === 'dir' ? `${entry.name}/` : entry.name}
+              {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
+              {entry.kind !== 'dir' && scopeSet.has(path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
+            </Text>
+          )
+        })}
+      </Box>
+      <Box>
+        <Button key="tree-reload" hotkey="r" plain onPress={() => { void loadTree($, dir) }}>重读</Button>
+      </Box>
+      <Text dimColor wrap="truncate-end">/deck 关闭 · ● 本会话改动 ○ 其他改动 · r 重读目录</Text>
+    </Box>
+  )
+}
+
 export const register: Register = (on, options) => {
   guardMode = options.guardMode === 'deny' ? 'deny' : 'warn'
 
@@ -299,11 +655,7 @@ export const register: Register = (on, options) => {
       list: path => path === undefined ? $.fs.list() : $.fs.list(path),
       read: path => $.fs.read(path),
     })
-    await $.command.register({ name: 'flow', description: '开关当前方案迭代或实施任务面板（含子代理运行状态）' })
-    await $.command.register({ name: 'git', description: '打开 git 仓库状态面板' })
-    await $.command.register({ name: 'flow-agents', description: '打开工作流面板（子代理状态在面板内，已开时不再重复打开）' })
-    await $.command.register({ name: 'doc', description: '开关文档浏览面板：/doc <相对路径> 打开文档，选节后可把修改请求填入输入框' })
-    await $.command.register({ name: 'tree', description: '开关文件树面板：本会话改动清单与目录浏览，批次边界内文件带标注' })
+    await $.command.register({ name: 'deck', description: '开关 flow-deck 面板：/deck 直开，/deck flow|tree|doc [路径] 直达页签' })
     await $.tool.register({
       name: 'flow_task',
       description: '声明当前工作流任务：iterate 方案迭代，implement 方案实施，idle 结束、暂停或取消。历史评审和路线图不会自动激活面板。',
@@ -413,7 +765,7 @@ export const register: Register = (on, options) => {
     refreshAgents = refreshAgentList
     const refreshAgentPane = async () => {
       try {
-        if ((await $.ui.panes()).some(pane => pane.id === PANE_ID)) await refreshAgentList()
+        if ((await $.ui.panes()).some(pane => pane.id === DECK_PANE_ID)) await refreshAgentList()
       } catch (error) {
         $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
       }
@@ -432,69 +784,39 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'flow' }, async $ => {
-    // toggle：面板已开则关闭（引擎原生关闭键同样可用，这里补键盘流的对称入口）
-    const isUp = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
-    if (isUp) {
-      await $.ui.close({ id: PANE_ID })
-      return { text: '已关闭工作流面板。' }
+  on('command.run', { command: 'deck' }, async ($, e) => {
+    const arg = e.args.trim()
+    const isOpen = (await $.ui.panes()).some(pane => pane.id === DECK_PANE_ID)
+    if (arg === '') {
+      if (isOpen) {
+        await $.ui.close({ id: DECK_PANE_ID })
+        return { text: '已关闭 flow-deck 面板。' }
+      }
+      await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
+      void refreshAgents?.().catch(error => {
+        $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
+      })
+      return { text: '已打开面板（1 工作流 · 2 文件 · 3 文档，Esc 回输入框）。' }
     }
-    await $.ui.open({ id: PANE_ID, title: 'Flow 当前任务' })
-    void refreshAgents?.().catch(error => {
-      $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
-    })
-    return { text: '已打开工作流面板（含子代理状态）。' }
-  })
-
-  on('command.run', { command: 'git' }, async $ => {
-    const isUp = (await $.ui.panes()).some(pane => pane.id === GIT_PANE_ID)
-    if (isUp) {
-      await $.ui.close({ id: GIT_PANE_ID })
-      return { text: '已关闭 git 仓库状态面板。' }
+    if (arg === 'flow' || arg === 'tree') {
+      await update($, activeTab, () => arg === 'tree' ? 'files' : 'flow')
+      if (arg === 'tree') await loadTree($, null)
+      if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
+      return { text: arg === 'tree' ? '已切到文件页签。' : '已切到工作流页签。' }
     }
-    void refreshGit?.().catch(error => {
-      $.ui.log(`flow-deck git 刷新失败：${String(error)}`, { to: 'debug' })
-    })
-    await $.ui.open({ id: GIT_PANE_ID, title: 'Git 仓库状态' })
-    return { text: '已打开 git 仓库状态面板。' }
-  })
-
-  on('command.run', { command: 'flow-agents' }, async $ => {
-    // 幂等打开：子代理状态已并入工作流面板，重复打开不误关（toggle 由 /flow 负责）
-    const isUp = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
-    if (isUp) return { text: '工作流面板已打开，子代理状态在面板内。' }
-    await $.ui.open({ id: PANE_ID, title: 'Flow 当前任务' })
-    void refreshAgents?.().catch(error => {
-      $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
-    })
-    return { text: '已打开工作流面板（含子代理状态）。' }
-  })
-
-  on('command.run', { command: 'doc' }, async ($, e) => {
-    // toggle 与装载一体：带路径打开并读文件，无路径时已开则关、未开给用法
-    const target = e.args.trim()
-    const isUp = (await $.ui.panes()).some(pane => pane.id === DOC_PANE_ID)
-    if (target !== '') {
-      await loadDoc($, target)
-      if (!isUp) await $.ui.open({ id: DOC_PANE_ID, title: DOC_TITLE })
-      return { text: `文档面板已打开：${target}` }
+    if (arg === 'doc' || arg.startsWith('doc ')) {
+      const path = arg.slice(3).trim()
+      if (path !== '') {
+        await loadDoc($, path)
+        await update($, activeTab, () => 'doc')
+        if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
+        return { text: `文档已装载：${path}` }
+      }
+      await update($, activeTab, () => 'doc')
+      if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
+      return { text: '已切到文档页签；装载文档用 /deck doc <相对路径>。' }
     }
-    if (isUp) {
-      await $.ui.close({ id: DOC_PANE_ID })
-      return { text: '已关闭文档面板。' }
-    }
-    return { text: '用法：/doc <相对路径> 打开文档浏览面板。' }
-  })
-
-  on('command.run', { command: 'tree' }, async $ => {
-    const isUp = (await $.ui.panes()).some(pane => pane.id === TREE_PANE_ID)
-    if (isUp) {
-      await $.ui.close({ id: TREE_PANE_ID })
-      return { text: '已关闭文件树面板。' }
-    }
-    await loadTree($, null)
-    await $.ui.open({ id: TREE_PANE_ID, title: TREE_TITLE })
-    return { text: '已打开文件树面板。' }
+    return { text: '用法：/deck [flow|tree|doc [相对路径]]' }
   })
 
   on('tool.call', { tool: 'mcp__flow-deck__flow_task' }, async ($, e) => {
@@ -593,425 +915,23 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const task = await read($, currentTask)
-    const { plans: list, graph, report, scope } = await readTaskView($)
-    const progressMap: Record<string, string> = await read($, progress)
-    const snapshot = await read($, agents)
-    const crumbs = await read($, lastRun)
-    const stallMinutes = await read($, stall)
-    const wide = e.props.bodyColumns >= 44
-    const nodes = graph === null ? [] : depStatuses(graph, progressMap)
-    const links = pipelineLinks(nodes)
-    const done = nodes.filter(node => node.status === 'done').length
-    const passing = list.filter(plan => plan.passed)
-    // 无事不扰：达标方案折叠为一行，未达标排前并逐个展示
-    const activePlans = [...list].sort((a, b) => Number(a.passed) - Number(b.passed)).filter(plan => !plan.passed)
-    const names = new Map(snapshot.agents.map(agent => [agent.id, agent.name || agent.description || agent.id]))
-
-    const agentsSection = (
-      <Box flexDirection="column" gap={1}>
-        <Box>
-          <Text bold wrap="truncate-end">{MARK.title}子代理{snapshot.loaded ? ` · ${agentSummary(snapshot.agents)}` : ''}</Text>
-          <Button key="flow-refresh" hotkey="r" plain onPress={() => refreshAll?.()}>刷新</Button>
-        </Box>
-        {snapshot.error && <Text color={TONE.warn} wrap="truncate-end">刷新失败，自动重试；{snapshot.loaded ? '以下为上次快照，状态可能已过期。' : '暂未取得子代理状态。'}</Text>}
-        {!snapshot.loaded && !snapshot.error && <Text dimColor>正在读取当前会话的子代理…</Text>}
-        {snapshot.loaded && snapshot.agents.length === 0 && <Text dimColor>当前会话暂无子代理。</Text>}
-        {snapshot.agents.map(agent => {
-          const status = agentStatus(agent.status)
-          return (
-            <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
-              <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
-              <Text dimColor wrap="truncate-middle">{agent.type} · {agent.id}</Text>
-              {agent.description !== '' && <Text wrap="truncate-end">任务：{agent.description}</Text>}
-              {agent.parentId !== undefined && <Text dimColor wrap="truncate-middle">↳ 父代理：{names.get(agent.parentId) ?? agent.parentId}</Text>}
-              {agent.spawnedBy !== undefined && <Text dimColor wrap="truncate-end">来源插件：{agent.spawnedBy}</Text>}
-            </Box>
-          )
-        })}
+  on('ui.render', { component: 'Pane', requestId: DECK_PANE_ID }, async ($, e) => {
+    const { Box, Button } = $.ui.resolve(e)
+    const active = await read($, activeTab)
+    const tabsRow = (
+      <Box>
+        <Button key="tab-flow" hotkey="1" plain dimColor={active !== 'flow'} onPress={() => { void update($, activeTab, () => 'flow') }}>工作流</Button>
+        <Button key="tab-files" hotkey="2" plain dimColor={active !== 'files'} onPress={() => { void update($, activeTab, () => 'files') }}>文件</Button>
+        <Button key="tab-doc" hotkey="3" plain dimColor={active !== 'doc'} onPress={() => { void update($, activeTab, () => 'doc') }}>文档</Button>
       </Box>
     )
-
-    if (task === null) {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Box flexDirection="column">
-            <Text>当前无方案迭代或实施任务。</Text>
-            <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
-            {crumbs !== null && <Text dimColor wrap="truncate-end">上次执行：{describeExecution(crumbs)}</Text>}
-          </Box>
-          {agentsSection}
-          <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · 面板内按 r 刷新</Text>
-        </Box>
-      )
-    }
-
-    const phase = report === null ? null : phaseProgress(report.phase)
+    const body = active === 'files' ? await renderFilesBody($, e)
+      : active === 'doc' ? await renderDocBody($, e)
+        : await renderFlowBody($, e)
     return (
       <Box flexDirection="column" gap={1}>
-        <Box flexDirection="column">
-          <Text bold color={TONE.accent}>{MARK.title}工作流 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
-          {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
-          {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
-        </Box>
-        {task.kind === 'iterate' && list.length === 0 && <Text dimColor>方案迭代进行中，等待评审结果落盘。</Text>}
-        {task.kind === 'implement' && report === null && <Text dimColor>实施任务已开始，等待阶段进度上报。</Text>}
-        {report !== null && phase !== null && (
-          <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={TONE.accent} paddingX={wide ? 1 : 0}>
-            <Text bold color={TONE.accent} wrap="truncate-end">{MARK.run} 当前执行 · {report.plan}</Text>
-            <Text wrap="truncate-end">
-              {report.batch}
-              {report.tLevel !== undefined && <Text backgroundColor={TONE.accent} color="inverseText"> {report.tLevel} </Text>}
-              {' '}· {report.phase}
-            </Text>
-            {phase.total > 0 && (
-              <Text wrap="truncate-end">
-                <Text color={TONE.ok}>{progressBar(phase.index, phase.total)}</Text>
-                <Text> </Text>
-                <Text color={phase.index >= phase.total ? TONE.ok : TONE.warn} bold>{phase.current} · {phase.index}/{phase.total}</Text>
-              </Text>
-            )}
-            {phase.total === 0 && <Text dimColor wrap="truncate-end">{phase.current}</Text>}
-            {stallMinutes !== null && <Text color={TONE.warn} wrap="truncate-end">{MARK.alert} 疑似停滞 · 距上次上报 {stallMinutes} 分钟</Text>}
-            {report.testsTotal !== undefined && (
-              <Text color={report.testsTotal > 0 && report.testsPassed === report.testsTotal ? TONE.ok : TONE.warn} wrap="truncate-end">
-                验证 {progressBar(report.testsPassed ?? 0, report.testsTotal)} {report.testsPassed ?? 0}/{report.testsTotal}
-              </Text>
-            )}
-            {report.evidenceDir !== undefined && <Text dimColor wrap="truncate-middle">证据 {report.evidenceDir}</Text>}
-          </Box>
-        )}
-        {scope !== null && <Text dimColor wrap="truncate-end">{MARK.info} 边界 · {scope.plan} / {scope.batch} · {scope.files.length} 文件 · {guardMode}</Text>}
-        {activePlans.length > 0 && (
-          <Text bold>{MARK.title}plan-iterate 评审 · 8.5 分且无 P0/P1 达标</Text>
-        )}
-        {activePlans.map(plan => {
-          const latest = plan.rounds.at(-1) ?? null
-          const previous = plan.rounds.at(-2) ?? null
-          const delta = latest === null || previous === null ? null : latest.score - previous.score
-          const tone = plan.passed ? TONE.ok : latest !== null && latest.p0 > 0 ? TONE.bad : TONE.warn
-          return (
-            <Box key={plan.dir} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={tone} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
-              <Text bold color={tone} wrap="truncate-end">{plan.passed ? MARK.done : MARK.run} {plan.name}</Text>
-              <Text wrap="truncate-end">
-                <Text color={tone}>{latest === null ? '等待结果' : `${latest.score.toFixed(1)} / 10`}</Text>
-                <Text dimColor> · R{plan.round}/5 · {plan.passed ? '已达标' : '待达标'}</Text>
-              </Text>
-              {latest !== null && (
-                <Text wrap="truncate-end">
-                  <Text color={tone}>{scoreGauge(latest.score)}</Text>
-                  <Text dimColor> {sparkline(plan.rounds.slice(-12).map(round => round.score))}</Text>
-                  {delta !== null && <Text color={delta > 0 ? TONE.ok : delta < 0 ? TONE.bad : undefined}> {delta > 0 ? '↑' : delta < 0 ? '↓' : '='}{Math.abs(delta).toFixed(1)}</Text>}
-                </Text>
-              )}
-              <Text wrap="truncate-end">
-                {latest === null && <Text dimColor>暂无已落盘的评审结果</Text>}
-                {latest !== null && latest.p0 > 0 && <Text color={TONE.bad}>P0×{latest.p0} </Text>}
-                {latest !== null && latest.p1 > 0 && <Text color={TONE.warn}>P1×{latest.p1} </Text>}
-                {latest !== null && latest.p2 > 0 && <Text dimColor>P2×{latest.p2}</Text>}
-                {latest !== null && latest.p0 === 0 && latest.p1 === 0 && latest.p2 === 0 && (
-                  <Text dimColor>无问题</Text>
-                )}
-              </Text>
-            </Box>
-          )
-        })}
-        {passing.length > 0 && <Text color={TONE.ok} wrap="truncate-end">{MARK.done} 已达标 {passing.length} 个方案（已折叠）</Text>}
-        {graph !== null && (
-          <Box flexDirection="column" gap={1}>
-            <Text bold wrap="truncate-end">{MARK.title}执行 DAG（{graph.plan}）</Text>
-            <Text color={TONE.accent} wrap="truncate-end">
-              {nodes.flatMap((node, index) => {
-                const glyph = (
-                  <Text key={node.batch}
-                    color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined}
-                    dimColor={node.status === 'pending'}>
-                    {node.status === 'done' ? MARK.nodeDone : node.status === 'active' ? MARK.nodeRun : MARK.nodeWait}
-                  </Text>
-                )
-                if (index === nodes.length - 1) return [glyph]
-                const linkStatus = links[index]
-                const link = (
-                  <Text key={`${node.batch}-link`}
-                    color={linkStatus === 'done' ? TONE.ok : linkStatus === 'active' ? TONE.warn : undefined}
-                    dimColor={linkStatus === 'pending'}>
-                    {linkStatus === 'pending' ? '╌' : '━'}
-                  </Text>
-                )
-                return [glyph, link]
-              })}
-              {' '}{done}/{nodes.length} 收口 · {nodes.filter(node => node.status === 'active').length} 进行中
-            </Text>
-            {nodes.map((node, index) => (
-              <Box key={node.batch} flexDirection="column">
-                <Text dimColor={node.status === 'pending'} color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined} wrap="truncate-end">
-                  {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
-                </Text>
-                <Text dimColor wrap="truncate-end">{index === nodes.length - 1 ? '└' : '│'} {progressMap[`${graph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
-              </Box>
-            ))}
-          </Box>
-        )}
-        {agentsSection}
-        <Text dimColor wrap="truncate-end">/flow 关闭 · /git 仓库状态 · 面板内按 r 刷新</Text>
-      </Box>
-    )
-  })
-
-  on('ui.render', { component: 'Pane', requestId: DOC_PANE_ID }, async ($, e) => {
-    const { Box, Text, Button, Select, Markdown } = $.ui.resolve(e)
-    const doc = await read($, docFile)
-    const wide = e.props.bodyColumns >= 44
-    if (doc === null) {
-      return (
-        <Box flexDirection="column">
-          <Text>未打开文档。</Text>
-          <Text dimColor>用法：/doc &lt;相对路径&gt; 打开要浏览的文档。</Text>
-        </Box>
-      )
-    }
-
-    const sendEdit = async () => {
-      const wanted = await read($, docSection)
-      const sections = doc.text === null ? [] : parseSections(doc.text)
-      const current = sections[Math.min(Math.max(wanted, 0), sections.length - 1)]
-      if (current === undefined) {
-        $.ui.toast('文档为空，没有可发送的节。')
-        return
-      }
-      const draft = `请修改 ${doc.path} 的「${current.title}」一节（第 ${current.start}–${current.end} 行）：`
-      try {
-        const box = await $.prompt.read()
-        await $.prompt.fill({ text: draft, mode: box.text.trim() === '' ? 'replace' : 'append' })
-      } catch (error) {
-        $.ui.log(`flow-deck 修改请求填入失败：${String(error)}`, { to: 'debug' })
-      }
-    }
-    const reload = () => {
-      void loadDoc($, doc.path).catch(error => {
-        $.ui.log(`flow-deck 文档重读失败：${String(error)}`, { to: 'debug' })
-      })
-    }
-    if (doc.text === null) {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold color={TONE.bad} wrap="truncate-end">{MARK.title}文档 · {doc.path}</Text>
-          <Text color={TONE.bad} wrap="truncate-end">读取失败：{doc.error ?? '未知原因'}</Text>
-          <Box>
-            <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
-          </Box>
-        </Box>
-      )
-    }
-    const sections = parseSections(doc.text)
-    if (sections.length === 0) {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · 空文档</Text>
-          <Text dimColor>文档没有内容：/doc &lt;另一路径&gt; 换一篇，或按 r 重读。</Text>
-          <Box>
-            <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
-          </Box>
-        </Box>
-      )
-    }
-    const wanted = await read($, docSection)
-    const index = Math.min(Math.max(wanted, 0), sections.length - 1)
-    const current = sections[index]
-    const allLines = doc.text.split('\n')
-    const body = allLines.slice(current.start - 1, current.end)
-    const truncated = body.length > DOC_SECTION_MAX_LINES
-    const shown = truncated ? body.slice(0, DOC_SECTION_MAX_LINES) : body
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文档 · {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
-        <Select
-          key="doc-section"
-          label="节"
-          options={sections.map((section, i) => ({ value: String(i), text: `${section.title}` }))}
-          value={String(index)}
-          onSelect={value => { void update($, docSection, () => Number(value)) }}
-        />
-        <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} paddingX={wide ? 1 : 0}>
-          <Text bold wrap="truncate-end">
-            {MARK.title}{current.title} · 第 {current.start}–{current.end} 行
-            {truncated ? ` · 截断显示前 ${DOC_SECTION_MAX_LINES} 行` : ''}
-          </Text>
-          <Markdown key="doc-body" text={shown.join('\n')} />
-        </Box>
-        <Box>
-          <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>
-          <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
-        </Box>
-        <Text dimColor wrap="truncate-end">/doc 关闭 · e 把修改请求填入输入框（补意图后回车）</Text>
-      </Box>
-    )
-  })
-
-  on('ui.render', { component: 'Pane', requestId: GIT_PANE_ID }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
-    const status: GitStatus | null = await read($, gitStatus)
-
-    if (status === null) {
-      return (
-        <Box flexDirection="column">
-          <Text>当前目录不是 git 仓库，或状态尚未取到。</Text>
-          <Text dimColor>自动重试；在仓库内打开会话后，/git 可重新取数。</Text>
-        </Box>
-      )
-    }
-
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold color={TONE.accent}>{MARK.title}仓库 · 状态</Text>
-        <Text wrap="truncate-middle">
-          <Text bold>{status.branch}</Text>
-          {status.upstream !== null && <Text dimColor> → {status.upstream}</Text>}
-          {status.ahead > 0 && <Text color={TONE.ok}> ↑{status.ahead}</Text>}
-          {status.behind > 0 && <Text color={TONE.warn}> ↓{status.behind}</Text>}
-        </Text>
-        <Text dimColor wrap="truncate-end">冲突 {status.conflicts.length} · 暂存 {status.staged.length} · 修改 {status.unstaged.length} · 新增 {status.untracked.length}</Text>
-        {(status.added > 0 || status.removed > 0) && (
-          <Box>
-            {status.added > 0 && <Text color={TONE.added}>+{status.added}</Text>}
-            {status.removed > 0 && <Text color={TONE.removed}> −{status.removed}</Text>}
-            <Text dimColor> 行级改动（tracked 合计）</Text>
-          </Box>
-        )}
-        {isGitQuiet(status) && <Text color={TONE.ok}>{MARK.done} 工作区干净{status.upstream === null ? ' · 未设置上游' : '，与上游同步'}</Text>}
-        {status.conflicts.length > 0 && (
-          <Box flexDirection="column">
-            <Text bold color={TONE.bad}>
-              {MARK.title}冲突（{status.conflicts.length}）
-            </Text>
-            {status.conflicts.slice(0, MAX_GIT_FILES).map(file => (
-              <Text key={file.path} color={TONE.bad} wrap="truncate-middle">
-                {MARK.bad} {file.code} {gitFileLabel(file)}
-              </Text>
-            ))}
-            {status.conflicts.length > MAX_GIT_FILES && (
-              <Text dimColor>…还有 {status.conflicts.length - MAX_GIT_FILES} 个</Text>
-            )}
-          </Box>
-        )}
-        {status.staged.length > 0 && (
-          <Box flexDirection="column">
-            <Text bold color={TONE.ok}>
-              {MARK.title}已暂存（{status.staged.length}）
-            </Text>
-            {status.staged.slice(0, MAX_GIT_FILES).map(file => (
-              <Text key={file.path} color={TONE.ok} wrap="truncate-middle">
-                {file.code} {gitFileLabel(file)}
-              </Text>
-            ))}
-            {status.staged.length > MAX_GIT_FILES && (
-              <Text dimColor>…还有 {status.staged.length - MAX_GIT_FILES} 个</Text>
-            )}
-          </Box>
-        )}
-        {status.unstaged.length > 0 && (
-          <Box flexDirection="column">
-            <Text bold color={TONE.warn}>
-              {MARK.title}未暂存（{status.unstaged.length}）
-            </Text>
-            {status.unstaged.slice(0, MAX_GIT_FILES).map(file => (
-              <Text key={file.path} color={TONE.warn} wrap="truncate-middle">
-                {file.code} {gitFileLabel(file)}
-              </Text>
-            ))}
-            {status.unstaged.length > MAX_GIT_FILES && (
-              <Text dimColor>…还有 {status.unstaged.length - MAX_GIT_FILES} 个</Text>
-            )}
-          </Box>
-        )}
-        {status.untracked.length > 0 && (
-          <Box flexDirection="column">
-            <Text bold>{MARK.title}未跟踪（{status.untracked.length}）</Text>
-            {status.untracked.slice(0, MAX_GIT_FILES).map(file => (
-              <Text key={file.path} dimColor wrap="truncate-middle">
-                {file.code} {gitFileLabel(file)}
-              </Text>
-            ))}
-            {status.untracked.length > MAX_GIT_FILES && (
-              <Text dimColor>…还有 {status.untracked.length - MAX_GIT_FILES} 个</Text>
-            )}
-          </Box>
-        )}
-      </Box>
-    )
-  })
-
-  on('ui.render', { component: 'Pane', requestId: TREE_PANE_ID }, async ($, e) => {
-    const { Box, Text, Button, Select } = $.ui.resolve(e)
-    const dir = await read($, treeDir)
-    const tree = await read($, treeEntries)
-    const touchedList = await read($, touched)
-    const scope = await read($, batchScope)
-    const git = await read($, gitStatus)
-    const scopeSet = new Set((scope?.files ?? []).map(file => normalizePath(file, sessionCwd).toLowerCase()))
-    const gitMark = (path: string): { label: string; color?: string } | null => {
-      if (git === null) return null
-      if (git.conflicts.some(file => file.path === path)) return { label: '冲突', color: TONE.bad }
-      if (git.staged.some(file => file.path === path)) return { label: '暂存', color: TONE.ok }
-      if (git.unstaged.some(file => file.path === path)) return { label: '改', color: TONE.warn }
-      if (git.untracked.some(file => file.path === path)) return { label: '新' }
-      return null
-    }
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件 · {dir === null ? '工作目录' : dir}</Text>
-        <Box flexDirection="column">
-          <Text bold wrap="truncate-end">{MARK.title}本会话改动{touchedList.length > 0 ? ` · ${touchedList.length}` : ''}</Text>
-          {touchedList.length === 0 && <Text dimColor>本会话尚无文件改动；agent 编辑文件后会出现在这里。</Text>}
-          {[...touchedList].reverse().map(one => {
-            const mark = gitMark(one.path)
-            return (
-              <Text key={one.path} wrap="truncate-middle">
-                <Text color={TONE.ok}>{MARK.done}</Text>
-                <Text> {one.path}</Text>
-                {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
-                {scopeSet.has(one.path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
-              </Text>
-            )
-          })}
-        </Box>
-        <Box flexDirection="column">
-          <Text bold wrap="truncate-end">{MARK.title}目录</Text>
-          {!tree?.loaded && <Text dimColor>正在读取目录…</Text>}
-          {tree?.loaded && (
-            <Select
-              key="tree-dir"
-              label="进入子目录"
-              options={[
-                { value: '', text: dir === null ? '工作目录（当前）' : '… 工作目录' },
-                ...sortEntries(tree.entries).filter(one => one.kind === 'dir').map(one => ({
-                  value: dir === null ? one.name : `${dir}/${one.name}`,
-                  text: `${one.name}/`,
-                })),
-              ]}
-              value=""
-              onSelect={value => { void loadTree($, value === '' ? null : value) }}
-            />
-          )}
-          {tree?.loaded && tree.entries.length === 0 && <Text dimColor>（空目录）读取失败或无内容，按 r 重读。</Text>}
-          {tree?.loaded && sortEntries(tree.entries).map(entry => {
-            const path = dir === null ? entry.name : `${dir}/${entry.name}`
-            const mark = entry.kind === 'dir' ? null : gitMark(path)
-            return (
-              <Text key={entry.name} wrap="truncate-middle">
-                {entry.kind === 'dir' ? `${entry.name}/` : entry.name}
-                {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
-                {entry.kind !== 'dir' && scopeSet.has(path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
-              </Text>
-            )
-          })}
-        </Box>
-        <Box>
-          <Button key="tree-reload" hotkey="r" plain onPress={() => { void loadTree($, dir) }}>重读</Button>
-        </Box>
-        <Text dimColor wrap="truncate-end">/tree 关闭 · 改动清单实时记录 Edit/Write · r 重读目录</Text>
+        {tabsRow}
+        {body}
       </Box>
     )
   })

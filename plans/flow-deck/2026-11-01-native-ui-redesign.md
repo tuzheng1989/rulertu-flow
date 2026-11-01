@@ -172,6 +172,78 @@ B1 → B2 → B3 → B4，线性。依据：后续批次都在 `register.tsx` �
 
 **分级与验证流程**：T2（新面板、新契约字段、新钩子数据流、有既往测试模式可循）。定级裁决：本批虽邻近守卫链路并在守卫钩子内追加副作用，但属红线明文授权的「既有钩子内追加渲染数据记录」（加法式、判定/分支顺序/返回值零改动、fail 路径不触及），故定 T2 不升 T3。→ 审计代理（证据包）+ 主控真机目检。
 
+### B5 统一命令 /deck 与面板页签化（T2，用户测试后追加）
+
+背景：用户测试 0.10.0 后提出——/git 与 /tree 信息重叠应合并；命令 5 个太多应统一。裁决：`/deck` 单命令 + 单面板三页签（工作流/文件/文档），git 信息以「统一改动清单」并入文件页签。
+
+**如何改**：
+
+1. `hooks/parse.ts` 新纯函数：`collectChanges(git, touched): ChangeRow[]`——git 四组文件 ∪ 本会话 touched 去重合并，每行 `{ path, touched, state }`（state ∈ conflict/staged/unstaged/untracked/null）；排序：touched 组在前、冲突优先、路径字典序。L1 用例覆盖并集去重、来源判定、排序与 git 为 null 退化为 touched 清单。
+2. `types/index.d.ts` 契约追加：`activeTab: 'flow' | 'files' | 'doc'`。
+3. `hooks/register.tsx`：
+   - 单一 `DECK_PANE_ID = 'deck'`；`activeTab` atom（默认 'flow'）；旧 PANE_ID/GIT_PANE_ID/TREE_PANE_ID/DOC_PANE_ID 退役。
+   - 命令收敛：仅注册 `deck`（description 含三页签用法）；`/deck` 无参 toggle（activeTab 保持）；`flow`/`tree`/`doc [路径]` 参数切页签（tree 映射 files 页签），doc 带路径先 loadDoc。旧 /flow /git /flow-agents /doc /tree 命令注册与钩子全部移除。
+   - 单一 ui.render Pane 钩子（requestId 'deck'）：顶部页签行（三枚 Button，plain + hotkey 1/2/3，当前页亮、其余 dimColor）+ 按 activeTab 分支渲染——工作流页签（原 /flow 渲染树迁移）、文件页签（git 头行 + 统一改动清单 `▍改动`（● 本会话 / ○ 其他，◆ 本批）+ 目录浏览区迁移）、文档页签（原 /doc 渲染树迁移，含空态与错误态）。`$.ui.open({ focus: true })` 使面板持焦，数字热键直切页签；holdToasts 不开。
+4. `hooks/register.test.ts`：全部 Pane mount 的 requestId 改 'deck' 并经 `$.ui.press`（key tab-flow/tab-files/tab-doc）切页签后再断言原内容；新增用例——统一改动清单（git ∪ touched 并集去重、● ○ 来源点、◆ 边界、git null 退化）、页签切换保持各页内容、/deck 参数分流（flow/tree/doc 直达、doc 带路径装载）、旧命令不再注册（session.start 后 command.register 捕获清单恰为 flow_task/flow_report/flow_batch/flow_deps 工具与 deck 命令）。
+5. `README.md` 命令节重写（/deck 用法与页签说明、/tree /git 并入说明）；双 manifest 0.10.0 → 0.11.0；根 CHANGELOG 补条目。
+
+**如何验证**：L1（collectChanges）+ L2（页签切换后各页渲染树、统一清单断言、参数分流）+ 红线回归 + 真机目检（/deck 打开、1/2/3 切页签、Esc 回输入框、/deck doc 直达）。
+
+**验收标准**：
+- 给 git 有 2 文件改动且 touched 含其中 1 个 + 另 1 个会话路径 → `▍改动` 恰 3 行：会话 2 行 ●、git 独有 1 行 ○；touched 独有行无 git 状态标注。
+- 给 git null → 改动清单退化为 touched 全集（全 ●）。
+- 给 flow_batch 边界含清单文件 → 该行 `◆ 本批`。
+- `/deck` 无参已开再调 → 关闭；`/deck doc plans/x.md` → doc 页签且文档装载。
+- 会话内只注册 deck 一个命令；红线回归全绿。
+
+**代码评审节点**：三个页签渲染分支迁移后 hotkey 不冲突（1/2/3 页签、r 刷新、e 发给 Claude）；plain Button 不与 variant 混用（选中态用亮暗对比实现）；collectChanges 去重键与守卫 key 口径一致（normalizePath + toLowerCase）；open({ focus: true }) 不带 holdToasts。
+
+**分级与验证流程**：T2（多文件、面板结构重构、不改契约既有字段语义、测试迁移面广但有既有模式可循）→ 审计代理（证据包）+ 主控真机目检。
+
+### B6 视线常驻空间：自动侧边栏、Spinner 进度、工具行批次标注（T2）
+
+背景：用户测试后要求「参考官方 mod 充分利用空间，体验第一」。官方 diff mod 的自动开栏范式（首次成功编辑自动开、仅可停靠布局、用户关过则不再打扰、数据先就位）与本插件守卫语义契合，照抄。
+
+**如何改**：
+
+1. 自动侧边栏：`session.start` 重置 `autoOpened`/`deckTouched` 模块标记；`recordTouch` 首次成功记录时——若 `userConfig.autoOpen !== 'off'`、本会话无人在场标记（`manual` atom：用户曾开或关过 deck 则不再自动开）、AbovePrompt 钩子缓存的 `viewport.isFullscreen === true`——`$.ui.open({ id: DECK_PANE_ID, title, focus: false })`（自动开不抢键盘，与手动开的 focus: true 区分）。本会话只试一次。manifest userConfig 追加 `autoOpen`（title 自动侧边栏，options on/off，默认 on）。
+2. Spinner 进度：新 `ui.render { component: 'Spinner' }` 钩子——实施中（currentTask=implement 且 execution 非收口）重写 `word` 为 `B2 · 验证 8/12`；迭代中显示 `评审 R{n} · {score} 分`；有 running 子代理且无任务时显示 `↻ {name} · {description 截断}`（多个时 `{n} 个子代理运行中`）；其余 `next(e)` 透传。desktop 表面 `message` 同步（props 相同）。
+3. 工具行批次标注：新 `ui.render { component: 'ToolUse' }` 钩子（matcher 无法按 props.tool 收窄 input 路径，钩子内 `e.props.tool` 分流 Edit/Write）——`isExpanded === true` 或非 Edit/Write 或 isErrored/isInterrupted 时 `next(e)` 透传；紧凑行自绘：状态图标（Edit/Write 各自引擎色）+ 工具名 + 路径（input.file_path）+ 批次标注——界内 `◆`（accent）、越界 warn 放行 `⚠ 越界`（warning）、deny 拦截 `✗ 拦截`（bad）、无任务时无标注。判定复用 `guardDecision`（守卫口径单一出处），纯展示不改写 input。
+4. `register.test.ts`：Spinner 三态（实施词/迭代词/子代理词/透传）、工具行三态标注 + isExpanded 透传 + 非 Edit/Write 透传、自动侧边栏（autoOpen off 不开、非 fullscreen 不开、手动开过后不开、首次编辑开一次）。
+
+**如何验证**：L2 渲染树（Spinner/ToolUse mount）+ 红线回归 + 真机目检（全屏终端 agent 编辑时侧边栏自动出现、spinner 词变化、工具行标注）。
+
+**验收标准**：
+- 给 autoOpen=off → 任何编辑不自动开；给非全屏 → 不开；给用户手动开/关过 → 不开；给首次编辑且全屏 → 恰开一次。
+- 给实施 report（B2 验证 8/12）→ Spinner 词含 `B2` 与 `8/12`；给无任务多子代理 → 词含 `个子代理运行中`；给空闲无子代理 → next(e) 透传（词不变）。
+- 给界内 Edit → 工具行含 `◆`；给越界 warn → 含 `⚠ 越界`；给 isExpanded → 树为引擎原行（透传）。
+- 红线回归全绿。
+
+**代码评审节点**：自动开不抢焦点（focus: false）；Spinner 重写不碰 `suffix`/`message`（引擎继续画时长与 token）；工具行自绘行在 ctrl+o 下让位（isExpanded 透传）；manual 标记在手动 open/close 两处设置。
+
+**分级与验证流程**：T2（新站点 hook ×2、自动开栏状态机、邻近渲染契约但不改契约）→ 审计代理（证据包）+ 主控真机目检。
+
+### B7 交互深度：输入框守卫预览、子代理查看、完成通知行（T2）
+
+**如何改**：
+
+1. 输入框守卫预览：新 `prompt.edit` 钩子（origin composer）——实施中有 batchScope 时读草稿，提取路径样式 token（`/[A-Za-z0-9_.\-\\\/]+\.[A-Za-z]{1,6}/g`），逐 token 按守卫口径（normalizePath+toLowerCase 对 scopeSet）判定：界内 `color: TONE.ok`、越界 `color: TONE.warn`，`$.prompt.paint({ text, decorations })`；无任务或无路径 token 时 paint 空清单清除。paint 失败静默（debug log）。
+2. 子代理查看：面板子代理行（工作流页签）追加 plain Button `查看`（key `agent-view-{id}`）→ `$.ui.view({ agentId })`；resolve `{ deny }` 时 `$.ui.toast` 说明原因；面板页签行尾部追加「主对话」Button（key `view-main`）→ `$.ui.view({})`。
+3. 完成通知行：新 `ui.render { component: 'UserMessage' }` 钩子，matcher `props.origin.kind: 'task-notification'`——`next(e)` 透传 `isExpanded`；紧凑行自绘：状态点（completed ✓ ok / failed ✗ bad / 其余 ○ idle）+ 任务名（from.name 或 task.id）+ 耗时（durationMs 人读格式）。
+4. `register.test.ts`：paint 判定（界内 ok/越界 warn/无任务清除）、查看按钮 press → $.ui.view 调用与 deny toast、通知行三态 + isExpanded 透传。
+
+**如何验证**：L2（paint 参数捕获、view 调用捕获、通知行渲染树）+ 红线回归 + 真机目检（输入路径实时变色、点查看切子代理视图、Esc 回主对话、通知行样式）。
+
+**验收标准**：
+- 给实施边界含 `src/a.ts`、草稿含 `src/a.ts` 与 `docs/b.md` → paint 收到两个 decoration：前者 success 后者 warning；给 idle → paint 收到空清单。
+- 给 running agent 行按查看 → `$.ui.view` 收到该 agentId；给 deny 应答 → toast 含原因；按主对话 → view 收到 `{}`。
+- 给 task-notification（completed, 3.2s）→ 通知行含 ✓、名称与 `3.2s`；isExpanded → 透传。
+- 红线回归全绿。
+
+**代码评审节点**：paint 仅在 composer origin（子代理转录不碰）；路径正则保守（含扩展名 token 才判定）；view 的 person-initiated 语义（仅 Button 触发）；通知行 isExpanded 让位 ctrl+o。
+
+**分级与验证流程**：T2（prompt.edit/paint 首次引入、新站点 hook ×2）→ 审计代理（证据包）+ 主控真机目检。
+
 ## 收口与真机目检
 
 四批各自收口后，末波统一目检清单（Claude Code 真机，`/theme` 深浅两档各一遍）：
