@@ -897,7 +897,7 @@ describe('pane', () => {
     expect(fills).toHaveLength(1)
     expect(fills[0].text).toBe('请修改 docs/plan.md 文件：')
     // Select 选节切到单节模式，e 锚定该节
-    await $.ui.press({ plugin: 'flow-deck', key: 'doc-sec-1', requestId: 'deck', surface: 'terminal' })
+    await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: '1', requestId: 'deck', surface: 'terminal' })
     expect(await ui.find({ text: /▍二 · 第 3–4 行/ })).not.toBeUndefined()
     const nextBody = await ui.find({ type: 'Markdown' })
     expect(nextBody?.props.text).toBe('## 二\n正文二')

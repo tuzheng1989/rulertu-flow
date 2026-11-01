@@ -26,6 +26,8 @@ import {
   toolMark,
   draftDecorations,
   humanDuration,
+  enhanceMarkdown,
+  pagerWindow,
 } from './parse'
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
 import { agentStatus, agentSummary, createAgentPoller } from './agents'
@@ -485,7 +487,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
 }
 
 const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
-  const { Box, Text, Button, Markdown } = $.ui.resolve(e)
+  const { Box, Text, Button, Select, Markdown } = $.ui.resolve(e)
   const doc = await read($, docFile)
   const wide = e.props.bodyColumns >= 44
   if (doc === null) {
@@ -567,17 +569,33 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
     <Box flexDirection="column" gap={1}>
       <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件查看器 · {doc.path} · {sections.length} 节 · {allLines.length} 行</Text>
       <Box flexWrap="wrap" gap={2}>
-        <Button key="doc-sec-all" plain dimColor={mode !== 'all'} onPress={() => { void update($, docMode, () => 'all') }}>全文</Button>
-        {sections.map((section, i) => (
-          <Button key={`doc-sec-${i}`} plain dimColor={!(mode === 'section' && index === i)} onPress={() => {
+        <Select
+          key="doc-section"
+          label="按节标题选"
+          options={sections.map((section, i) => ({ value: String(i), text: `${section.title}` }))}
+          value={String(index)}
+          onSelect={value => {
             void update($, docMode, () => 'section')
-            void update($, docSection, () => i)
-          }}>{section.title}</Button>
-        ))}
+            void update($, docSection, () => Number(value))
+          }}
+        />
+        <Button key="doc-sec-all" plain dimColor={mode !== 'all'} onPress={() => { void update($, docMode, () => 'all') }}>全文</Button>
+        <Button key="doc-prev" plain dimColor={mode !== 'section' || index <= 0} onPress={() => {
+          if (mode === 'section' && index > 0) { void update($, docSection, () => index - 1) }
+        }}>‹ 上一节</Button>
+        {pagerWindow(index, sections.length).map((page, i) => page === -1
+          ? <Text key={`doc-gap-${i}`} dimColor>…</Text>
+          : <Button key={`doc-page-${page}`} plain dimColor={!(mode === 'section' && index === page)} onPress={() => {
+            void update($, docMode, () => 'section')
+            void update($, docSection, () => page)
+          }}>{page + 1}</Button>)}
+        <Button key="doc-next" plain dimColor={mode !== 'section' || index >= sections.length - 1} onPress={() => {
+          if (mode === 'section' && index < sections.length - 1) { void update($, docSection, () => index + 1) }
+        }}>下一节 ›</Button>
       </Box>
       <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} paddingX={wide ? 1 : 0}>
         <Text bold wrap="truncate-end">{bodyTitle}</Text>
-        <Markdown key="doc-body" text={slice.join('\n')} />
+        <Markdown key="doc-body" text={enhanceMarkdown(slice.join('\n'))} />
       </Box>
       <Box gap={2}>
         <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>

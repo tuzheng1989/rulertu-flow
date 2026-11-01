@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- flow-deck 0.16.0：文件查看器 markdown 图表增强——表格重排为等宽对齐的 Unicode 表格（CJK 按 2 列计宽），mermaid `graph TD` 基本子集（节点与箭头链，含链式声明）自绘为 Unicode 分层流程图（box-drawing 框线 + ▼ 箭头，分层固定点收敛，环内节点保持原层；classDef/style/subgraph 等不支持的语法整体保持代码块原样），`enhanceMarkdown` 管道在渲染前预处理（fenced code 内不处理）。双 manifest 同步升版 0.16.0。
+
 - flow-deck 0.15.0：页签改名与文件查看器浏览交互改造——三个页签更名（工作流→工作面板、文件→文件树、文档→文件查看器，页内标题/返回文案/README 同步）；文件查看器的「浏览」从 Select 下拉改为横向平铺按钮行（「全文」+ 各节标题，flexWrap 自动换行，当前项亮/其余暗），与页签行同款交互；「发给 Claude」与「重读」按钮之间加宽松间距。双 manifest 同步升版 0.15.0。
 
 - flow-deck 0.14.2：文件页签目录导航改为点击交互——目录行直接点击进入（原 Select 下拉在侧边栏里难以操作，已移除），非根目录显示「← 上级」按钮逐级返回。双 manifest 同步升版 0.14.2。

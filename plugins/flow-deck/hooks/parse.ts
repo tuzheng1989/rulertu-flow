@@ -604,3 +604,268 @@ export function parseSections(text: string): DocSection[] {
   })
   return sections
 }
+
+// ---- 文件查看器的 markdown 图表增强（表格对齐重排 + mermaid graph TD 子集自绘） ----
+
+/** 终端显示宽度：CJK 与全角字符计 2，其余计 1（简版 wcwidth，覆盖常用区间） */
+function displayWidth(text: string): number {
+  let width = 0
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0
+    const wide = code >= 0x1100 && (
+      code <= 0x115f ||
+      (code >= 0x2e80 && code <= 0xa4cf) ||
+      (code >= 0xac00 && code <= 0xd7a3) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xfe30 && code <= 0xfe4f) ||
+      (code >= 0xff00 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6)
+    )
+    width += wide ? 2 : 1
+  }
+  return width
+}
+
+const TABLE_ROW = /^\s*\|.*\|\s*$/
+const TABLE_SEP = /^\s*\|\s*:?-{1,}[-\s:|]*\|\s*$/
+
+const cellsOf = (line: string): string[] =>
+  line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim().replace(/\\\|/g, '|'))
+
+/** 把 markdown 表格行（含分隔行）重排为等宽对齐的 Unicode 表格；无有效表格行时原样返回 */
+export function renderAsciiTable(lines: readonly string[]): string[] {
+  const rows = lines
+    .filter(line => TABLE_ROW.test(line) && !TABLE_SEP.test(line))
+    .map(cellsOf)
+  if (rows.length === 0) return [...lines]
+  const columns = Math.max(...rows.map(row => row.length))
+  const widths: number[] = Array.from({ length: columns }, (_, c) =>
+    Math.max(3, ...rows.map(row => displayWidth(row[c] ?? ''))))
+  const border = (left: string, mid: string, right: string) =>
+    left + widths.map(w => '─'.repeat(w + 2)).join(mid) + right
+  const renderRow = (row: readonly string[]) =>
+    '│ ' + widths.map((w, c) => {
+      const cell = row[c] ?? ''
+      return cell + ' '.repeat(Math.max(0, w - displayWidth(cell)))
+    }).join(' │ ') + ' │'
+  return [border('┌', '┬', '┐'), renderRow(rows[0]), border('├', '┼', '┤'),
+    ...rows.slice(1).map(renderRow), border('└', '┴', '┘')]
+}
+
+/** mermaid 子集解析出的一个节点 */
+type MermaidNode = { id: string; label: string }
+/** mermaid 子集解析出的一条边 */
+type MermaidEdge = { from: string; to: string }
+
+/** 剥掉节点形状语法取标签：A[文本] / A(文本) / A */
+function nodeLabel(token: string): MermaidNode {
+  const m = /^([\w-]+)(?:\[([^\]]*)\]|\(([^)]*)\))?\s*$/.exec(token.trim())
+  if (m === null) return { id: token.trim(), label: token.trim() }
+  return { id: m[1], label: m[2] ?? m[3] ?? m[1] }
+}
+
+/** 解析 mermaid graph TD 基本子集（节点与箭头链），自绘 Unicode 分层流程图；
+ *  非 TD 声明、无节点无边或含不认识的行时返回 null（调用方保持代码块原样） */
+export function renderMermaidGraph(source: string): string[] | null {
+  const lines = source.split('\n').map(line => line.trim())
+    .filter(line => line !== '' && !line.startsWith('%%'))
+  const head = /^(?:graph|flowchart)\s+(TD|TB)\s*$/i.exec(lines[0] ?? '')
+  if (head === null || lines.length < 2) return null
+  const nodes = new Map<string, MermaidNode>()
+  const edges: MermaidEdge[] = []
+  for (const line of lines.slice(1)) {
+    if (/^(?:classDef|class|style|click|subgraph\b|end\s*$)/.test(line)) return null
+    // 按链式箭头切分：A --> B --> C / A --- B / A -.-> B
+    const segments = line.split(/\s*(?:-\.->|-->)\s*|\s*-{3,}\s*/)
+    if (segments.length < 2) {
+      const node = nodeLabel(line)
+      if (!/^[\w-]+$/.test(node.id)) return null
+      nodes.set(node.id, node)
+      continue
+    }
+    const ids: string[] = []
+    for (const token of segments) {
+      const node = nodeLabel(token)
+      if (!/^[\w-]+$/.test(node.id)) return null
+      nodes.set(node.id, node)
+      ids.push(node.id)
+    }
+    for (let i = 1; i < ids.length; i++) edges.push({ from: ids[i - 1], to: ids[i] })
+  }
+  if (nodes.size === 0 || edges.length === 0) return null
+
+  // 分层固定点收敛：layer(to) = max(layer(from)+1)；环内未继续更新的节点保持原层
+  const layer = new Map<string, number>()
+  for (const id of nodes.keys()) layer.set(id, 0)
+  for (let round = 0; round < nodes.size; round++) {
+    let changed = false
+    for (const edge of edges) {
+      const next = (layer.get(edge.from) ?? 0) + 1
+      if (next > (layer.get(edge.to) ?? 0)) {
+        layer.set(edge.to, next)
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+  const layers: string[][] = []
+  for (const [id, depth] of layer) {
+    if (layers[depth] === undefined) layers[depth] = []
+    layers[depth].push(id)
+  }
+  const liveLayers = layers.filter(list => list !== undefined)
+  if (liveLayers.length === 0) return null
+
+  const width = Math.max(3, ...[...nodes.values()].map(node => displayWidth(node.label)))
+  const gap = 4
+  const startOf = new Map<string, number>()
+  for (const list of liveLayers) {
+    let cursor = 0
+    for (const id of list) {
+      startOf.set(id, cursor)
+      cursor += width + gap
+    }
+  }
+  const totalCols = Math.max(width, ...liveLayers.map(list => list.length * (width + gap) - gap))
+
+  const rowCount = liveLayers.length * 3 + (liveLayers.length - 1) * 2
+  const grid: string[][] = Array.from({ length: rowCount }, () => Array.from({ length: totalCols }, () => ' '))
+  const put = (row: number, col: number, ch: string) => {
+    if (row >= 0 && row < rowCount && col >= 0 && col < totalCols) grid[row][col] = ch
+  }
+
+  const startColOf = (layerIndex: number, slot: number) => startOf.get(liveLayers[layerIndex][slot]) ?? 0
+  const centerOf = (layerIndex: number, slot: number) => startColOf(layerIndex, slot) + Math.floor(width / 2)
+
+  liveLayers.forEach((list, layerIndex) => {
+    const top = layerIndex * 5
+    let cursor = 0
+    put(top, cursor, '┌')
+    for (const _ of list) {
+      for (let c = 1; c <= width; c++) put(top, cursor + c, '─')
+      cursor += width
+      if (cursor < totalCols) {
+        for (let g = 0; g < gap; g++) put(top, cursor + g, ' ')
+        put(top, cursor + Math.floor(gap / 2), '┬')
+      }
+      cursor += gap
+    }
+    put(top, Math.min(totalCols - 1, cursor), '┐')
+
+    list.forEach((id, slot) => {
+      const label = nodes.get(id)?.label ?? id
+      const padLeft = Math.floor((width - displayWidth(label)) / 2)
+      let cell = startColOf(layerIndex, slot) + 1
+      for (let pad = 0; pad < padLeft; pad++) { put(top + 1, cell, ' '); cell += 1 }
+      for (const ch of label) {
+        put(top + 1, cell, ch)
+        if (displayWidth(ch) === 2) { cell += 1; put(top + 1, cell, '') }
+        cell += 1
+      }
+      for (; cell < startColOf(layerIndex, slot) + 1 + width; cell++) put(top + 1, cell, ' ')
+    })
+
+    cursor = 0
+    put(top + 2, cursor, '└')
+    for (const _ of list) {
+      for (let c = 1; c <= width; c++) put(top + 2, cursor + c, '─')
+      cursor += width
+      if (cursor < totalCols) {
+        for (let g = 0; g < gap; g++) put(top + 2, cursor + g, ' ')
+        put(top + 2, cursor + Math.floor(gap / 2), '┴')
+      }
+      cursor += gap
+    }
+    put(top + 2, Math.min(totalCols - 1, cursor), '┘')
+  })
+
+  // 连线区：父节点底部中心下行，横向走线到子节点列，子节点顶画 ▼
+  for (const edge of edges) {
+    const fromLayer = layer.get(edge.from) ?? 0
+    const toLayer = layer.get(edge.to) ?? 0
+    if (toLayer <= fromLayer) continue
+    const fromSlot = liveLayers[fromLayer].indexOf(edge.from)
+    const toSlot = liveLayers[toLayer].indexOf(edge.to)
+    if (fromSlot === -1 || toSlot === -1) continue
+    const top = fromLayer * 5 + 3
+    const bottom = toLayer * 5 - 1
+    const fc = centerOf(fromLayer, fromSlot)
+    const tc = centerOf(toLayer, toSlot)
+    put(top, fc, '│')
+    for (let row = top + 1; row < bottom; row++) put(row, fc, '│')
+    if (fc === tc) {
+      put(bottom, tc, '▼')
+      continue
+    }
+    const hr = bottom - 1
+    for (let row = top + 1; row < hr; row++) put(row, fc, '│')
+    put(hr, fc, fc < tc ? '└' : '┘')
+    for (let c = Math.min(fc, tc) + 1; c < Math.max(fc, tc); c++) put(hr, c, '─')
+    put(hr, tc, fc < tc ? '┌' : '┐')
+    put(bottom, tc, '▼')
+  }
+
+  return grid.map(row => row.join('').replace(/\s+$/, ''))
+}
+
+const MERMAID_FENCE = /^\s*```\s*mermaid\b/i
+const CODE_FENCE = /^\s*```/
+
+/** 文件查看器的 markdown 预处理：表格重排为等宽对齐表格，mermaid graph TD
+ *  子集自绘为 Unicode 流程图（解析失败保持代码块原样），其余内容原样透传 */
+/** HTML 分页式节码窗口：恒含首尾节，窗口平移补满 5 个（当前居中、靠边时窗口平移），间断处以 -1 表示省略号 */
+export function pagerWindow(current: number, total: number): number[] {
+  if (total <= 0) return []
+  const clamp = Math.min(Math.max(current, 0), total - 1)
+  const windowStart = Math.min(Math.max(clamp - 2, 0), Math.max(0, total - 5))
+  const wanted = new Set<number>([0, total - 1])
+  for (let i = windowStart; i < windowStart + 5 && i < total; i++) wanted.add(i)
+  const list = [...wanted].sort((a, b) => a - b)
+  const out: number[] = []
+  for (let i = 0; i < list.length; i++) {
+    if (i > 0 && list[i] - list[i - 1] > 1) out.push(-1)
+    out.push(list[i])
+  }
+  return out
+}
+
+export function enhanceMarkdown(text: string): string {
+  const lines = text.split('\n')
+  const out: string[] = []
+  let i = 0
+  let fence = false
+  while (i < lines.length) {
+    if (fence) {
+      out.push(lines[i])
+      if (CODE_FENCE.test(lines[i])) fence = false
+      i += 1
+      continue
+    }
+    if (MERMAID_FENCE.test(lines[i])) {
+      const block: string[] = [lines[i]]
+      i += 1
+      while (i < lines.length && !CODE_FENCE.test(lines[i])) { block.push(lines[i]); i += 1 }
+      block.push(lines[i] ?? '```')
+      i += 1
+      const drawn = renderMermaidGraph(block.slice(1, -1).join('\n'))
+      if (drawn === null) out.push(...block)
+      else out.push('```', ...drawn, '```')
+      continue
+    }
+    if (CODE_FENCE.test(lines[i])) {
+      fence = true
+      out.push(lines[i])
+      i += 1
+      continue
+    }
+    if (TABLE_ROW.test(lines[i]) && i + 1 < lines.length && TABLE_SEP.test(lines[i + 1])) {
+      const block: string[] = []
+      while (i < lines.length && TABLE_ROW.test(lines[i])) { block.push(lines[i]); i += 1 }
+      out.push(...renderAsciiTable(block))
+      continue
+    }
+    out.push(lines[i])
+    i += 1
+  }
+  return out.join('\n')
+}

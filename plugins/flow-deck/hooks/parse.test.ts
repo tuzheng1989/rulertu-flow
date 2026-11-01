@@ -4,7 +4,11 @@ import {
   bannerPlan,
   collectChanges,
   draftDecorations,
+  enhanceMarkdown,
   humanDuration,
+  pagerWindow,
+  renderAsciiTable,
+  renderMermaidGraph,
   spinnerWord,
   toolMark,
   progressBar,
@@ -160,6 +164,69 @@ describe('parse', () => {
     expect(humanDuration(0)).toBe('0s')
     expect(humanDuration(-5)).toBe('0s')
     expect(humanDuration(NaN)).toBe('0s')
+  })
+
+  test('renderAsciiTable：等宽对齐含中文，分隔行剥除', () => {
+    const rows = renderAsciiTable([
+      '| 批次 | 状态 |',
+      '| --- | --- |',
+      '| B1 | ✓收口 |',
+    ])
+    expect(rows).toHaveLength(5)
+    expect(rows[0]).toMatch(/^┌/)
+    expect(rows[1]).toContain('│ 批次')
+    expect(rows[1]).toContain('│ 状态')
+    expect(rows[3]).toContain('│ B1')
+    expect(rows[3]).toContain('│ ✓收口')
+    expect(rows[4]).toMatch(/^└/)
+  })
+
+  test('renderMermaidGraph：TD 链式与分叉自绘流程图，非 TD 返回 null', () => {
+    const chain = renderMermaidGraph(['graph TD', 'A[开始] --> B[处理] --> C[结束]'].join('\n'))
+    expect(chain).not.toBeNull()
+    const drawn = chain.join('\n')
+    expect(drawn).toContain('开始')
+    expect(drawn).toContain('处理')
+    expect(drawn).toContain('结束')
+    expect(drawn).toContain('▼')
+    // A 在 B 上一层
+    const aRow = chain.findIndex(row => row.includes('开始'))
+    const bRow = chain.findIndex(row => row.includes('处理'))
+    expect(aRow).toBeLessThan(bRow)
+    expect(renderMermaidGraph('graph LR\nA --> B')).toBeNull()
+    expect(renderMermaidGraph('graph TD\nstyle A fill:#f9f')).toBeNull()
+  })
+
+  test('pagerWindow：窗口 5 个、首尾恒显、间断省略号', () => {
+    expect(pagerWindow(0, 3)).toEqual([0, 1, 2])
+    expect(pagerWindow(3, 12)).toEqual([0, 1, 2, 3, 4, 5, -1, 11])
+    expect(pagerWindow(0, 12)).toEqual([0, 1, 2, 3, 4, -1, 11])
+    expect(pagerWindow(11, 12)).toEqual([0, -1, 7, 8, 9, 10, 11])
+    expect(pagerWindow(5, 6)).toEqual([0, 1, 2, 3, 4, 5])
+  })
+
+  test('enhanceMarkdown：表格重排与 mermaid 自绘，fence 内不处理', () => {
+    const enhanced = enhanceMarkdown([
+      '前言',
+      '| a | b |',
+      '| - | - |',
+      '| 1 | 2 |',
+      '',
+      '```mermaid',
+      'graph TD',
+      'A --> B',
+      '```',
+      '```text',
+      '| 不是表格 |',
+      '| - |',
+      '```',
+    ].join('\n'))
+    expect(enhanced).toContain('┌')
+    expect(enhanced).toContain('│ a')
+    expect(enhanced).toContain('▼')
+    expect(enhanced).toContain('┌─┐')
+    // fence 内的假表格保持原样
+    expect(enhanced).toContain('| 不是表格 |')
   })
 
   test('统一改动清单：git 并集会话记录，会话组在前、冲突优先、路径排序', () => {
