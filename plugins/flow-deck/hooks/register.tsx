@@ -572,7 +572,7 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
         <Select
           key="doc-section"
           label="按节标题选"
-          options={sections.map((section, i) => ({ value: String(i), text: `${section.title}` }))}
+          options={sections.map((section, i) => ({ value: String(i), label: `${section.title}` }))}
           value={String(index)}
           onSelect={value => {
             void update($, docMode, () => 'section')

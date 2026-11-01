@@ -886,6 +886,9 @@ describe('pane', () => {
       props: paneProps('文档浏览'),
     })
     expect(await ui.find({ text: /▍文件查看器 · docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
+    // 节标题下拉的选项显示节标题（SelectOption 字段是 label，缺省会画成 value 序号）
+    const selector = await ui.find({ type: 'Select' })
+    expect(selector?.props.options?.map((option: { label?: string }) => option.label)).toEqual(['一', '二'])
     // 默认全文模式：浏览行显示全文标题，Markdown 渲染整篇
     expect(await ui.find({ text: /▍全文 · 4 行/ })).not.toBeUndefined()
     const body = await ui.find({ type: 'Markdown' })
