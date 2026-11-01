@@ -7,7 +7,7 @@
 | 插件 | 定位 |
 |------|------|
 | `rulertu-flow` | 工作流引擎：T0–T3 风险分级的方案编写、分批实施与独立验证，配 commit/PR 文案技能与提交守卫 |
-| `work-skills` | 21 个日常工作技能：阅读研究、思维工具、写作改写、文档转换、工作总结 |
+| `work-skills` | 22 个日常工作技能：阅读研究、思维工具、写作改写、文档转换、工作总结 |
 | `agent-skills` | 8 个 Agent 工程技能：Agent 设计知识包、主动型 Agent 架构、评测、DeepAgents、检索指南 |
 | `copyright-skills` | 5 个知识产权申报技能：软著材料生成与合规预审、专利分析与交底书 |
 | `rulertu-frontend` | 前端开发工程师代理 + 6 个配套技能（z.ai 官方技能包，Apache-2.0） |
@@ -70,11 +70,11 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 ## work-skills：日常工作技能
 
-21 个技能，按用途分组：
+22 个技能，按用途分组：
 
 - **阅读与研究**：`article-guide`（文章互动导读：选项式确定起点、分块讲解、按需搜索与保存学习进度）、`deep-research`（深度研究，多源搜索通道）、`company-research`（公司调研）、`strategic-analysis`（战略分析）
 - **思维工具**：`brainstorm`（纯发散头脑风暴，负责**广度**——可能性地图横向铺开，只发散不收敛）、`inspiration-pacemaker`（深度下钻引擎，负责**深度**——对单一想法纵向钻透到领域专家级洞察）、`feynman-tutor`（费曼式教学）
-- **写作与转化**：`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
+- **写作与转化**：`writing-for-human`（面向人类读者的写作、改稿与审阅）、`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
 - **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
 - **工作总结**：`work-summary`（汇总个人或团队工作记录，支持持久工作区及跨周期分尺度融合）
 - **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`
