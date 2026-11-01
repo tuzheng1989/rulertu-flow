@@ -131,6 +131,13 @@ export type GitStatus = {
   fetchedAt: number
 }
 
+/** $.fs.list() 的展示字段子集（文件树面板） */
+export type FsEntryLike = {
+  name: string
+  kind: string
+  isLink: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'flow-deck': {
@@ -160,6 +167,16 @@ declare module 'claude-code' {
       lastRun: ExecutionReport | null
       /** 执行停滞提示：距上次上报的分钟数（超过阈值）；未停滞或无执行则 null */
       stall: number | null
+      /** 文档浏览面板装载的文档；text 为 null 表示读取失败（error 记原因） */
+      doc: { path: string; text: string | null; error?: string } | null
+      /** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
+      docSection: number
+      /** 文件树面板当前浏览目录（相对会话工作目录）；null 表示根 */
+      treeDir: string | null
+      /** 文件树面板最近一次目录列表；loaded 表示已取数（含空目录） */
+      treeEntries: { entries: FsEntryLike[]; loaded: boolean } | null
+      /** 本会话 Edit/Write 改动记录（去重保序，上限 50，最新在末尾） */
+      touched: { path: string; at: number }[]
     }
   }
 }

@@ -4,6 +4,7 @@ import type {
   DepGraph,
   ExecutionReport,
   FlowTask,
+  FsEntryLike,
   GitFileState,
   GitStatus,
   PlanReview,
@@ -40,6 +41,26 @@ export function progressBar(value: number, total: number, width = 10): string {
     ? Math.max(0, Math.min(1, value / total)) : 0
   const filled = Math.round(ratio * width)
   return '━'.repeat(filled) + '─'.repeat(width - filled)
+}
+
+/** 评审达标刻度条：`▏` 固定在达标线位置（由 pass 决定，不随 score 移动），实格随 score 伸缩。 */
+export function scoreGauge(score: number, width = 10, pass = PASS_SCORE): string {
+  const clamp = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.min(10, value)) : 0)
+  const filled = Math.round((clamp(score) / 10) * width)
+  const gauge = '━'.repeat(filled) + '─'.repeat(width - filled)
+  const at = Math.max(0, Math.min(width, Math.round((clamp(pass) / 10) * width)))
+  return gauge.slice(0, at) + '▏' + gauge.slice(at)
+}
+
+/** 流水线连线状态序列：连线状态 = 右侧节点状态（流向由下游决定）；单节点或空图无连线。 */
+export function pipelineLinks(nodes: readonly DepNode[]): DepNodeStatus[] {
+  return nodes.slice(1).map(node => node.status)
+}
+
+/** 目录浏览排序：目录在前，各自按名称字典序。 */
+export function sortEntries(entries: readonly FsEntryLike[]): FsEntryLike[] {
+  return [...entries].sort((a, b) =>
+    a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1)
 }
 
 /** 五阶段序进度：index 从 1 计（完成比例 index/total）；未知阶段无序号（total 0，渲染退化为纯文字） */

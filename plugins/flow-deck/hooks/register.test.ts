@@ -138,7 +138,7 @@ describe('pane', () => {
           props: { ...paneProps('Flow 当前任务'), bodyColumns },
         })
         for (const text of [/运行中 1 · 完成 1 · 失败 1 · 停止 1 · 其他 1/, /● 运行中 · executor/,
-          /✗ 失败 · 检查边界/, /✓ 已完成/, /■ 已停止/, /○ queued/, /任务：实现面板/,
+          /✗ 失败 · 检查边界/, /✓ 已完成/, /○ 已停止/, /○ queued/, /任务：实现面板/,
           /父代理：executor/, /父代理：missing-parent/, /来源插件：workflow/]) {
           expect(await ui.find({ text })).not.toBeUndefined()
         }
@@ -288,6 +288,137 @@ describe('pane', () => {
     await ui.unmount()
   })
 
+  test('未达标评审卡画达标刻度条，▏ 固定在 8.5 位置', async ($, on) => {
+    const clock = mock.clock(on)
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    const files = new Map<string, string>([
+      ['.plan-iterate/beta/state.json', '{"backend":"glm","round":3}'],
+      ['.plan-iterate/beta/review-R3.json', '{"score":6.8,"issues":[{"severity":"P1"}]}'],
+    ])
+    const dirs = new Map<string, Array<{ name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }>>([
+      ['', [{ name: '.plan-iterate', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]],
+      ['.plan-iterate', [{ name: 'beta', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]],
+      ['.plan-iterate/beta', [
+        { name: 'review-R3.json', kind: 'file', size: 44, mtimeMs: 2, isLink: false },
+        { name: 'state.json', kind: 'file', size: 28, mtimeMs: 1, isLink: false },
+      ]],
+    ])
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      const at = norm.indexOf('.plan-iterate')
+      return at === -1 ? '' : norm.slice(at)
+    }
+    on('fs.list', ($, e) => ({ value: dirs.get(relOf(e.path)) ?? [] }))
+    on('fs.read', ($, e) => ({ value: files.get(relOf(e.path)) ?? '' }))
+    on('ui.log', () => ({ value: undefined }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'iterate', plan: 'beta' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow',
+      props: paneProps('Flow 当前任务'),
+    })
+    expect(await ui.find({ text: /● beta/ })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '━━━━━━━──▏─' })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('/tree 面板：改动清单去重、批次标注、目录导航与开关', async ($, on) => {
+    const clock = mock.clock(on)
+    const upPanes: string[] = []
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: upPanes.map(id => ({ id })) }))
+    on('ui.open', ($, e) => {
+      if (!upPanes.includes(e.id)) upPanes.push(e.id)
+      return { value: { isPlaced: true } }
+    })
+    on('ui.close', ($, e) => {
+      const at = upPanes.indexOf(e.id)
+      if (at !== -1) upPanes.splice(at, 1)
+      return { value: undefined }
+    })
+    // 底层应答：插件守卫钩子放行（next）时由本钩子收口
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    const dirs = new Map<string, Array<{ name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }>>([
+      ['', [
+        { name: 'readme.md', kind: 'file', size: 1, mtimeMs: 1, isLink: false },
+        { name: 'src', kind: 'dir', size: 0, mtimeMs: 1, isLink: false },
+      ]],
+      ['src', [{ name: 'index.ts', kind: 'file', size: 1, mtimeMs: 1, isLink: false }]],
+    ])
+    // 引擎把 $.fs.list 的路径解析为相对插件 cwd 的绝对路径转发；按尾段识别目标目录
+    const relOf = (value: unknown): string => {
+      if (typeof value !== 'string') return ''
+      const norm = value.replaceAll('\\', '/')
+      return norm.endsWith('/src') ? 'src' : ''
+    }
+    on('fs.list', ($, e) => ({ value: dirs.get(relOf(e.path)) ?? [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts' })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\src\\a.ts' })
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\readme.md' })
+    expect((await $.command.run({ command: 'tree', args: '' })).text).toContain('已打开')
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow-tree',
+      props: paneProps('文件'),
+    })
+    expect(await ui.find({ text: /▍文件 · 工作目录/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍本会话改动 · 2/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /src\/a\.ts/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /src\// })).not.toBeUndefined()
+    await $.ui.select({ plugin: 'flow-deck', key: 'tree-dir', value: 'src', requestId: 'flow-tree', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍文件 · src/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /index\.ts/ })).not.toBeUndefined()
+    // 批次边界内文件标注（边界声明本身不改变目录列表）
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'p', batch: 'B1', files: ['src/index.ts'] })
+    expect(await ui.find({ text: /◆ 本批/ })).not.toBeUndefined()
+    await ui.unmount()
+    expect((await $.command.run({ command: 'tree', args: '' })).text).toBe('已关闭文件树面板。')
+  })
+
+  test('改动记录上限 50：挤出最旧，重复路径不重复记录', async ($, on) => {
+    const clock = mock.clock(on)
+    void clock
+    let lastTouched: { path: string; at: number }[] = []
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    on('state.set', { plugin: 'flow-deck', key: 'touched' }, ($, e, next) => {
+      lastTouched = e.value as { path: string; at: number }[]
+      return next(e)
+    })
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    for (let i = 0; i < 51; i++) {
+      await $.tool.call({ tool: 'Edit', file_path: `C:\\repo\\f${i}.ts` })
+    }
+    expect(lastTouched).toHaveLength(50)
+    expect(lastTouched[0]?.path).toBe('f1.ts')
+    expect(lastTouched.at(-1)?.path).toBe('f50.ts')
+  })
+
   test('实施上报超时未续报时提示疑似停滞，同值不重复写状态', async ($, on) => {
     const clock = mock.clock(on)
     let stallWrites = 0
@@ -347,6 +478,17 @@ describe('pane', () => {
       })
       expect(await ui.find({ text: /demo · B2 · T1 · 执行 · 验证 12\/15/ })).not.toBeUndefined()
       await ui.unmount()
+      const pane = await $.ui.mount({
+        plugin: 'flow-deck',
+        surface,
+        component: 'Pane',
+        requestId: 'flow',
+        props: { ...paneProps('Flow'), bodyColumns: 80 },
+      })
+      // 风险定级在面板执行卡内为反色 chip（accent 底 + inverseText）
+      const chips = await pane.findAll({ type: 'Text', text: ' T1 ' })
+      expect(chips.some(seg => seg.props.backgroundColor === 'claude')).toBe(true)
+      await pane.unmount()
     }
   })
 
@@ -492,11 +634,16 @@ describe('pane', () => {
     expect(await ui.find({ text: /1\/3 收口/ })).not.toBeUndefined()
     // 总览条按批着色：收口 ■ 绿、进行 ▣ 黄、待执行 □ 灰（分段文本经引擎文本匹配，颜色查 props）
     const dones = await ui.findAll({ type: 'Text', text: '■' })
-    expect(dones.some(seg => seg.props.color === 'green')).toBe(true)
+    expect(dones.some(seg => seg.props.color === 'success')).toBe(true)
     const actives = await ui.findAll({ type: 'Text', text: '▣' })
-    expect(actives.some(seg => seg.props.color === 'yellow')).toBe(true)
+    expect(actives.some(seg => seg.props.color === 'warning')).toBe(true)
     const pendings = await ui.findAll({ type: 'Text', text: '□' })
     expect(pendings.some(seg => seg.props.dimColor === true)).toBe(true)
+    // 流水线连线取下游状态：B2 进行中 → ━（warn），B3 未上报 → ╌（dim）
+    const solidLinks = await ui.findAll({ type: 'Text', text: '━' })
+    expect(solidLinks.some(seg => seg.props.color === 'warning')).toBe(true)
+    const dashedLinks = await ui.findAll({ type: 'Text', text: '╌' })
+    expect(dashedLinks.some(seg => seg.props.dimColor === true)).toBe(true)
     await ui.unmount()
   })
 
@@ -558,7 +705,7 @@ describe('pane', () => {
           plugin: 'flow-deck', surface, component: 'Pane', requestId: 'flow',
           props: { ...paneProps('Flow'), bodyColumns },
         })
-        expect(await ui.find({ text: /FLOW \/ 方案迭代 · 当前迭代/ })).not.toBeUndefined()
+        expect(await ui.find({ text: /▍工作流 · 方案迭代 · 当前迭代/ })).not.toBeUndefined()
         expect(await ui.find({ text: /等待评审结果落盘/ })).not.toBeUndefined()
         expect(await ui.find({ text: /当前执行|执行 DAG|◇ 边界|旧实施/ })).toBeUndefined()
         await ui.unmount()
@@ -574,7 +721,7 @@ describe('pane', () => {
     const implementing = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow', props: paneProps('Flow'),
     })
-    expect(await implementing.find({ text: /FLOW \/ 方案实施 · 新实施/ })).not.toBeUndefined()
+    expect(await implementing.find({ text: /▍工作流 · 方案实施 · 新实施/ })).not.toBeUndefined()
     expect(await implementing.find({ text: /等待阶段进度上报/ })).not.toBeUndefined()
     expect(await implementing.find({ text: /当前迭代|旧实施|执行 DAG/ })).toBeUndefined()
     await implementing.unmount()
@@ -589,7 +736,7 @@ describe('pane', () => {
     const ui = await $.ui.mount({
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow', props: paneProps('Flow'),
     })
-    expect(await ui.find({ text: /FLOW \/ 方案迭代 · demo/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍工作流 · 方案迭代 · demo/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
@@ -650,10 +797,15 @@ describe('pane', () => {
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'flow-doc',
       props: paneProps('文档浏览'),
     })
-    expect(await ui.find({ text: /DOC \/ docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
-    expect(await ui.find({ text: /# 一 · 第 1–2 行/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍文档 · docs\/plan\.md · 2 节 · 4 行/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍一 · 第 1–2 行/ })).not.toBeUndefined()
+    const body = await ui.find({ type: 'Markdown' })
+    expect(body).not.toBeUndefined()
+    expect(body?.props.text).toBe('# 一\n正文一')
     await $.ui.select({ plugin: 'flow-deck', key: 'doc-section', value: '1', requestId: 'flow-doc', surface: 'terminal' })
-    expect(await ui.find({ text: /## 二 · 第 3–4 行/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍二 · 第 3–4 行/ })).not.toBeUndefined()
+    const nextBody = await ui.find({ type: 'Markdown' })
+    expect(nextBody?.props.text).toBe('## 二\n正文二')
     await $.ui.press({ plugin: 'flow-deck', key: 'doc-send', requestId: 'flow-doc', surface: 'terminal' })
     await clock.settle()
     expect(fills).toHaveLength(1)
@@ -665,5 +817,33 @@ describe('pane', () => {
     expect(fills).toHaveLength(2)
     expect(fills[1].mode).toBe('append')
     await ui.unmount()
+  })
+
+  test('doc 节内容以 Markdown 渲染，终端与桌面均通过引擎校验', async ($, on) => {
+    const clock = mock.clock(on)
+    const files = new Map<string, string>([['docs/plan.md', '# 一\n正文一\n## 二\n正文二']])
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      return norm.includes('docs/plan.md') ? 'docs/plan.md' : norm
+    }
+    on('fs.read', ($, e) => {
+      const rel = relOf(e.path)
+      if (!files.has(rel)) throw new Error('ENOENT: ' + String(e.path))
+      return { value: files.get(rel) }
+    })
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.close', () => ({ value: undefined }))
+    await $.command.run({ command: 'doc', args: 'docs/plan.md' })
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const view = await $.ui.mount({
+        plugin: 'flow-deck', surface, component: 'Pane', requestId: 'flow-doc',
+        props: paneProps('文档浏览'),
+      })
+      const rendered = await view.find({ type: 'Markdown' })
+      expect(rendered).not.toBeUndefined()
+      expect(rendered?.props.text).toBe('# 一\n正文一')
+      await view.unmount()
+    }
   })
 })

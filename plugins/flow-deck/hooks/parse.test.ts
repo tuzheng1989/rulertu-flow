@@ -4,6 +4,9 @@ import {
   bannerPlan,
   progressBar,
   phaseProgress,
+  pipelineLinks,
+  scoreGauge,
+  sortEntries,
   buildGitStatus,
   buildPlanReview,
   countIssues,
@@ -25,7 +28,8 @@ import {
   sparkline,
   selectTaskView,
 } from './parse'
-import type { BatchScope, GitStatus } from '../types'
+import type { DepNode } from './parse'
+import type { BatchScope, FsEntryLike, GitStatus } from '../types'
 
 describe('parse', () => {
   test('当前任务筛选不把历史评审、执行、边界或路线图当成活动任务', () => {
@@ -58,6 +62,42 @@ describe('parse', () => {
     expect(progressBar(12, 10)).toBe('━━━━━━━━━━')
     expect(progressBar(-1, 10)).toBe('──────────')
     expect(progressBar(NaN, 10)).toBe('──────────')
+  })
+
+  test('达标刻度条：▏ 固定在达标线位置，不随分数移动', () => {
+    expect(scoreGauge(6.8)).toBe('━━━━━━━──▏─')
+    expect(scoreGauge(0)).toBe('─────────▏─')
+    expect(scoreGauge(8.5)).toBe('━━━━━━━━━▏─')
+    expect(scoreGauge(10)).toBe('━━━━━━━━━▏━')
+    expect(scoreGauge(12)).toBe('━━━━━━━━━▏━')
+    expect(scoreGauge(-1)).toBe('─────────▏─')
+  })
+
+  test('达标刻度条：pass 可调，pass=10 时刻度在串尾', () => {
+    expect(scoreGauge(10, 10, 10)).toBe('━━━━━━━━━━▏')
+    expect(scoreGauge(5, 10, 5)).toBe('━━━━━▏─────')
+  })
+
+  test('流水线连线状态取右侧节点，单节点无连线', () => {
+    const nodes: DepNode[] = [
+      { batch: 'B1', dependsOn: [], status: 'done' },
+      { batch: 'B2', dependsOn: ['B1'], status: 'active' },
+      { batch: 'B3', dependsOn: ['B2'], status: 'pending' },
+    ]
+    expect(pipelineLinks(nodes)).toEqual(['active', 'pending'])
+    expect(pipelineLinks(nodes.slice(0, 1))).toEqual([])
+    expect(pipelineLinks([])).toEqual([])
+  })
+
+  test('目录排序：目录在前，各自按名称字典序，不改原数组', () => {
+    const entries: FsEntryLike[] = [
+      { name: 'readme.md', kind: 'file', isLink: false },
+      { name: 'src', kind: 'dir', isLink: false },
+      { name: 'a.ts', kind: 'file', isLink: false },
+      { name: 'docs', kind: 'dir', isLink: false },
+    ]
+    expect(sortEntries(entries).map(one => one.name)).toEqual(['docs', 'src', 'a.ts', 'readme.md'])
+    expect(entries.map(one => one.name)).toEqual(['readme.md', 'src', 'a.ts', 'docs'])
   })
 
   test('phaseProgress 映射五阶段序号，未知阶段无序号', () => {

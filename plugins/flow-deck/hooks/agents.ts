@@ -1,14 +1,15 @@
-import type { AgentInfo } from 'claude-code'
+import type { AgentInfo, ThemeKey } from 'claude-code'
 import type { AgentSnapshot } from '../types'
 import { singleFlight } from './poll'
+import { MARK, TONE } from './ui'
 
-export function agentStatus(status: string): { label: string; mark: string; color?: string } {
+export function agentStatus(status: string): { label: string; mark: string; color?: ThemeKey } {
   switch (status) {
-    case 'running': return { label: '运行中', mark: '●', color: 'cyan' }
-    case 'completed': return { label: '已完成', mark: '✓', color: 'green' }
-    case 'failed': return { label: '失败', mark: '✗', color: 'red' }
-    case 'killed': return { label: '已停止', mark: '■', color: 'yellow' }
-    default: return { label: status || '未知', mark: '○' }
+    case 'running': return { label: '运行中', mark: MARK.run, color: TONE.accent }
+    case 'completed': return { label: '已完成', mark: MARK.done, color: TONE.ok }
+    case 'failed': return { label: '失败', mark: MARK.bad, color: TONE.bad }
+    case 'killed': return { label: '已停止', mark: MARK.idle, color: TONE.warn }
+    default: return { label: status || '未知', mark: MARK.idle }
   }
 }
 
