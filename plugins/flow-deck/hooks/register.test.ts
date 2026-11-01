@@ -455,10 +455,17 @@ describe('pane', () => {
     expect(await ui.find({ text: /▍改动 · 2/ })).not.toBeUndefined()
     expect(await ui.find({ text: /src\/a\.ts/ })).not.toBeUndefined()
     expect(await ui.find({ text: /src\// })).not.toBeUndefined()
-    await $.ui.select({ plugin: 'flow-deck', key: 'tree-dir', value: 'src', requestId: 'deck', surface: 'terminal' })
+    // 目录行点击进入该目录
+    await $.ui.press({ plugin: 'flow-deck', key: 'dir-open-src', requestId: 'deck', surface: 'terminal' })
     await clock.settle()
     expect(await ui.find({ text: /▍文件 · src/ })).not.toBeUndefined()
     expect(await ui.find({ text: /index\.ts/ })).not.toBeUndefined()
+    // 「← 上级」回工作目录
+    await $.ui.press({ plugin: 'flow-deck', key: 'dir-up', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍文件 · 工作目录/ })).not.toBeUndefined()
+    await $.ui.press({ plugin: 'flow-deck', key: 'dir-open-src', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
     // 批次边界内文件标注（边界声明本身不改变目录列表）
     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'p', batch: 'B1', files: ['src/index.ts'] })
     expect(await ui.find({ text: /◆ 本批/ })).not.toBeUndefined()

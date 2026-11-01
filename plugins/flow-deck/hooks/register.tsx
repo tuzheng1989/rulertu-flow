@@ -597,7 +597,7 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
 }
 
 const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
-  const { Box, Text, Button, Select } = $.ui.resolve(e)
+  const { Box, Text, Button } = $.ui.resolve(e)
   const status: GitStatus | null = await read($, gitStatus)
   const touchedList = await read($, touched)
   const scope = await read($, batchScope)
@@ -655,35 +655,25 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
         })}
       </Box>
       <Box flexDirection="column">
-        <Text bold wrap="truncate-end">{MARK.title}目录</Text>
+        <Box gap={2}>
+          <Text bold wrap="truncate-end">{MARK.title}目录</Text>
+          {dir !== null && (
+            <Button key="dir-up" plain onPress={() => { void loadTree($, dir.includes('/') ? dir.split('/').slice(0, -1).join('/') : null) }}>← 上级</Button>
+          )}
+        </Box>
         {!tree?.loaded && <Text dimColor>正在读取目录…</Text>}
-        {tree?.loaded && (
-          <Select
-            key="tree-dir"
-            label="进入子目录"
-            options={[
-              { value: '', text: dir === null ? '工作目录（当前）' : '… 工作目录' },
-              ...sortEntries(tree.entries).filter(one => one.kind === 'dir').map(one => ({
-                value: dir === null ? one.name : `${dir}/${one.name}`,
-                text: `${one.name}/`,
-              })),
-            ]}
-            value=""
-            onSelect={value => { void loadTree($, value === '' ? null : value) }}
-          />
-        )}
         {tree?.loaded && tree.entries.length === 0 && <Text dimColor>（空目录）读取失败或无内容，按 r 重读。</Text>}
         {tree?.loaded && sortEntries(tree.entries).map(entry => {
           const path = dir === null ? entry.name : `${dir}/${entry.name}`
           const mark = entry.kind === 'dir' ? null : gitMark(path)
           const pinned = entry.kind !== 'dir' && scopeSet.has(path.toLowerCase())
-          // 目录行保持纯文本（进目录走上方 Select），文件行可点击跳到文档页签
+          // 目录行点击进入该目录，文件行点击跳到文档页签
           if (entry.kind === 'dir') {
             return (
-              <Text key={entry.name} wrap="truncate-middle">
+              <Button key={`dir-open-${path}`} plain wrap="truncate-middle" onPress={() => { void loadTree($, path) }}>
                 {`${entry.name}/`}
                 {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
-              </Text>
+              </Button>
             )
           }
           return (
@@ -698,7 +688,7 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
       <Box>
         <Button key="tree-reload" hotkey="r" plain onPress={() => { void loadTree($, dir) }}>重读</Button>
       </Box>
-      <Text dimColor wrap="truncate-end">/deck 关闭 · 点击文件跳到文档页签 · ● 本会话 ○ 其他 · r 重读目录</Text>
+      <Text dimColor wrap="truncate-end">/deck 关闭 · 点目录进入 · 点文件看文档 · ● 本会话 ○ 其他 · r 重读目录</Text>
     </Box>
   )
 }
