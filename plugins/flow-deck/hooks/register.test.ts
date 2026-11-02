@@ -163,6 +163,17 @@ describe('pane', () => {
     expect(closed).toBe(1)
   })
 
+  test('/deck 打开未停靠时如实报告引擎原因', async ($, on) => {
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: false, reason: 'below its floor of 110 columns (now 80)' } }))
+    const opened = await $.command.run({ command: 'deck', args: '' })
+    expect(opened.text).toContain('面板暂未停靠')
+    expect(opened.text).toContain('110 columns')
+    // 页签直达分支同样转述
+    const tree = await $.command.run({ command: 'deck', args: 'tree' })
+    expect(tree.text).toContain('面板暂未停靠')
+  })
+
   test('子代理面板区分加载中、空清单、刷新失败和过期快照', async ($, on) => {
     let snapshot: AgentSnapshot = { agents: [], loaded: false, error: false }
     on('state.set', { plugin: 'flow-deck', key: 'agents' }, ($, e, next) => next({ ...e, value: snapshot }))

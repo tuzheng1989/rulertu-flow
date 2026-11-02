@@ -213,13 +213,20 @@ async function recordTouch($: EngineInterface, file_path: unknown): Promise<void
     try {
       const isOpen = (await $.ui.panes()).some(pane => pane.id === DECK_PANE_ID)
       if (!isOpen) {
-        await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: false })
+        const opened = await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: false })
+        if (!opened.isPlaced) $.ui.log(`flow-deck 自动侧边栏未停靠：${opened.reason}`, { to: 'debug' })
         void refreshAgents?.().catch(() => {})
       }
     } catch (error) {
       $.ui.log(`flow-deck 自动侧边栏失败：${String(error)}`, { to: 'debug' })
     }
   }
+}
+
+/** 打开 deck 面板；返回空串（已停靠）或未停靠说明（引擎 reason，如宽度门槛） */
+async function openDeckPane($: EngineInterface): Promise<string> {
+  const opened = await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
+  return opened.isPlaced ? '' : `；面板暂未停靠：${opened.reason}`
 }
 
 /** 在文档页签装载一个文件并切过去（文件页签点击文件行的入口） */
@@ -874,18 +881,18 @@ export const register: Register = (on, options) => {
         return { text: '已关闭 flow-deck 面板。' }
       }
       manualDeck = true
-      await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
+      const note = await openDeckPane($)
       void refreshAgents?.().catch(error => {
         $.ui.log(`flow-deck 子代理刷新失败：${String(error)}`, { to: 'debug' })
       })
-      return { text: '已打开面板（1 工作流 · 2 文件 · 3 文档，Esc 回输入框）。' }
+      return { text: `已打开面板（1 工作流 · 2 文件 · 3 文档，Esc 回输入框）${note}。` }
     }
     if (arg === 'flow' || arg === 'tree') {
       await update($, activeTab, () => arg === 'tree' ? 'files' : 'flow')
       if (arg === 'tree') await loadTree($, null)
       manualDeck = true
-      if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
-      return { text: arg === 'tree' ? '已切到文件树页签。' : '已切到工作面板页签。' }
+      const note = isOpen ? '' : await openDeckPane($)
+      return { text: `${arg === 'tree' ? '已切到文件树页签' : '已切到工作面板页签'}${note}。` }
     }
     if (arg === 'doc' || arg.startsWith('doc ')) {
       const path = arg.slice(3).trim()
@@ -893,13 +900,13 @@ export const register: Register = (on, options) => {
         await loadDoc($, path)
         await update($, activeTab, () => 'doc')
         manualDeck = true
-        if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
-        return { text: `文档已装载：${path}` }
+        const note = isOpen ? '' : await openDeckPane($)
+        return { text: `文档已装载：${path}${note}` }
       }
       await update($, activeTab, () => 'doc')
       manualDeck = true
-      if (!isOpen) await $.ui.open({ id: DECK_PANE_ID, title: DECK_TITLE, focus: true })
-      return { text: '已切到文件查看器页签；装载文档用 /deck doc <相对路径>。' }
+      const note = isOpen ? '' : await openDeckPane($)
+      return { text: `已切到文件查看器页签；装载文档用 /deck doc <相对路径>${note}。` }
     }
     return { text: '用法：/deck [flow|tree|doc [相对路径]]' }
   })
