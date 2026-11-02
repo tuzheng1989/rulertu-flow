@@ -73,7 +73,7 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 22 个技能，按用途分组：
 
 - **阅读与研究**：`article-guide`（文章互动导读：选项式确定起点、分块讲解、按需搜索与保存学习进度）、`deep-research`（深度研究，多源搜索通道）、`company-research`（公司调研）、`strategic-analysis`（战略分析）
-- **思维工具**：`brainstorm`（纯发散头脑风暴，负责**广度**——可能性地图横向铺开，只发散不收敛）、`inspiration-pacemaker`（深度下钻引擎，负责**深度**——对单一想法纵向钻透到领域专家级洞察）、`feynman-tutor`（费曼式教学）
+- **思维工具**：`brainstorm`（思维探索引擎三模式：深钻——单点钻透到领域专家级洞察；扩散——可能性地图横向铺开，只发散不收敛；创意——把参考物的深层机制翻译成意料之外、情理之中的设计）、`feynman-tutor`（费曼式教学）
 - **写作与转化**：`writing-for-human`（面向人类读者的写作、改稿与审阅）、`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
 - **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
 - **工作总结**：`work-summary`（汇总个人或团队工作记录，支持持久工作区及跨周期分尺度融合）

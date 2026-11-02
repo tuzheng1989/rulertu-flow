@@ -1,0 +1,147 @@
+# B2 commands.log —— 定向验证记录（2026-11-02）
+
+执行者：executor（B2：新增创意模式）。工作目录 `D:/runspace/rulertu-flow`，路径均为仓库相对路径。
+通过标准引自 B2 委派单"改动锚点 → 定向验证命令映射"。
+
+## A1：mode-creative.md 存在性 + 13 关键要素
+
+命令（Git Bash）：
+
+```bash
+F="plugins/work-skills/skills/brainstorm/references/mode-creative.md"
+test -f "$F"; echo "test -f exit=$?"
+for kw in 生效条件 机制移植 结构映射 混血 变维 反平庸 意外程度 查新 机制核实 试金石 未验证创意 产出不足 不建日志; do
+  c=$(grep -c "$kw" "$F"); echo "grep -c '$kw' => $c (exit=$?)"
+done
+```
+
+输出：
+
+```
+test -f exit=0
+grep -c '生效条件' => 7 (exit=0)
+grep -c '机制移植' => 1 (exit=0)
+grep -c '结构映射' => 1 (exit=0)
+grep -c '混血' => 1 (exit=0)
+grep -c '变维' => 1 (exit=0)
+grep -c '反平庸' => 2 (exit=0)
+grep -c '意外程度' => 3 (exit=0)
+grep -c '查新' => 3 (exit=0)
+grep -c '机制核实' => 3 (exit=0)
+grep -c '试金石' => 4 (exit=0)
+grep -c '未验证创意' => 1 (exit=0)
+grep -c '产出不足' => 2 (exit=0)
+grep -c '不建日志' => 1 (exit=0)
+```
+
+结论：**通过**。文件在；13 要素各 ≥1。
+
+## A2：test-scenarios.md 判别节关键词 + 原场景保留
+
+命令：
+
+```bash
+TS="plugins/work-skills/skills/brainstorm/references/test-scenarios.md"
+for kw in 模式判别 冲突 显式 切换 "场景 A"; do
+  c=$(grep -c "$kw" "$TS"); echo "grep -c '$kw' => $c (exit=$?)"
+done
+grep -c '^## 场景' "$TS"
+grep -n '^## 模式判别场景' "$TS"
+```
+
+输出：
+
+```
+grep -c '模式判别' => 2 (exit=0)
+grep -c '冲突' => 5 (exit=0)
+grep -c '显式' => 1 (exit=0)
+grep -c '切换' => 6 (exit=0)
+grep -c '场景 A' => 2 (exit=0)
+grep -c '^## 场景' => 4        # 场景 A/B/C/D 标题保留
+grep -n '^## 模式判别场景' => 183:## 模式判别场景（三模式整合后新增）
+```
+
+补充证据（纯追加核验）：
+
+```bash
+git diff --stat -- plugins/work-skills/skills/brainstorm/references/test-scenarios.md
+git diff -- <同路径> | grep -cE '^-[^-]'
+```
+
+输出：
+
+```
+ 1 file changed, 32 insertions(+)
+删除行计数: 0
+```
+
+结论：**通过**。判别节在（行 183）；4 关键词各 ≥1；原 4 场景与清单保留（相对 HEAD 纯追加 32 行、0 删除行）。
+
+## A3：evals.json 合法性 + 用例数 + 判别内容
+
+命令：
+
+```bash
+python -X utf8 -c "
+import json
+p='plugins/work-skills/skills/brainstorm/evals/evals.json'
+d=json.load(open(p,encoding='utf-8'))
+evs=d['evals']
+print('valid json; skill_name =',d['skill_name'],'; evals =',len(evs))
+for e in evs[5:]:
+    s=json.dumps(e,ensure_ascii=False)
+    has_kw = ('模式' in s) and ('判' in s)
+    print('new eval id=%s name=%s keys=%s 判别内容=%s' % (e['id'],e['name'],sorted(e.keys()),has_kw))
+"
+```
+
+输出：
+
+```
+valid json; skill_name = brainstorm ; evals = 8
+new eval id=6 name=mode-dispatch-no-reference-creative-request keys=['expected_output', 'files', 'id', 'name', 'prompt'] 判别内容=True
+new eval id=7 name=mode-dispatch-with-reference-design keys=['expected_output', 'files', 'id', 'name', 'prompt'] 判别内容=True
+new eval id=8 name=mode-dispatch-explicit-mode-param keys=['expected_output', 'files', 'id', 'name', 'prompt'] 判别内容=True
+exit=0
+```
+
+结论：**通过**。JSON 合法；8 条（5 旧未动 + 3 新 ≥2）；新用例 keys 与既有 schema 一致，内容含模式判别。
+
+## A4：路由层 ↔ 手册交叉引用
+
+命令：
+
+```bash
+grep -n "mode-creative" plugins/work-skills/skills/brainstorm/SKILL.md
+test -f plugins/work-skills/skills/brainstorm/references/mode-creative.md && echo "mode-creative.md exists"
+grep -n "创意（creative）" plugins/work-skills/skills/brainstorm/SKILL.md
+```
+
+输出：
+
+```
+16:| 创意（creative） | `references/mode-creative.md` | 远距关联，把参考物机制翻译成设计 |
+mode-creative.md exists
+16:| 创意（creative） | `references/mode-creative.md` | 远距关联，把参考物机制翻译成设计 |
+55:| **有参考物**（作品/风格/领域/案例）+ 要设计某物，或要"意想不到/创意/灵感" | 创意（creative） |
+```
+
+结论：**通过**。SKILL.md 第 16 行引用的手册文件名与实际文件一致；判据表（行 55"有参考物 + 要设计某物/意想不到"）与 mode-creative.md 定位段（"远距关联引擎：把参考物的深层机制翻译到用户需求上"、盘点步的参考 R 与需求 N）语义一致。
+
+## 回归：dual-listen 测试套件
+
+命令：
+
+```bash
+python -m pytest tests/test_dual_listen.py -q 2>&1 | tail -5
+```
+
+输出：
+
+```
+......................                                                   [100%]Running teardown with pytest sessionfinish...
+22 passed in 15.00s
+exit=0
+```
+
+结论：**通过**。22 passed，exit=0（本批未动脚本，防意外回归——无回归）。

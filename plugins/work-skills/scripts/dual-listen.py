@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """dual-listen.py — 跨模型兼听（Codex CLI）共用执行脚本。
 
-brainstorm（diverge）与 inspiration-pacemaker（attack / blindspot）复用本脚本。
+brainstorm 技能（diverge / attack / blindspot 三种模式）复用本脚本。
 确定性机制（预算扣次、排他目录、进程启动、五级失败分类、用量提取、清理）
 全部下沉到这里，宿主模型只做判断性工作：触发、撰写快照、读取结果 JSON 并合并。
 规格唯一出处：plans/work-skills/2026-10-29-dual-model-listening.md §2.8。

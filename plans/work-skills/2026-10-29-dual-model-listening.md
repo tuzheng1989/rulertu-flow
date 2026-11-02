@@ -1,5 +1,7 @@
 # 方案：brainstorm / inspiration-pacemaker 双模型兼听
 
+> **整合说明（2026-11-02）**：brainstorm 与 inspiration-pacemaker 已整合为单一技能 brainstorm（深钻/扩散/创意三模式，方案见 [2026-11-02-brainstorm-three-mode-merge.md](2026-11-02-brainstorm-three-mode-merge.md)）。本文中 brainstorm 对应整合后的**扩散模式**，inspiration-pacemaker 对应**深钻模式**；机制规格不变，本文仍为活规格。
+
 > 收尾修订（第 5 轮评审 + 用户质疑后）：机制下沉至共用脚本 `dual-listen.py`（见 2.8），SKILL.md 调用 prose 删减为三步；新增 B0 批次与单元测试。原"不动脚本"决定及其反转理由见取舍 D。
 
 > 修订 R4：响应四轮评审 1×P1、3×P2。关键修正：扣次改为"启动前先持久化预留、写入成功才启动进程、中断不返还"；事件流字段缺失时验收接受"请求值（未验证）"；台账遇同名不覆盖、追加序号新建；每次尝试改为排他创建的独立目录，输出/事件文件由目录保证唯一，并明确三种清理时机。

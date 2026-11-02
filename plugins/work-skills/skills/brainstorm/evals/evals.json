@@ -1,5 +1,5 @@
 {
-  "skill_name": "inspiration-pacemaker",
+  "skill_name": "brainstorm",
   "evals": [
     {
       "id": 1,
@@ -34,6 +34,27 @@
       "name": "feature-design-essence",
       "prompt": "我在做一个'邮件助手'类产品，用户抱怨处理邮件太慢也分不清轻重缓急，帮我深度设计一些新功能方向。",
       "expected_output": "应把功能名词换成动词、下钻到用户真正要完成的任务本质，产出 1-3 个方案且每个说明任务本质与什么能证明它对。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "mode-dispatch-no-reference-creative-request",
+      "prompt": "帮我想几个有创意的方案，我要给我们团队办一场年度活动。",
+      "expected_output": "应宣告判据冲突的走向：请求含'创意'但无参考物，判扩散模式并在宣告中明示判据（无参考→扩散），同时提示'如有参考物（喜欢的活动/游戏机制/品牌案例）可切换创意模式'；不应直接进入创意模式的盘点-解构流程。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "mode-dispatch-with-reference-design",
+      "prompt": "参考盲盒机制，帮我设计我们产品的功能发布节奏，想要意料之外但靠谱的方案。",
+      "expected_output": "应宣告创意模式并给出判据（有参考物 + 要设计某物 + 要'意料之外'），随后按 mode-creative.md 五步流程执行：盘点需求与参考、解构盲盒为生效机制（含生效条件清单）、四透镜远距关联并写关联路径、双轴筛选（意外点锚定软件发布领域惯例）、产出 3-5 个按意外程度排序的设计（每个含必填试金石）；不应输出未经筛选的可能性清单。",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "mode-dispatch-explicit-mode-param",
+      "prompt": "/brainstorm 创意 把交响乐四乐章结构用到我的技术分享设计上",
+      "expected_output": "应因 $mode 显式参数前缀'创意'命中第 1 层判别，宣告创意模式并标注'用户指定'，然后按创意模式五步流程执行（结构映射透镜：四乐章张力-释放结构 → 分享叙事结构）；宣告中应包含判据说明与可切换提示。",
       "files": []
     }
   ]
