@@ -245,6 +245,7 @@ export function parseReviewJson(text: string, round: number): ReviewRound | null
 export type PlanState = {
   backend?: string
   round?: number
+  planPath?: string
 }
 
 /** 解析 state.json 文本；坏 JSON 或结构不符（含数组）返回 null */
@@ -256,10 +257,11 @@ export function parseStateJson(text: string): PlanState | null {
     return null
   }
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return null
-  const record = data as { backend?: unknown; round?: unknown }
+  const record = data as { backend?: unknown; round?: unknown; plan_path?: unknown }
   const state: PlanState = {}
   if (typeof record.backend === 'string') state.backend = record.backend
   if (typeof record.round === 'number') state.round = record.round
+  if (typeof record.plan_path === 'string' && record.plan_path !== '') state.planPath = record.plan_path
   return state
 }
 
@@ -382,6 +384,7 @@ export function buildPlanReview(
   return {
     name,
     dir,
+    ...(state?.planPath !== undefined ? { docPath: state.planPath } : {}),
     backend: state?.backend,
     round: state?.round ?? (latest === null ? 0 : latest.round),
     rounds,

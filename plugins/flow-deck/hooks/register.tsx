@@ -235,6 +235,38 @@ async function openInDoc($: EngineInterface, path: string): Promise<void> {
   await update($, activeTab, () => 'doc')
 }
 
+/** 按仓库约定在 plans/<插件>/<方案名>.md 处即时查找方案文档；无 plans 目录或未命中返回 null */
+async function findPlanDoc($: EngineInterface, name: string): Promise<string | null> {
+  try {
+    for (const entry of await $.fs.list('plans')) {
+      if (entry.kind !== 'dir') continue
+      const files = await $.fs.list(`plans/${entry.name}`)
+      const hit = files.find(file => file.kind === 'file' && file.name === `${name}.md`)
+      if (hit !== undefined) return `plans/${entry.name}/${hit.name}`
+    }
+  } catch {
+    // plans 目录不存在或不可读：视为未找到
+  }
+  return null
+}
+
+/** 按方案名把方案文档装入文件查看器（工作面板方案名点击的入口）：
+ * 优先取评审 state.json 记录的 plan_path；implement 任务常无评审目录，
+ * 退而按仓库约定扫 plans/<插件>/<方案名>.md；仍无则 toast 说明 */
+async function openPlanDoc($: EngineInterface, name: string): Promise<void> {
+  const known = (await read($, plans)).find(plan => plan.name === name && plan.docPath !== undefined)?.docPath
+  if (known !== undefined) {
+    await openInDoc($, normalizePath(known, sessionCwd))
+    return
+  }
+  const fallback = await findPlanDoc($, name)
+  if (fallback !== null) {
+    await openInDoc($, fallback)
+    return
+  }
+  $.ui.toast(`未找到「${name}」的方案文档`)
+}
+
 /** 装载文件树目录列表；dir 为 null 表示会话工作目录根。读失败置空（面板内提示可重读）。 */
 async function loadTree($: EngineInterface, dir: string | null): Promise<void> {
   let entries: FsEntryLike[] = []
@@ -385,7 +417,10 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="column">
-        <Text bold color={TONE.accent}>{MARK.title}工作面板 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · {task.plan}</Text>
+        <Button key="task-plan-open" plain onPress={() => { void openPlanDoc($, task.plan) }}>
+          <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}工作面板 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · </Text>
+          <Text bold color={TONE.accent} underline wrap="truncate-end">{task.plan}</Text>
+        </Button>
         {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
         {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
       </Box>
@@ -393,7 +428,10 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
       {task.kind === 'implement' && report === null && <Text dimColor>实施任务已开始，等待阶段进度上报。</Text>}
       {report !== null && phase !== null && (
         <Box flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={TONE.accent} paddingX={wide ? 1 : 0}>
-          <Text bold color={TONE.accent} wrap="truncate-end">{MARK.run} 当前执行 · {report.plan}</Text>
+          <Button key="exec-plan-open" plain onPress={() => { void openPlanDoc($, report.plan) }}>
+            <Text bold color={TONE.accent} wrap="truncate-end">{MARK.run} 当前执行 · </Text>
+            <Text bold color={TONE.accent} underline wrap="truncate-end">{report.plan}</Text>
+          </Button>
           <Text wrap="truncate-end">
             {report.batch}
             {report.tLevel !== undefined && <Text backgroundColor={TONE.accent} color="inverseText"> {report.tLevel} </Text>}
@@ -427,7 +465,10 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
         const tone = plan.passed ? TONE.ok : latest !== null && latest.p0 > 0 ? TONE.bad : TONE.warn
         return (
           <Box key={plan.dir} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={tone} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
-            <Text bold color={tone} wrap="truncate-end">{plan.passed ? MARK.done : MARK.run} {plan.name}</Text>
+            <Button key={`plan-open-${plan.dir}`} plain onPress={() => { void openPlanDoc($, plan.name) }}>
+              <Text bold color={tone}>{plan.passed ? MARK.done : MARK.run} </Text>
+              <Text bold color={tone} underline wrap="truncate-end">{plan.name}</Text>
+            </Button>
             <Text wrap="truncate-end">
               <Text color={tone}>{latest === null ? '等待结果' : `${latest.score.toFixed(1)} / 10`}</Text>
               <Text dimColor> · R{plan.round}/5 · {plan.passed ? '已达标' : '待达标'}</Text>
@@ -488,7 +529,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
         </Box>
       )}
       {agentsSection}
-      <Text dimColor wrap="truncate-end">/deck 关闭 · 面板内按 r 刷新</Text>
+      <Text dimColor wrap="truncate-end">/deck 关闭 · 点方案名看文档 · 面板内按 r 刷新</Text>
     </Box>
   )
 }

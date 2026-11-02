@@ -61,6 +61,9 @@ describe('pane', () => {
       props: paneProps('Flow 当前任务'),
     })
     expect(await ui.find({ text: /● 运行中 · executor/ })).not.toBeUndefined()
+    // 子代理区保留 Claude Code 一致的橙（deck 主色调已改蓝，此处不跟随）
+    const runningLine = await ui.find({ type: 'Text', text: /● 运行中 · executor/ })
+    expect(runningLine?.props.color).toBe('claude')
     status = 'completed'
     await clock.advance(2000)
     expect(calls).toBe(2)
@@ -409,6 +412,79 @@ describe('pane', () => {
     await ui.unmount()
   })
 
+  test('点工作面板方案名把方案文档装入文件查看器：卡片走 plan_path，实施标题走 plans/ 约定兜底', async ($, on) => {
+    const clock = mock.clock(on)
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    const toasts: string[] = []
+    on('ui.toast', ($, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    const files = new Map<string, string>([
+      ['.plan-iterate/beta/state.json', JSON.stringify({ backend: 'glm', round: 1, plan_path: 'C:\\repo\\plans\\work\\beta.md' })],
+      ['.plan-iterate/beta/review-R1.json', JSON.stringify({ score: 6.8, issues: [{ severity: 'P1' }] })],
+      ['plans/work/beta.md', '# 方案\n内容'],
+      ['plans/work/impl.md', '# 实施\n内容'],
+    ])
+    const dirs = new Map<string, Array<{ name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }>>([
+      ['', [
+        { name: '.plan-iterate', kind: 'dir', size: 0, mtimeMs: 0, isLink: false },
+        { name: 'plans', kind: 'dir', size: 0, mtimeMs: 0, isLink: false },
+      ]],
+      ['.plan-iterate', [{ name: 'beta', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]],
+      ['.plan-iterate/beta', [
+        { name: 'review-R1.json', kind: 'file', size: 40, mtimeMs: 2, isLink: false },
+        { name: 'state.json', kind: 'file', size: 60, mtimeMs: 1, isLink: false },
+      ]],
+      ['plans', [{ name: 'work', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]],
+      ['plans/work', [
+        { name: 'beta.md', kind: 'file', size: 12, mtimeMs: 4, isLink: false },
+        { name: 'impl.md', kind: 'file', size: 12, mtimeMs: 5, isLink: false },
+      ]],
+    ])
+    // 引擎把 $.fs.list/read 的路径规范化为绝对路径转发；剥出 .plan-iterate 或 plans 起的相对段分发
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      const at = Math.max(norm.indexOf('.plan-iterate'), norm.indexOf('plans'))
+      return at === -1 ? '' : norm.slice(at)
+    }
+    on('fs.list', ($, e) => ({ value: dirs.get(relOf(e.path)) ?? [] }))
+    on('fs.read', ($, e) => ({ value: files.get(relOf(e.path)) ?? '' }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'iterate', plan: 'beta' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Flow 当前任务'),
+    })
+    expect(await ui.find({ text: /● beta/ })).not.toBeUndefined()
+    // 评审卡片：state.json 的 plan_path（绝对路径剥 cwd 前缀后装载）
+    await $.ui.press({ plugin: 'flow-deck', key: 'plan-open-.plan-iterate/beta', requestId: 'deck', surface: 'terminal' })
+    expect(await ui.find({ text: /▍文件查看器 · plans\/work\/beta\.md · 1 节 · 2 行/ })).not.toBeUndefined()
+    // 实施任务标题：无评审目录，按 plans/<插件>/<方案名>.md 约定兜底
+    await $.ui.press({ plugin: 'flow-deck', key: 'tab-flow', requestId: 'deck', surface: 'terminal' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'impl' })
+    // 先确认面板已切到新任务（避免按压命中旧渲染树的闭包）
+    expect(await ui.find({ text: /▍工作面板 · 方案实施 · impl/ })).not.toBeUndefined()
+    await $.ui.press({ plugin: 'flow-deck', key: 'task-plan-open', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍文件查看器 · plans\/work\/impl\.md · 1 节 · 2 行/ })).not.toBeUndefined()
+    // 两处都找不到时 toast 说明，不切页签
+    await $.ui.press({ plugin: 'flow-deck', key: 'tab-flow', requestId: 'deck', surface: 'terminal' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'ghost' })
+    expect(await ui.find({ text: /▍工作面板 · 方案实施 · ghost/ })).not.toBeUndefined()
+    await $.ui.press({ plugin: 'flow-deck', key: 'task-plan-open', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(toasts.some(text => text.includes('未找到「ghost」的方案文档'))).toBe(true)
+    await ui.unmount()
+  })
+
   test('/tree 面板：改动清单去重、批次标注、目录导航与开关', async ($, on) => {
     const clock = mock.clock(on)
     const upPanes: string[] = []
@@ -583,9 +659,9 @@ describe('pane', () => {
         requestId: 'deck',
         props: { ...paneProps('Flow'), bodyColumns: 80 },
       })
-      // 风险定级在面板执行卡内为反色 chip（accent 底 + inverseText）
+      // 风险定级在面板执行卡内为反色 chip（accent 底 + inverseText；accent 已改为蓝）
       const chips = await pane.findAll({ type: 'Text', text: ' T1 ' })
-      expect(chips.some(seg => seg.props.backgroundColor === 'claude')).toBe(true)
+      expect(chips.some(seg => seg.props.backgroundColor === 'professionalBlue')).toBe(true)
       await pane.unmount()
     }
   })

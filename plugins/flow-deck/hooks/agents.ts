@@ -5,7 +5,7 @@ import { MARK, TONE } from './ui'
 
 export function agentStatus(status: string): { label: string; mark: string; color?: ThemeKey } {
   switch (status) {
-    case 'running': return { label: '运行中', mark: MARK.run, color: TONE.accent }
+    case 'running': return { label: '运行中', mark: MARK.run, color: TONE.agent }
     case 'completed': return { label: '已完成', mark: MARK.done, color: TONE.ok }
     case 'failed': return { label: '失败', mark: MARK.bad, color: TONE.bad }
     case 'killed': return { label: '已停止', mark: MARK.idle, color: TONE.warn }

@@ -5,8 +5,10 @@ import type { ThemeKey } from 'claude-code'
  * ThemeKey 跟随用户 /theme 与换肤类 mod 自动适配；渲染层禁用 ANSI 字面量色名。
  */
 export const TONE = {
-  /** 面板标题、flow 前缀、进行中强调、chip 底色（承接旧 cyan） */
-  accent: 'claude',
+  /** 面板标题、flow 前缀、进行中强调、chip 底色（2026-11-02 应用户要求由 claude 橙改为蓝） */
+  accent: 'professionalBlue',
+  /** 子代理区强调色：保留与 Claude Code 子代理展示一致的橙 */
+  agent: 'claude',
   /** 完成/达标/已暂存/ahead/干净（承接旧 green） */
   ok: 'success',
   /** 警告/待达标/未暂存/behind/停滞（承接旧 yellow） */

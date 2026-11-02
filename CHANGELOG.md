@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- flow-deck 0.17.0：工作面板方案名点击直达文件查看器 + 主色调改蓝——标题行、当前执行行与 plan-iterate 评审卡的方案名改为可点击（`plain` 按钮 + 方案名下划线，沿 0.16.3 整行链接约定），点击装载方案文档并切到文件查看器页签：优先取评审目录 `state.json` 的 `plan_path`（新增 `PlanReview.docPath` 契约，绝对路径经 cwd 归一化），implement 任务常无评审目录，退而按仓库约定即时扫 `plans/<插件>/<方案名>.md`，两处皆无时 toast 说明不切页签。主色调 `TONE.accent` 由 `claude`（橙）改为 `professionalBlue`（蓝，面板标题/flow 前缀/执行卡边框/DAG 总览/tLevel chip 底色等全量跟随）；子代理区新增 `TONE.agent = 'claude'` 语义色保留与 Claude Code 子代理展示一致的橙（运行中状态行与卡片边框不跟随主色变化）。双 manifest 同步升版 0.17.0。
+
 - flow-deck 0.16.3：按钮与文本的视觉区分（分治策略）——无热键的低密度操作按钮（子代理「查看」、「全文」「‹ 上一节」「下一节 ›」与分页数字、「← 上级」、「主对话」）去掉 `plain`，终端画成 `[ label ]` 括号样式；文件树高密度整行按钮（改动清单、目录行、文件行）保持 `plain` 但主名（路径/文件名/目录名）加下划线（改动行的状态点 `●`/`○` 不下划线）。带热键的按钮（`r: 刷新` 等）与页签行（亮暗对比选中态）维持原样。顺手补齐 codex manifest 漏升的 0.16.2。双 manifest 同步升版 0.16.3。
 
 - flow-deck 0.16.0：文件查看器 markdown 图表增强——表格重排为等宽对齐的 Unicode 表格（CJK 按 2 列计宽），mermaid `graph TD` 基本子集（节点与箭头链，含链式声明）自绘为 Unicode 分层流程图（box-drawing 框线 + ▼ 箭头，分层固定点收敛，环内节点保持原层；classDef/style/subgraph 等不支持的语法整体保持代码块原样），`enhanceMarkdown` 管道在渲染前预处理（fenced code 内不处理）。双 manifest 同步升版 0.16.0。

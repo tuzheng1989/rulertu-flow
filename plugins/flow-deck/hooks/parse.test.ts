@@ -300,11 +300,12 @@ describe('parse', () => {
     expect(parseReviewJson(JSON.stringify({ score: '9' }), 1)).toBe(null)
   })
 
-  test('parseStateJson 提取 backend 与 round，忽略其余字段', () => {
+  test('parseStateJson 提取 backend、round 与 plan_path，忽略其余字段', () => {
     const state = parseStateJson(
-      JSON.stringify({ backend: 'codex', round: 3, plan_path: 'p.md', plan_sha256: 'x' }),
+      JSON.stringify({ backend: 'codex', round: 3, plan_path: 'plans/p.md', plan_sha256: 'x' }),
     )
-    expect(state).toEqual({ backend: 'codex', round: 3 })
+    expect(state).toEqual({ backend: 'codex', round: 3, planPath: 'plans/p.md' })
+    expect(parseStateJson(JSON.stringify({ plan_path: '' }))).toEqual({})
     expect(parseStateJson('[]')).toBe(null)
     expect(parseStateJson('nope')).toBe(null)
   })
@@ -466,7 +467,7 @@ describe('parse', () => {
     const plan = buildPlanReview(
       'demo',
       '.plan-iterate/demo',
-      JSON.stringify({ backend: 'codex', round: 2 }),
+      JSON.stringify({ backend: 'codex', round: 2, plan_path: 'plans/demo.md' }),
       [
         { round: 2, text: JSON.stringify({ score: 8.7, issues: [{ severity: 'P2' }] }) },
         {
@@ -477,16 +478,18 @@ describe('parse', () => {
     )
     expect(plan.name).toBe('demo')
     expect(plan.backend).toBe('codex')
+    expect(plan.docPath).toBe('plans/demo.md')
     expect(plan.round).toBe(2)
     expect(plan.rounds.map(round => round.round)).toEqual([1, 2])
     expect(plan.passed).toBe(true)
 
-    // 无 state.json 时轮次回退到最新评审轮；最新轮有 P1 则不达标
+    // 无 state.json 时轮次回退到最新评审轮；最新轮有 P1 则不达标；docPath 缺失
     const failing = buildPlanReview('old', '.plan-iterate/old', null, [
       { round: 1, text: JSON.stringify({ score: 9, issues: [{ severity: 'P1' }] }) },
     ])
     expect(failing.round).toBe(1)
     expect(failing.passed).toBe(false)
+    expect(failing.docPath).toBeUndefined()
 
     // 只有 state.json、评审尚未落盘：不达标，轮次取自 state
     const pending = buildPlanReview('new', '.plan-iterate/new', JSON.stringify({ round: 3 }), [])

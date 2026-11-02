@@ -13,6 +13,8 @@ export type PlanReview = {
   name: string
   /** .plan-iterate/<plan名> 的路径（相对会话工作目录） */
   dir: string
+  /** 方案文档路径（state.json 的 plan_path 原文，可为绝对路径）；缺失则面板不可点击跳转 */
+  docPath?: string
   /** 评审后端（state.json 的 backend 字段） */
   backend?: string
   /** 当前轮次（state.json 的 round 字段，缺失时取最新评审轮） */
