@@ -88,6 +88,21 @@ elif mode == "resume_fail":
     emit_ok()
 elif mode == "no_output":
     sys.exit(0)  # 退出 0 但不写输出文件
+elif mode in ("kill_after_turn", "kill_after_turn_prose"):
+    # 模拟真实故障：turn 已完成（事件流含最终 agent_message）但进程在优雅退出、
+    # 写 -o 文件之前被超时击杀——不写输出文件，硬退非零
+    print(json.dumps({"type": "thread.started",
+                      "thread_id": os.environ.get("FAKE_THREAD_ID", "th-killed")}))
+    if mode == "kill_after_turn":
+        text = "- 击杀前已完成的第一项\\n- 击杀前已完成的第二项"
+    else:
+        text = "turn 完成但最终消息不是列表"
+    print(json.dumps({"type": "item.completed",
+                      "item": {"id": "item_0", "type": "agent_message", "text": text}}))
+    print(json.dumps({"type": "turn.completed",
+                      "usage": {"input_tokens": 90, "output_tokens": 30}}))
+    sys.stdout.flush()
+    os._exit(1)
 elif mode == "bad_output":
     with open(out, "w", encoding="utf-8") as f:
         f.write("这不是列表输出，没有以 - 开头的行。")
@@ -385,6 +400,37 @@ def test_l5_parse_fail_no_list_item(env):
     assert p.returncode == 4
     assert result_of(p)["failure"] == "parse_failed"
     assert read_state(env)["disabled"] is False
+
+
+def test_recover_output_after_post_turn_kill(env):
+    """产出兜底：turn 完成后进程被杀（无 -o 文件、退出码 1）→ 从事件流恢复，判成功。
+
+    真实故障场景（2026-11-02）：effort=max 评审任务撞上 120s 超时，codex 写完
+    turn.completed 但在优雅退出、写 -o 文件之前被 taskkill 击杀。"""
+    p = run_listen(env, fake_env={"FAKE_MODE": "kill_after_turn",
+                                  "FAKE_THREAD_ID": "th-killed"})
+    assert p.returncode == 0, p.stderr
+    r = result_of(p)
+    assert r["ok"] is True
+    assert r["output_path"] is not None
+    assert "击杀前已完成的第一项" in Path(r["output_path"]).read_text(encoding="utf-8")
+    assert r["usage"] == {"input_tokens": 90, "output_tokens": 30}
+    t = read_state(env)
+    assert t["thread_id"] == "th-killed"  # 恢复路径同样保留会话锚点
+    assert t["disabled"] is False
+    entry = t["usage_log"][-1]
+    assert entry["outcome"] == "ok" and entry["recovered"] is True
+    assert_no_tmp_residue(env)
+
+
+def test_kill_after_turn_prose_message_still_fails(env):
+    """产出兜底的边界：事件流最终消息不是列表 → 校验不过，按进程失败处理。"""
+    p = run_listen(env, fake_env={"FAKE_MODE": "kill_after_turn_prose"})
+    assert p.returncode == 3
+    r = result_of(p)
+    assert r["ok"] is False
+    assert r["failure"] == "process_failed"  # 两次尝试（预算 3）都无合格产出 → L4 连败禁用
+    assert read_state(env)["disabled"] is True
 
 
 # ---------------------------------------------------------------- 切片 3：会话策略

@@ -96,7 +96,7 @@
 | 1 | CLI 不可用 | 调用前 `command -v codex` 失败 | 不启动 | 本会话禁用兼听（不扣次，未启动） |
 | 2 | 模型名不可用 | 错误信息明确指向模型名无效/无权限 | 不重试（不猜测替代模型名） | 本会话禁用兼听 |
 | 3 | 强度不支持 | 错误信息明确指向 `model_reasoning_effort` | 回落 `"high"` 重试一次；回落仍失败 | 本会话禁用兼听 |
-| 4 | 进程失败 | Bash 超时 120s 或其他非零退出 | 告知 stderr 摘要；可重试一次；**连续 2 次进程失败 → 本会话禁用** | 本会话禁用兼听 |
+| 4 | 进程失败 | 超时（默认 300s）或其他非零退出，**且事件流中无可恢复的合格产出**（见 2.8 产出兜底） | 告知 stderr 摘要；可重试一次；**连续 2 次进程失败 → 本会话禁用** | 本会话禁用兼听 |
 | 5 | 解析失败 | 退出码 0 但输出不满足合并条件 | 不重试，告知"输出格式不符" | 不禁用（下次可再试） |
 
 - 降级时**如实告知"本轮无外部视角"**，禁止宿主自评冒充外部意见。
@@ -130,8 +130,10 @@ python dual-listen.py --mode {diverge|attack|blindspot} \
 
 1. **预算**：状态真源为 `<workdir>/.listen/state.json`（按 task-id 键控：`{used, disabled, model_effective, usage[]}`，原子写）。启动（含重试）前：查余额 → 预留扣次并落盘 → 才启动进程；中断不返还。日志/台账中的计数是展示副本，每次调用后从脚本输出回填。
 2. **尝试目录**：排他创建 `<workdir>/.listen-tmp/<ID>/`，进程结束（任何结局）后清理本次目录，摘要写入 state。
-3. **执行与策略**：`subprocess.run(..., timeout=120)` 精确超时；`--json` 事件流落盘；**会话策略按取舍 C 自动执行**——diverge/blindspot 恒为 fresh；attack 模式从 state 读取该 task 的 `thread_id`，有则 `codex exec resume`（提示词只发 delta），无则 fresh 全量快照；resume 失败自动降级单发增量快照。按 2.6 表做互斥失败分类与回落重试（强度回落 high、连续 2 次进程失败禁用会话等），禁用状态与 `thread_id` 持久化到 state。
+3. **执行与策略**：`subprocess` 精确超时（`--proc-timeout`，默认 300s——effort=max 的评审任务常超 2 分钟，120s 会击杀刚跑完的任务）；`--json` 事件流落盘；**会话策略按取舍 C 自动执行**——diverge/blindspot 恒为 fresh；attack 模式从 state 读取该 task 的 `thread_id`，有则 `codex exec resume`（提示词只发 delta），无则 fresh 全量快照；resume 失败自动降级单发增量快照。按 2.6 表做互斥失败分类与回落重试（强度回落 high、连续 2 次进程失败禁用会话等），禁用状态与 `thread_id` 持久化到 state。
 4. **校验与解析**：退出码 0 + 输出非空 + ≥1 条列表项才算成功；从事件流提取实际模型/强度与 token 用量，字段缺失如实标"请求值（未验证）/不可验证"。
+   **产出兜底（2026-11-02 修订）**：`-o` 文件缺失或进程非零退出/被超时击杀时，若事件流已含完整的最终 `agent_message` 且过同一列表校验，则从事件流恢复产出、判成功（state 台账记 `recovered: true`）。依据：codex 在优雅退出时才写 `-o` 文件，超时击杀发生在 turn 完成之后时成果已实际落盘，判失败会白扣预算并误禁用任务。
+   **清理重试（2026-11-02 修订）**：进程结束后清理尝试目录失败（Windows 句柄释放滞后，击杀后常见 WinError 32）时隔 1s 重试至 3 次，仍失败仅记录不判失败。
 5. **输出**：stdout 打印单个结果 JSON：`{ok, output_path, failure, model_effective, model_verified, usage, budget_remaining, disabled}`。合并进日志/地图仍由模型做（判断性工作：来源标注、不评判）。
 
 退出码沿用 plan-iterate 惯例：`0` 成功、`2` 输入错误、`3` 进程失败（重试后仍失败）、`4` 协议/解析失败。

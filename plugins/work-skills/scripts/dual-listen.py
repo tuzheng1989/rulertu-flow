@@ -23,6 +23,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 
 MODES = ("diverge", "attack", "blindspot")
@@ -183,12 +184,19 @@ def make_attempt_dir(workdir: str, snapshot: str):
 
 
 def cleanup_dir(attempt_dir: str):
-    """进程结束（任何结局）后清理本次尝试目录。失败返回错误摘要（不判失败）。"""
-    try:
-        shutil.rmtree(attempt_dir)
-        return None
-    except OSError as exc:
-        return f"cleanup_failed: {exc}"
+    """进程结束（任何结局）后清理本次尝试目录。失败返回错误摘要（不判失败）。
+
+    Windows 上进程刚退出时文件句柄可能尚未释放（杀进程树后尤为常见），
+    首次 rmtree 报 WinError 32 属常态，间隔重试再放弃。"""
+    last_exc = None
+    for _ in range(3):
+        try:
+            shutil.rmtree(attempt_dir)
+            return None
+        except OSError as exc:
+            last_exc = exc
+            time.sleep(1.0)
+    return f"cleanup_failed: {last_exc}"
 
 
 def _kill_process_tree(proc) -> None:
@@ -282,11 +290,31 @@ def read_list_output(out_path: str):
             text = f.read()
     except OSError:
         return None
-    if not text.strip():
+    return validate_list_output(text)
+
+
+def validate_list_output(text: str):
+    """校验输出文本：非空且含 ≥1 行以 "- " 开头的列表项；不合规返回 None。"""
+    if not text or not text.strip():
         return None
     if not any(line.lstrip().startswith("- ") for line in text.splitlines()):
         return None
     return text
+
+
+def recover_final_message(events: list):
+    """从事件流恢复最终产出：取最后一条已完成的 agent_message，同样过列表校验。
+
+    覆盖两类情形——超时击杀发生在 turn 完成之后（codex 在优雅退出时才写 -o
+    文件，被杀则文件缺失），以及 codex 版本更新导致 -o 行为不符预期。"""
+    text = None
+    for ev in events:
+        if isinstance(ev, dict) and ev.get("type") == "item.completed":
+            item = ev.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message" \
+                    and isinstance(item.get("text"), str) and item["text"].strip():
+                text = item["text"]
+    return validate_list_output(text)
 
 
 # ---------------------------------------------------------------- 结果 JSON
@@ -324,7 +352,7 @@ def main(argv=None) -> int:
     parser.add_argument("--effort", default=DEFAULT_EFFORT, choices=["max", "high"])
     parser.add_argument("--prompt-file", dest="prompt_file", default=None)
     parser.add_argument("--codex-bin", dest="codex_bin", default="codex")
-    parser.add_argument("--proc-timeout", dest="proc_timeout", type=float, default=120.0,
+    parser.add_argument("--proc-timeout", dest="proc_timeout", type=float, default=300.0,
                         help="单次进程硬超时（秒，浮点）；超时后强杀整棵进程树")
     args = parser.parse_args(argv)
 
@@ -450,12 +478,20 @@ def main(argv=None) -> int:
         # 进程结束：先读事件流与输出内容（目录清理前），再清理
         events = parse_events(events_path)
         out_text = read_list_output(out_path) if (rc == 0 and not timed_out) else None
+        recovered = False
+        if out_text is None:
+            # 产出兜底：进程虽被杀/非零退出，但事件流已有完整的最终消息 → 成果有效
+            out_text = recover_final_message(events)
+            recovered = out_text is not None
         cleanup_err = cleanup_dir(attempt_dir)
         if cleanup_err:
             log_usage(workdir, args.task_id, outcome="cleanup", detail=cleanup_err)
 
-        # 失败分类（互斥，按优先级）
-        if timed_out or rc != 0:
+        # 失败分类（互斥，按优先级）：产出可用（-o 文件或事件流恢复）即成功，
+        # 即使进程被超时击杀或非零退出——成果已落盘，被杀在退出前还是后不重要。
+        if out_text is not None:
+            kind = "ok"
+        elif timed_out or rc != 0:
             if resume_thread_id is not None:
                 kind = "resume_failed"  # 交由调用方降级 fresh，不计入 L4 连败
             elif _is_l2(stderr):
@@ -466,10 +502,9 @@ def main(argv=None) -> int:
                 kind = "l4"
         elif out_text is None:
             kind = "l5"
-        else:
-            kind = "ok"
         return {"kind": kind, "rc": rc, "stderr": stderr, "events": events,
-                "out_text": out_text, "cleanup_err": cleanup_err, "timed_out": timed_out}
+                "out_text": out_text, "recovered": recovered,
+                "cleanup_err": cleanup_err, "timed_out": timed_out}
 
     def _is_l2(stderr: str) -> bool:
         low = stderr.lower()
@@ -529,6 +564,7 @@ def main(argv=None) -> int:
             "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "outcome": "ok",
             "failure": failure,
+            "recovered": oc.get("recovered", False),
             "usage": usage,
             "cleanup": oc["cleanup_err"] or "ok",
             "output_path": output_path,
