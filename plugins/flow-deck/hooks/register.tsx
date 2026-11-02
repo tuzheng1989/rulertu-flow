@@ -349,7 +349,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
           <Box key={agent.id} flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={status.color} borderDimColor paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
             <Box>
               <Text bold color={status.color} wrap="truncate-end">{status.mark} {status.label} · {agent.name || agent.description || agent.id}</Text>
-              <Button key={`agent-view-${agent.id}`} plain dimColor onPress={() => {
+              <Button key={`agent-view-${agent.id}`} dimColor onPress={() => {
                 void $.ui.view({ agentId: agent.id }).then(result => {
                   if ('deny' in result && result.deny !== undefined) $.ui.toast(`无法查看子代理：${result.deny}`)
                 }).catch(error => {
@@ -586,17 +586,17 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
             void update($, docSection, () => Number(value))
           }}
         />
-        <Button key="doc-sec-all" plain dimColor={mode !== 'all'} onPress={() => { void update($, docMode, () => 'all') }}>全文</Button>
-        <Button key="doc-prev" plain dimColor={mode !== 'section' || index <= 0} onPress={() => {
+        <Button key="doc-sec-all" dimColor={mode !== 'all'} onPress={() => { void update($, docMode, () => 'all') }}>全文</Button>
+        <Button key="doc-prev" dimColor={mode !== 'section' || index <= 0} onPress={() => {
           if (mode === 'section' && index > 0) { void update($, docSection, () => index - 1) }
         }}>‹ 上一节</Button>
         {pagerWindow(index, sections.length).map((page, i) => page === -1
           ? <Text key={`doc-gap-${i}`} dimColor>…</Text>
-          : <Button key={`doc-page-${page}`} plain dimColor={!(mode === 'section' && index === page)} onPress={() => {
+          : <Button key={`doc-page-${page}`} dimColor={!(mode === 'section' && index === page)} onPress={() => {
             void update($, docMode, () => 'section')
             void update($, docSection, () => page)
           }}>{page + 1}</Button>)}
-        <Button key="doc-next" plain dimColor={mode !== 'section' || index >= sections.length - 1} onPress={() => {
+        <Button key="doc-next" dimColor={mode !== 'section' || index >= sections.length - 1} onPress={() => {
           if (mode === 'section' && index < sections.length - 1) { void update($, docSection, () => index + 1) }
         }}>下一节 ›</Button>
       </Box>
@@ -664,7 +664,7 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
           const mark = row.state === null ? null : STATE_MARK[row.state]
           return (
             <Button key={`file-open-${row.path}`} plain wrap="truncate-middle" onPress={() => { void openInDoc($, row.path) }}>
-              {`${row.touched ? MARK.run : MARK.idle} ${row.path}`}
+              <Text>{`${row.touched ? MARK.run : MARK.idle} `}</Text><Text underline>{row.path}</Text>
               {mark !== null && <Text color={mark.color} dimColor={mark.dim === true}> · {mark.label}</Text>}
               {scopeSet.has(row.path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
             </Button>
@@ -675,7 +675,7 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
         <Box gap={2}>
           <Text bold wrap="truncate-end">{MARK.title}目录</Text>
           {dir !== null && (
-            <Button key="dir-up" plain onPress={() => { void loadTree($, dir.includes('/') ? dir.split('/').slice(0, -1).join('/') : null) }}>← 上级</Button>
+            <Button key="dir-up" onPress={() => { void loadTree($, dir.includes('/') ? dir.split('/').slice(0, -1).join('/') : null) }}>← 上级</Button>
           )}
         </Box>
         {!tree?.loaded && <Text dimColor>正在读取目录…</Text>}
@@ -688,14 +688,14 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
           if (entry.kind === 'dir') {
             return (
               <Button key={`dir-open-${path}`} plain wrap="truncate-middle" onPress={() => { void loadTree($, path) }}>
-                {`${entry.name}/`}
+                <Text underline>{`${entry.name}/`}</Text>
                 {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
               </Button>
             )
           }
           return (
             <Button key={`file-open-${path}`} plain wrap="truncate-middle" onPress={() => { void openInDoc($, path) }}>
-              {entry.name}
+              <Text underline>{entry.name}</Text>
               {mark !== null && <Text color={mark.color} dimColor={mark.color === undefined}> · {mark.label}</Text>}
               {pinned && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
             </Button>
@@ -1015,7 +1015,7 @@ export const register: Register = (on, options) => {
         <Button key="tab-flow" hotkey="1" plain dimColor={active !== 'flow'} onPress={() => { void update($, activeTab, () => 'flow') }}>工作面板</Button>
         <Button key="tab-files" hotkey="2" plain dimColor={active !== 'files'} onPress={() => { void update($, activeTab, () => 'files') }}>文件树</Button>
         <Button key="tab-doc" hotkey="3" plain dimColor={active !== 'doc'} onPress={() => { void update($, activeTab, () => 'doc') }}>文件查看器</Button>
-        <Button key="view-main" plain onPress={() => { void $.ui.view({}).catch(error => {
+        <Button key="view-main" onPress={() => { void $.ui.view({}).catch(error => {
           $.ui.log(`flow-deck 切回主对话失败：${String(error)}`, { to: 'debug' })
         }) }}>主对话</Button>
       </Box>
