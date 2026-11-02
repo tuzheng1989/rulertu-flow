@@ -1,6 +1,7 @@
 ---
 name: sn-search-code
 description: 搜索开发者资源：GitHub 仓库/代码/Issue、Stack Overflow 问答、Hacker News 讨论、HuggingFace 模型/数据集/Space。用于查找代码示例、开源项目、技术问答、预训练模型。
+user-invocable: false
 ---
 
 # sn-search-code - 开发者搜索

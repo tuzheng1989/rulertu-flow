@@ -1,6 +1,7 @@
 ---
 name: deepxiv
 description: 使用 deepxiv CLI 工具搜索学术论文、渐进式阅读论文内容、发现近期热点论文。当用户想要搜索论文、查找论文、阅读论文、了解某个研究方向、跟踪学术热点、查找 trending 论文、获取论文摘要/章节/全文、搜索 arXiv 论文、查找生物医学文献、搜索 PMC 论文、使用 Semantic Scholar、或者提到"论文"、"paper"、"arXiv"、"学术"、"研究趋势"、"热点论文"时，使用此 skill。即使用户只是说"帮我找几篇关于 X 的论文"或"最近有什么热门论文"，也应触发此 skill。
+user-invocable: false
 ---
 
 # DeepXiv 论文搜索与阅读 Skill
