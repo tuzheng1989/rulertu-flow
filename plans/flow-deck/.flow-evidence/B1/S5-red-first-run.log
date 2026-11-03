@@ -1,0 +1,350 @@
+
+hooks\agents.test.ts:
+(pass) agent monitor > 生命周期变化更新清单；相同清单、不同返回顺序不重复写状态 [4.22ms]
+(pass) agent monitor > 查询失败保留旧值并标记过期；重试恢复时清除错误 [1.04ms]
+(pass) agent monitor > 未知状态保留原文，等待/空闲不计为运行中 [0.58ms]
+(pass) agent monitor > 慢查询防重入 [0.50ms]
+
+hooks\parse.test.ts:
+(pass) parse > 当前任务筛选不把历史评审、执行、边界或路线图当成活动任务 [3.40ms]
+(pass) parse > 进度条处理零总数和越界值，未知阶段保留原文 [0.81ms]
+(pass) parse > 达标刻度条：▏ 固定在达标线位置，不随分数移动 [0.69ms]
+(pass) parse > 达标刻度条：pass 可调，pass=10 时刻度在串尾 [0.37ms]
+(pass) parse > 流水线连线状态取右侧节点，单节点无连线 [0.58ms]
+(pass) parse > 目录排序：目录在前，各自按名称字典序，不改原数组 [1.05ms]
+(pass) parse > spinnerWord：实施报批次阶段、迭代报评审、无任务报子代理、无话可说返回 null [0.87ms]
+(pass) parse > toolMark：界内或无边界不加标注，越界按 guardMode 定文案 [0.63ms]
+(pass) parse > draftDecorations：带扩展名的 token 才判定，界内外分色 [0.61ms]
+(pass) parse > humanDuration：秒与分钟两档，非法输入归零 [0.44ms]
+(pass) parse > renderAsciiTable：等宽对齐含中文，分隔行剥除 [0.94ms]
+(pass) parse > renderMermaidGraph：TD 链式与分叉自绘流程图，非 TD 返回 null [1.29ms]
+(pass) parse > pagerWindow：窗口 5 个、首尾恒显、间断省略号 [0.53ms]
+(pass) parse > enhanceMarkdown：表格重排与 mermaid 自绘，fence 内不处理 [0.70ms]
+(pass) parse > 统一改动清单：git 并集会话记录，会话组在前、冲突优先、路径排序 [1.11ms]
+(pass) parse > 统一改动清单：git 缺失退化为会话清单，路径大小写折叠去重 [0.43ms]
+(pass) parse > phaseProgress 映射五阶段序号，未知阶段无序号 [0.48ms]
+(pass) parse > extractRound 认识 review-RN.json [0.56ms]
+(pass) parse > countIssues 按 P0/P1/P2 统计，未知 severity 忽略 [0.63ms]
+(pass) parse > isPassing 要求达标分且无 P0/P1 [0.61ms]
+(pass) parse > parseReviewJson 解析合法输入、拒绝坏 JSON 与缺字段 [0.71ms]
+(pass) parse > parseStateJson 提取 backend、round 与 plan_path，忽略其余字段 [0.47ms]
+(pass) parse > sparkline 把 0-10 分映射为方块字符并夹紧边界 [0.35ms]
+(pass) parse > parseExecution 校验上报并容错 store 旧值 [0.80ms]
+(pass) parse > parseExecution closure 透传：null 原样、缺省规范化为 null、非法整个丢弃 [0.82ms]
+(pass) parse > normalizePath 归一化分隔符并剥工作目录前缀 [0.53ms]
+(pass) parse > parseBatchScope 校验边界声明 [0.48ms]
+(pass) parse > guardDecision 判定越界并归一化比较 [1.02ms]
+(pass) parse > parseDepGraph 校验波次依赖声明 [0.61ms]
+(pass) parse > depStatuses 按 progress 标注三态 [0.55ms]
+(pass) parse > buildPlanReview 组装概览并以最新轮判定达标 [0.81ms]
+(pass) parse > bannerPlan 选取横条方案:最后一个未达标者,全部达标撤下 [0.54ms]
+(pass) parse > parsePorcelain 解析各头行变体 [0.56ms]
+(pass) parse > parsePorcelain 按 XY 码收集文件行 [0.32ms]
+(pass) parse > parsePorcelain 剥带引号路径的引号 [0.18ms]
+(pass) parse > parseNumstat 累加行级增删并跳过二进制 [0.42ms]
+(pass) parse > numstatByPath 逐文件聚合：多文件、空输出、非法行与二进制跳过 [0.43ms]
+(pass) parse > numstatByPath rename 目标路径还原：全量记法与花括号压缩记法 [0.41ms]
+(pass) parse > numstatByPath 键归一化：反斜杠转正斜杠并小写折叠 [0.27ms]
+(pass) parse > numstatByPath 引号路径：剥引号并解码八进制转义（UTF-8 字节还原） [0.69ms]
+(pass) parse > buildGitStatus 组装快照并按 XY 分类 [0.52ms]
+(pass) parse > buildGitStatus 侧状态装配：两侧均成功 → ok/ok [0.26ms]
+(pass) parse > buildGitStatus 侧状态装配：无 tracked 改动的一侧 skipped，对侧不受影响 [0.30ms]
+(pass) parse > buildGitStatus 侧状态装配：本应查询但返回 null → failed，与 skipped 可区分 [0.26ms]
+(pass) parse > buildGitStatus byPath：同文件暂存+未暂存求和，键归一化，合计与 added/removed 一致 [0.34ms]
+(pass) parse > isGitQuiet 判定干净且同步 [0.30ms]
+(pass) parse > gitSummaryParts 拼计数段与行级段 [0.42ms]
+(pass) parse > parseSections 按标题切分，围栏内 # 不算标题 [0.74ms]
+
+hooks\poll.test.ts:
+(pass) polling cost and freshness > unchanged plans reuse parsed objects without file reads or project traversal [4.35ms]
+(pass) polling cost and freshness > new review roots are discovered after the slower discovery interval [0.60ms]
+(pass) polling cost and freshness > clean git runs only status, backs off, and does not publish timestamp-only changes [1.24ms]
+(pass) polling cost and freshness > tracked content changes with identical porcelain still refresh line counts; untracked-only skips diffs [0.79ms]
+(pass) polling cost and freshness > non-repositories retry slowly, and explicit open can force refresh [0.42ms]
+(fail) polling cost and freshness > numstat 逐文件贯通：rename 还原、引号路径解码、同文件两段求和，合计与 byPath 一致 [1.04ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: { worktree: "ok", cached: "skipped" }
+  Received: { worktree: "ok", cached: "ok" }
+(pass) polling cost and freshness > numstat 侧状态贯通：单侧失败 failed、对侧 skipped、统计不掺部分数据 [0.49ms]
+(pass) polling cost and freshness > timer and forced git refresh share one in-flight query [0.35ms]
+(pass) polling cost and freshness > slow scans never overlap and failed scans can retry [1.11ms]
+
+hooks\register.test.ts:
+(pass) pane > 打开时立即读宿主清单并自动刷新，关闭后停止查询，新会话清空快照 [174.58ms]
+(pass) pane > 会话内只注册 deck 一个命令 [73.06ms]
+(fail) pane > 统一改动清单：● 本会话 ○ 其他 ◆ 本批三态同屏 [75.00ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+(pass) pane > /deck toggle 开关面板，参数切页签不误关 [54.47ms]
+(pass) pane > /deck 打开未停靠时如实报告引擎原因 [59.01ms]
+(pass) pane > 子代理面板区分加载中、空清单、刷新失败和过期快照 [113.42ms]
+(pass) pane > 子代理状态、任务与父代理关系在终端和桌面宽窄面板中可见 [85.26ms]
+(fail) pane > 只有路线图声明时提示无当前任务，不显示实施面板 [54.01ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+(fail) pane > 批次收口后撤下执行卡片和边界，提示无当前任务 [56.47ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+  
+  nothing beneath the plugins answers ui.status: a test answers it with on('ui.status', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.log dropped: HooksError: no implementation for ui.log
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) pane > 空状态给出提示文案 [48.47ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+(fail) pane > 基线回归：default 皮肤空态渲染树与改动前一致 [76.14ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: "[{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"text\":\"工作面板文件树文件查看器主对话当前无方案迭代或实施任务。运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。▍子代理刷新正在读取当前会话的子代理…/deck 关闭 · 面板内按 r 刷新\",\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Button\",\"props\":{\"key\":\"tab-flow\",\"label\":\"工作面板\",\"hotkey\":\"1\",\"plain\":true,\"dimColor\":false}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-files\",\"label\":\"文件树\",\"hotkey\":\"2\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-doc\",\"label\":\"文件查看器\",\"hotkey\":\"3\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"view-main\",\"label\":\"主对话\"}}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"children\":[{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\"},\"children\":[{\"type\":\"Text\",\"children\":[\"当前无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"正在读取当前会话的子代理…\"]}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true,\"wrap\":\"truncate-end\"},\"children\":[\"/deck 关闭 · 面板内按 r 刷新\"]}]}]},{\"type\":\"Box\",\"props\":{\"gap\":2},\"text\":\"工作面板文件树文件查看器主对话\",\"children\":[{\"type\":\"Button\",\"props\":{\"key\":\"tab-flow\",\"label\":\"工作面板\",\"hotkey\":\"1\",\"plain\":true,\"dimColor\":false}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-files\",\"label\":\"文件树\",\"hotkey\":\"2\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-doc\",\"label\":\"文件查看器\",\"hotkey\":\"3\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"view-main\",\"label\":\"主对话\"}}]},{\"type\":\"Button\",\"key\":\"tab-flow\",\"props\":{\"key\":\"tab-flow\",\"label\":\"工作面板\",\"hotkey\":\"1\",\"plain\":true,\"dimColor\":false},\"text\":\"工作面板\",\"children\":[]},{\"type\":\"Button\",\"key\":\"tab-files\",\"props\":{\"key\":\"tab-files\",\"label\":\"文件树\",\"hotkey\":\"2\",\"plain\":true,\"dimColor\":true},\"text\":\"文件树\",\"children\":[]},{\"type\":\"Button\",\"key\":\"tab-doc\",\"props\":{\"key\":\"tab-doc\",\"label\":\"文件查看器\",\"hotkey\":\"3\",\"plain\":true,\"dimColor\":true},\"text\":\"文件查看器\",\"children\":[]},{\"type\":\"Button\",\"key\":\"view-main\",\"props\":{\"key\":\"view-main\",\"label\":\"主对话\"},\"text\":\"主对话\",\"children\":[]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"text\":\"当前无方案迭代或实施任务。运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。▍子代理刷新正在读取当前会话的子代理…/deck 关闭 · 面板内按 r 刷新\",\"children\":[{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\"},\"children\":[{\"type\":\"Text\",\"children\":[\"当前无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"正在读取当前会话的子代理…\"]}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true,\"wrap\":\"truncate-end\"},\"children\":[\"/deck 关闭 · 面板内按 r 刷新\"]}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\"},\"text\":\"当前无方案迭代或实施任务。运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\",\"children\":[{\"type\":\"Text\",\"children\":[\"当前无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]}]},{\"type\":\"Text\",\"props\":{},\"text\":\"当前无方案迭代或实施任务。\",\"children\":[\"当前无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"text\":\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\",\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"text\":\"▍子代理刷新正在读取当前会话的子代理…\",\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"正在读取当前会话的子代理…\"]}]},{\"type\":\"Box\",\"props\":{\"gap\":2},\"text\":\"▍子代理刷新\",\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"text\":\"▍子代理\",\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"key\":\"flow-refresh\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true},\"text\":\"刷新\",\"children\":[]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"text\":\"正在读取当前会话的子代理…\",\"children\":[\"正在读取当前会话的子代理…\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true,\"wrap\":\"truncate-end\"},\"text\":\"/deck 关闭 · 面板内按 r 刷新\",\"children\":[\"/deck 关闭 · 面板内按 r 刷新\"]}]"
+  Received: "[{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"text\":\"工作面板文件树文件查看器主对话待命 · 暂无方案迭代或实施任务。运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。▍子代理刷新正在读取当前会话的子代理…/deck 关闭 · 面板内按 r 刷新\",\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Button\",\"props\":{\"key\":\"tab-flow\",\"label\":\"工作面板\",\"hotkey\":\"1\",\"plain\":true,\"dimColor\":false}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-files\",\"label\":\"文件树\",\"hotkey\":\"2\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-doc\",\"label\":\"文件查看器\",\"hotkey\":\"3\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"view-main\",\"label\":\"主对话\"}}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"children\":[{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\"},\"children\":[{\"type\":\"Text\",\"children\":[\"待命 · 暂无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"正在读取当前会话的子代理…\"]}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true,\"wrap\":\"truncate-end\"},\"children\":[\"/deck 关闭 · 面板内按 r 刷新\"]}]}]},{\"type\":\"Box\",\"props\":{\"gap\":2},\"text\":\"工作面板文件树文件查看器主对话\",\"children\":[{\"type\":\"Button\",\"props\":{\"key\":\"tab-flow\",\"label\":\"工作面板\",\"hotkey\":\"1\",\"plain\":true,\"dimColor\":false}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-files\",\"label\":\"文件树\",\"hotkey\":\"2\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"tab-doc\",\"label\":\"文件查看器\",\"hotkey\":\"3\",\"plain\":true,\"dimColor\":true}},{\"type\":\"Button\",\"props\":{\"key\":\"view-main\",\"label\":\"主对话\"}}]},{\"type\":\"Button\",\"key\":\"tab-flow\",\"props\":{\"key\":\"tab-flow\",\"label\":\"工作面板\",\"hotkey\":\"1\",\"plain\":true,\"dimColor\":false},\"text\":\"工作面板\",\"children\":[]},{\"type\":\"Button\",\"key\":\"tab-files\",\"props\":{\"key\":\"tab-files\",\"label\":\"文件树\",\"hotkey\":\"2\",\"plain\":true,\"dimColor\":true},\"text\":\"文件树\",\"children\":[]},{\"type\":\"Button\",\"key\":\"tab-doc\",\"props\":{\"key\":\"tab-doc\",\"label\":\"文件查看器\",\"hotkey\":\"3\",\"plain\":true,\"dimColor\":true},\"text\":\"文件查看器\",\"children\":[]},{\"type\":\"Button\",\"key\":\"view-main\",\"props\":{\"key\":\"view-main\",\"label\":\"主对话\"},\"text\":\"主对话\",\"children\":[]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"text\":\"待命 · 暂无方案迭代或实施任务。运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。▍子代理刷新正在读取当前会话的子代理…/deck 关闭 · 面板内按 r 刷新\",\"children\":[{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\"},\"children\":[{\"type\":\"Text\",\"children\":[\"待命 · 暂无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"正在读取当前会话的子代理…\"]}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true,\"wrap\":\"truncate-end\"},\"children\":[\"/deck 关闭 · 面板内按 r 刷新\"]}]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\"},\"text\":\"待命 · 暂无方案迭代或实施任务。运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\",\"children\":[{\"type\":\"Text\",\"children\":[\"待命 · 暂无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]}]},{\"type\":\"Text\",\"props\":{},\"text\":\"待命 · 暂无方案迭代或实施任务。\",\"children\":[\"待命 · 暂无方案迭代或实施任务。\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"text\":\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\",\"children\":[\"运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。\"]},{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"gap\":1},\"text\":\"▍子代理刷新正在读取当前会话的子代理…\",\"children\":[{\"type\":\"Box\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"children\":[\"正在读取当前会话的子代理…\"]}]},{\"type\":\"Box\",\"props\":{\"gap\":2},\"text\":\"▍子代理刷新\",\"children\":[{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true}}]},{\"type\":\"Text\",\"props\":{\"bold\":true,\"wrap\":\"truncate-end\"},\"text\":\"▍子代理\",\"children\":[\"▍\",\"子代理\",\"\"]},{\"type\":\"Button\",\"key\":\"flow-refresh\",\"props\":{\"key\":\"flow-refresh\",\"label\":\"刷新\",\"hotkey\":\"r\",\"plain\":true},\"text\":\"刷新\",\"children\":[]},{\"type\":\"Text\",\"props\":{\"dimColor\":true},\"text\":\"正在读取当前会话的子代理…\",\"children\":[\"正在读取当前会话的子代理…\"]},{\"type\":\"Text\",\"props\":{\"dimColor\":true,\"wrap\":\"truncate-end\"},\"text\":\"/deck 关闭 · 面板内按 r 刷新\",\"children\":[\"/deck 关闭 · 面板内按 r 刷新\"]}]"
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+(pass) pane > describeExecution 战报格式：closure 存在升级为战报，null 显示 — 与真实 0 可区分 [8.57ms]
+(pass) pane > 空态面包屑：跨会话恢复的上次执行显示在无任务面板 [63.13ms]
+(pass) pane > 任务数据与子代理状态同屏，面板内刷新按钮可触发全部重取 [108.26ms]
+(pass) pane > 达标方案折叠为一行，未达标方案照常逐个展示 [81.54ms]
+(pass) pane > 未达标评审卡画达标刻度条，▏ 固定在 8.5 位置 [76.43ms]
+(pass) pane > 点工作面板方案名把方案文档装入文件查看器：卡片走 plan_path，实施标题走 plans/ 约定兜底 [95.47ms]
+(pass) pane > /tree 面板：改动清单去重、批次标注、目录导航与开关 [102.38ms]
+(pass) pane > 改动记录上限 50：挤出最旧，重复路径不重复记录 [156.10ms]
+(fail) pane > 实施上报超时未续报时提示疑似停滞，同值不重复写状态 [68.12ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+(pass) pane > flow_report 缺必填字段时返回错误结果 [58.65ms]
+(fail) pane > 收口组装：全绿收口写通关卡，行数为声明边界合计，minutes 自首报起点 [214.62ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    plan: "demo",
+    batch: "B2",
+    closure: {
+      files: 3,
+      added: 842,
+      removed: 96,
+      minutes: 4,
+      statsAt: 777000
+    }
+  }
+  Received: {
+    plan: "demo",
+    batch: "B2",
+    closure: {
+      files: 3,
+      added: 800,
+      removed: 90,
+      minutes: 0,
+      statsAt: 777000
+    }
+  }
+(fail) pane > 统计三态：git 快照为 null → —；byPath 无 scope 文件 → 真实 0 且 statsAt 有值 [65.52ms]
+  TypeError: on("state.set") after the test first called $: the hooks beneath the plugins are registered before that, as a module registers its hooks in register()
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+(pass) pane > 失败收口：tests 不全绿必不写卡且清既有卡 [79.30ms]
+(pass) pane > 收口边界缺失或他批残留：closure 整体不写入，store 值不含 closure [271.64ms]
+(fail) pane > 清卡统一规则：同 plan#batch 全绿重复收口三出口幂等保留（重放），他批错配清卡 [458.19ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    plan: "demo",
+    batch: "B2",
+    phase: "收口",
+    updatedAt: 1793678613014,
+    testsPassed: 1,
+    testsTotal: 1,
+    closure: { files: 1, added: 3, removed: 2, minutes: 0, statsAt: 5 }
+  }
+  Received: {
+    plan: "demo",
+    batch: "B2",
+    phase: "收口",
+    updatedAt: 1793678613037,
+    testsPassed: 1,
+    testsTotal: 1,
+    closure: { files: 1, added: 3, removed: 2, minutes: 0, statsAt: 5 }
+  }
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+(fail) pane > guardWarned 条件清理：同批阶段上报保留去重，异批上报清空残留 [534.26ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: 2
+  Received: 1
+  
+  nothing beneath the plugins answers command.register: a test answers it with on('command.register', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck's session.start hook was skipped: flow-deck: no implementation for command.register
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+(fail) pane > 首报起点三态：同键重新声明不重置起点，异批声明记新键 [1936.04ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: 10
+  Received: 0
+(fail) pane > 重复收口三出口完整序列：收口 → 重复收口 → idle → 新会话恢复，出口逐字段一致 [325.47ms]
+  TypeError: on("store.get") after the test first called $: the hooks beneath the plugins are registered before that, as a module registers its hooks in register()
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+(fail) pane > 全绿后 idle 或下一批上报 → 通关卡消失、出口保留 [348.23ms]
+  AssertionError: expect(received).toHaveProperty()
+  
+  Expected: property "closure"
+  Received: {
+    plan: "demo",
+    batch: "B3",
+    phase: "执行",
+    updatedAt: 1793678616191
+  }
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+(fail) pane > 通关卡装配：deps 匹配渲染轨道图按实际状态着色，未声明或他方案 deps 只渲染战报行 [387.04ms]
+  HooksError: $.ui.mount: flow-deck drew nothing on the terminal surface: flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+  
+  the engine reported:
+    ui.render (Pane): a hook returned a tree that does not validate (Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group)
+    flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+(fail) pane > 全线点亮：依赖图内全部批次收口才全图 done 色（B1 条目 6 唯一触发） [384.87ms]
+  HooksError: $.ui.mount: flow-deck drew nothing on the terminal surface: flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+  
+  the engine reported:
+    ui.render (Pane): a hook returned a tree that does not validate (Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group)
+    flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+(fail) pane > 双皮肤同态对比：default 与 mission-control 结构与非文案信息一致，仅文案不同 [322.37ms]
+  HooksError: $.ui.mount: flow-deck drew nothing on the terminal surface: flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+  
+  the engine reported:
+    ui.render (Pane): a hook returned a tree that does not validate (Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group)
+    flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+(fail) pane > 双皮肤同态对比：mission-control 词表换文案不改结构 [278.05ms]
+  HooksError: $.ui.mount: flow-deck drew nothing on the terminal surface: flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+  
+  the engine reported:
+    ui.render (Pane): a hook returned a tree that does not validate (Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group)
+    flow-deck's ui.render hook was skipped: flow-deck: returned a tree Pane refuses: Box hover has no Box with a key around it; the nearest keyed Box is what the pointer hovers, or a scope names its group
+(pass) pane > flow_report 上报驱动横条（terminal 与 desktop 同构） [318.50ms]
+(pass) pane > flow_batch 声明边界后 deny 模式拦截越界 Edit [349.37ms]
+(pass) pane > deny 模式下界内 Edit 放行到真工具 [272.84ms]
+(pass) pane > 未声明边界时 Edit 不受守卫 [202.51ms]
+(pass) pane > warn 模式越界提醒按文件去重，重新声明边界后再次提醒 [346.54ms]
+(fail) pane > flow_deps 声明后面板绘制执行 DAG 区块与分色总览条 [284.83ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+  
+  nothing beneath the plugins answers ui.status: a test answers it with on('ui.status', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.log dropped: HooksError: no implementation for ui.log
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.log dropped: HooksError: no implementation for ui.log
+(pass) pane > flow_deps 缺 batches 返回错误结果 [303.71ms]
+(fail) pane > 没有评审或 DAG 时，上报仍显示执行卡片（极简阶段条）；宽窄面板跨表面渲染 [317.74ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+  
+  nothing beneath the plugins answers ui.status: a test answers it with on('ui.status', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.log dropped: HooksError: no implementation for ui.log
+(pass) pane > 切换方案后单行横条撤下旧上报，并截断长名称 [358.55ms]
+(fail) pane > 实施切迭代、结束、再实施时，终端和桌面只展示当前任务 [351.70ms]
+  AssertionError: expect(received).not.toBeUndefined()
+  
+  Expected: not undefined
+  Received: undefined
+  
+  nothing beneath the plugins answers ui.status: a test answers it with on('ui.status', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.log dropped: HooksError: no implementation for ui.log
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+    [flow-deck] $.ui.status dropped: HooksError: no implementation for ui.status
+(pass) pane > flow_task 拒绝无效声明，并保留当前任务 [234.53ms]
+(pass) pane > 迭代开始后旧实施边界不再拦截文件编辑 [312.29ms]
+(pass) pane > /doc 无路径时给用法提示 [319.92ms]
+(pass) pane > /doc 装载文档，选节后 e 把修改请求填入输入框 [423.12ms]
+(pass) pane > doc 节内容以 Markdown 渲染，终端与桌面均通过引擎校验 [330.91ms]
+(pass) pane > 自动侧边栏：非全屏或 autoOpen=off 时编辑不自动开面板 [289.39ms]
+(pass) pane > 自动侧边栏：autoOpen=off 时即使全屏也不开（配置守门） [278.74ms]
+(pass) pane > 子代理行查看按钮把主视图切到该代理，deny 时 toast 说明 [379.55ms]
+(pass) pane > 后台任务完成通知行：状态点、名称与耗时 [361.26ms]
+(fail) pane > 代次门：旧会话在途 publish 在新会话递增后到达被拒绝，清空兜底不残留旧 cwd 快照 [243.78ms]
+  TypeError: on("clock.now") after the test first called $: the hooks beneath the plugins are registered before that, as a module registers its hooks in register()
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+(fail) pane > 跨会话收口：session.start 清空后、新快照落地前收口 → 统计不可用而非旧 cwd 值 [347.22ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    plan: "demo",
+    batch: "B2",
+    closure: { files: 1, added: null, removed: null, minutes: 0 }
+  }
+  Received: {
+    plan: "demo",
+    batch: "B2",
+    closure: { files: 1, added: 99, removed: 88, minutes: 0, statsAt: 5 }
+  }
+  
+  nothing beneath the plugins answers clock.every: a test answers it with on('clock.every', ...): { value: ... } for a call on $, the event's own result otherwise
+  
+  the engine reported:
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+    flow-deck: $.clock.every refused: no implementation for clock.every
+
+ 93 pass
+ 23 fail
+Ran 116 tests across 4 files. [15.34s]

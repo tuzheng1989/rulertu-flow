@@ -51,6 +51,17 @@ export type FlowTask = {
   batch?: string
 }
 
+/** 全绿收口的战报统计（组装与解析同一契约）：files 为声明边界数（必填，缺失/非法整个 closure 丢弃）；
+ *  added/removed/minutes 为 number | null 且缺省与 null 等价——null = 统计不可用/无首报起点，
+ *  与真实 0 可区分；statsAt 为统计快照 fetchedAt（ms），仅统计可用时写入、可缺省 */
+export type ClosureStats = {
+  files: number
+  added: number | null
+  removed: number | null
+  minutes: number | null
+  statsAt?: number
+}
+
 /** 一条 implement-plan 执行进度上报（源自 flow_report 工具调用） */
 export type ExecutionReport = {
   /** 方案名（方案文档文件名去扩展名） */
@@ -67,6 +78,8 @@ export type ExecutionReport = {
   testsTotal?: number
   /** 证据目录路径 */
   evidenceDir?: string
+  /** 全绿收口战报；缺省不出现（非收口或前置校验不过时整个不写） */
+  closure?: ClosureStats
   /** 上报时间（ms）；$.store 旧值缺失时为 0 */
   updatedAt: number
 }
@@ -131,6 +144,10 @@ export type GitStatus = {
   removed: number
   /** 快照时间（ms） */
   fetchedAt: number
+  /** numstat 逐文件行级增删（键为归一化小写路径，rename 取目标路径，值 [added, removed]） */
+  byPath?: Record<string, [number, number]>
+  /** 两侧 numstat 查询状态：ok 发起且成功；skipped 该侧无 tracked 改动未查询；failed 本应查询但失败 */
+  numstatSides?: { worktree: 'ok' | 'skipped' | 'failed'; cached: 'ok' | 'skipped' | 'failed' }
 }
 
 /** $.fs.list() 的展示字段子集（文件树面板） */
@@ -167,6 +184,8 @@ declare module 'claude-code' {
       agents: AgentSnapshot
       /** 跨会话恢复的上次执行摘要（源自 $.store），空态面板的面包屑；无则 null */
       lastRun: ExecutionReport | null
+      /** 全绿收口通关卡（方案+批次+战报统计）；非收口/任务切换/新边界声明时清空，无则 null */
+      closureCard: { plan: string; batch: string; closure: ClosureStats } | null
       /** 执行停滞提示：距上次上报的分钟数（超过阈值）；未停滞或无执行则 null */
       stall: number | null
       /** 文档浏览面板装载的文档；text 为 null 表示读取失败（error 记原因） */
@@ -183,6 +202,9 @@ declare module 'claude-code' {
       touched: { path: string; at: number }[]
       /** deck 面板当前页签；/deck 无参打开时保持上次所在页签 */
       activeTab: 'flow' | 'files' | 'doc'
+      /** 呼吸节拍帧（0|1）：beatTimer 每 800ms 翻转、仅 deck 面板可见时写入。帧三红线 1——
+       *  帧状态只写本专用键，禁止写入其余任何 PluginState 键（否则击穿 git 快照时间戳防抖） */
+      beat: 0 | 1
     }
   }
 }

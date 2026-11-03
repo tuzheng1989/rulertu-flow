@@ -1,0 +1,26 @@
+{
+  "overall_quality": "通过。已完整重读当前磁盘方案并复核上一轮三项：同批阶段上报的守卫去重、旧基线快照的 companion 配置均已补齐；代次门已移入更新回调并增加交错测试，但状态写入钩子暂停后的情形仍需验证。未发现 P0/P1，存在两项 P2。",
+  "score": 8.6,
+  "issues": [
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:51,94",
+      "problem": "代次门测试尚未验证更新回调执行后、状态写入完成前的交错。",
+      "evidence": "方案将代次判断移入 update 回调，并测试回调执行前递增代次。现有 plugins/flow-deck/hooks/register.test.ts:120 展示了 state.set 可被钩子拦截；方案未说明回调计算结果后到 state.set 完成之间是否由引擎保证原子性。",
+      "impact": "如果旧会话的 state.set 可在回调计算后暂停，并在新会话清空后继续提交，旧快照仍可能写回。当前测试不足以确认该情形是否被引擎排除。",
+      "recommendation": "核验引擎对 update 和 state.set 的原子性契约；增加一条在旧 state.set 已收到值后暂停、新会话递增并清空、再释放旧写入的测试。若可复现，应在实际提交处校验代次或串行化写入。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:63,123",
+      "problem": "同一任务重申后，警告态可能继续显示已失效边界的告警。",
+      "evidence": "方案规定 flow_task 重申相同 plan#batch 时不清 guardWarned，小生物只判断 currentTask 非空和 guardWarned 非空；现有 hooks/register.tsx:966-968 的 flow_task 每次都会清空 batchScope。",
+      "impact": "批次越界告警后，若重申相同实施任务，当前任务仍非空但守卫边界已撤下，小生物仍会显示捂脸态。",
+      "recommendation": "让警告态同时检查匹配的活动 batchScope，或另行区分告警展示状态与守卫去重集合；增加同任务重申后边界已清空的状态测试。"
+    }
+  ],
+  "suggestions": [
+    "实施时保留同批阶段推进和异批激活两组守卫回归测试，避免修复展示态时再次改变去重行为。",
+    "确认代次校验与宿主实际状态提交之间的并发语义，并记录测试结果。"
+  ]
+}

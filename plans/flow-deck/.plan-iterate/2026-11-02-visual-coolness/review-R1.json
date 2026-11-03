@@ -1,0 +1,83 @@
+{
+  "overall_quality": "未通过。方案结构清晰，也识别了持久化与空态摘要的数据通路，但收口卡、统计数据、小生物状态和定时器生命周期仍有关键缺口。按 8.5 分且无 P0/P1 的标准，当前不能进入实施。",
+  "score": 6.3,
+  "issues": [
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:39",
+      "problem": "按文件统计没有贯通 Git 轮询的数据通路。",
+      "evidence": "hooks/poll.ts:123-128 将两次 numstat 原始输出分别交给 parseNumstat，传入 buildGitStatus 的只有 added 和 removed 总数。仅新增 numstatByPath 并让 buildGitStatus“顺带填充”，无法从总数恢复各文件数据。",
+      "impact": "按方案中的改动点实施时，byPath 无法得到真实数据，通关卡的增删行数不可靠。",
+      "recommendation": "明确修改 poll.ts 的数据装配：保留两次输出的逐文件结果，合并暂存与未暂存数据，再传入 buildGitStatus；保持查询条件和节流行为不变，并增加真实输出贯通到 GitStatus 的测试。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:40,72",
+      "problem": "战报统计的可用性、路径匹配和时效承诺不成立。",
+      "evidence": "hooks/parse.ts:296-303 保留 flow_batch 传入的原始路径，而工具允许绝对路径；Git diff 返回的路径和 rename 表示法可能与之不同。hooks/poll.ts:122-129 不统计未跟踪文件，失败时也可能得到空 diff；poll.ts:100-105 排除 fetchedAt，相同快照不重新发布，因此 atom 中的时间戳不保证表示最近一次成功查询。干净仓库和失败重试间隔还分别为 15 秒和 60 秒。",
+      "impact": "新文件、绝对路径、重命名或查询失败场景可能显示错误的零值；“≤5 秒陈旧”也无法保证，使用者会把缺失数据当成实际统计。",
+      "recommendation": "定义文件数是声明边界数还是实际变动数；统一路径和 rename 口径，明确未跟踪文件及二进制文件的限制。区分不可用与零值，展示实际统计口径及可靠的新鲜度，覆盖这些场景的端到端测试。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:45",
+      "problem": "收口后的通关卡无法按现有装配路径取得依赖图。",
+      "evidence": "hooks/register.tsx:985-987 收口时把 currentTask 置为 null；hooks/parse.ts:25-35 的 selectTaskView 只在活动实施任务匹配时返回 graph；register.tsx:402-413 在 task 为 null 时直接返回空态。",
+      "impact": "即使此前声明过 DAG，按方案引用的 selectTaskView 和现有渲染分支也只能得到 null，无法实现通关卡中的 DAG 展示。",
+      "recommendation": "为通关卡明确独立的数据装配和渲染分支，以收口报告的 plan 匹配原始 deps；测试有图、无图和不同方案残留图三种情况。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:88",
+      "problem": "小生物警告态条件与现有 atom 类型不匹配。",
+      "evidence": "hooks/register.tsx:65 和 types/index.d.ts:158-159 将 guardWarned 定义为字符串数组，初始值及新批次重置值均为 []，而方案使用“guardWarned 非空”作为条件且未说明数组长度判断。",
+      "impact": "若按通常的非 null 判断实现，空数组也会命中捂脸态，优先级更低的停滞、分身、干活和睡觉态将无法正常出现。",
+      "recommendation": "明确以 guardWarned.length > 0 判定，并测试初始空数组、实际警告、批次重声明和收口后的状态。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:86",
+      "problem": "节拍器的创建位置和重建生命周期缺失。",
+      "evidence": "hooks/register.tsx:754 的 register 只有 on 和 options；现有 clock 依赖的 $ 在 session.start 回调内取得。register.tsx:780-781 在每次 session.start 取消旧 planTimer 和 gitTimer，方案没有给 beatTimer 对应的取消、重置及重复启动规则。",
+      "impact": "直接按“register 时建”无法取得所示的引擎对象；若在 session.start 创建但不取消旧实例，重复启动会累积定时器，造成翻转频率异常和持续开销。",
+      "recommendation": "在 session.start 内先取消旧 beatTimer、重置 beat，再创建新定时器；定义 panes 查询失败时的处理，并测试连续两次 session.start 后只保留一个有效节拍器。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:40,43,58",
+      "problem": "失败收口仅规定不写新卡，没有清除可能已有的成功卡。",
+      "evidence": "方案的清卡出口不包含 flow_batch，也不包含失败的收口报告。现有 hooks/register.tsx:1002-1010 允许 flow_batch 直接启动新批次；随后失败收口会将 currentTask 清空。",
+      "impact": "成功收口后直接声明下一批、再失败收口时，旧 closureCard 可能重新出现在无活动任务的面板中，错误地显示为本次全绿结果。现有测试只检查失败时不写入，不能发现残留。",
+      "recommendation": "定义新批次启动及任何非成功收口时的清卡行为，并加入“成功收口→flow_batch 新批次→失败收口”的序列测试。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:40,73",
+      "problem": "批次计时的重置、缺失和会话边界没有完整定义。",
+      "evidence": "方案只要求模块级按 plan#batch 记录首报时间，并在评审节点提及批次重开时清理；没有规定新会话清理、重复收口、直接收口或缺少首报时的计算行为。",
+      "impact": "同名批次重开或跨会话复用模块状态时可能沿用旧时间；缺失起点时无法可靠生成分钟数。",
+      "recommendation": "明确计时起点、重开和会话重置规则，定义缺失起点时的展示，并用可控时钟覆盖重开、重复报告和新会话。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:87,98,105-108",
+      "problem": "动画验收条件与共享节拍的小生物帧存在冲突，验证计数的一次性反馈也缺少可验证的生命周期。",
+      "evidence": "方案要求两帧渲染树仅有着色差异、停滞时两帧完全一致，同时又要求默认开启的小生物按同一个 beat 切换两帧，包括停滞态。testsPassed 变化时的“渲染一次”没有定义何时消失或重复渲染时如何避免重复触发。",
+      "impact": "整体快照可能因小生物变化而失败，或者通过缩小断言范围掩盖实际问题；一次性反馈无法形成确定的实现和测试。",
+      "recommendation": "将呼吸元素和小生物分别断言；明确停滞时小生物是否继续动画，以及验证反馈的触发、持续和清除规则。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:53-68,92-108",
+      "problem": "视觉功能主要依赖替身和渲染树验收，缺少发布前真实终端的视觉检查。",
+      "evidence": "方案引入 800ms 呼吸、盲文帧、固定占位和新默认文案，但验收只要求自动化快照；两周观察清单明确不阻塞发布。已有原生界面方案在 plans/flow-deck/2026-11-01-native-ui-redesign.md:收口与真机目检 中对终端主题和窄宽度安排了实机检查。",
+      "impact": "自动化树无法确认终端字体列宽、窄面板截断、主题对比度和实际动画观感，核心视觉目标可能在发布后才发现不可用。",
+      "recommendation": "增加最小真机验收：深浅主题、窄宽面板、工作流与其他页签切换、停滞和关闭面板后的表现，并记录结果。"
+    }
+  ],
+  "suggestions": [
+    "先补齐收口状态机与 Git 数据契约，再冻结战报的显示口径和测试样例。",
+    "在方案中列出每个新增状态的初始化、更新、清理和跨会话行为，并为关键事件序列设置集成测试。",
+    "验收命令写明插件路径，例如 claude plugin validate plugins/flow-deck，并将自动化结果与真实终端检查结果分开记录。"
+  ]
+}

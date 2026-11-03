@@ -19,6 +19,8 @@ import {
   buildGitStatus,
   buildPlanReview,
   countIssues,
+  creatureState,
+  creatureFrames,
   depStatuses,
   extractRound,
   guardDecision,
@@ -28,6 +30,8 @@ import {
   normalizePath,
   parseBatchScope,
   parseDepGraph,
+  numstatByPath,
+  SKIN_TERMS,
   parseExecution,
   parseNumstat,
   parseSections,
@@ -37,8 +41,8 @@ import {
   sparkline,
   selectTaskView,
 } from './parse'
-import type { DepNode, ExecutionReport, FlowTask, PlanReview } from './parse'
-import type { BatchScope, FsEntryLike, GitStatus } from '../types'
+import type { CreatureState, DepNode, ExecutionReport, FlowTask, PlanReview } from './parse'
+import type { AgentSnapshot, BatchScope, FsEntryLike, GitStatus } from '../types'
 
 describe('parse', () => {
   test('当前任务筛选不把历史评审、执行、边界或路线图当成活动任务', () => {
@@ -236,7 +240,7 @@ describe('parse', () => {
       'M  hooks/b.ts',
       '?? plans/new.md',
       'UU plans/x.md',
-    ].join('\n')), { added: 0, removed: 0 }, { added: 0, removed: 0 }, 0)
+    ].join('\n')), null, null, 0)
     const rows = collectChanges(git, [{ path: 'hooks/a.ts' }, { path: 'docs/only-session.md' }])
     expect(rows.map(row => `${row.touched ? '●' : '○'} ${row.path} ${row.state}`)).toEqual([
       '● docs/only-session.md null',
@@ -358,6 +362,42 @@ describe('parse', () => {
       phase: '开工',
       updatedAt: 0,
     })
+  })
+
+  test('parseExecution closure 透传：null 原样、缺省规范化为 null、非法整个丢弃', () => {
+    // null 字段原样透传（真实统计不可用形态），不折算为 0
+    const allNull = parseExecution({
+      plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 1,
+      closure: { files: 3, added: null, removed: null, minutes: null },
+    })
+    expect(allNull?.closure).toEqual({ files: 3, added: null, removed: null, minutes: null })
+    expect('removed' in (allNull?.closure ?? {})).toBe(true)
+    // 部分缺失规范化为 null（不出现 undefined 形态）
+    const partial = parseExecution({
+      plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 1,
+      closure: { files: 3, added: 842 },
+    })
+    expect(partial?.closure).toEqual({ files: 3, added: 842, removed: null, minutes: null })
+    // statsAt 为 number 时透传
+    expect(parseExecution({
+      plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 1,
+      closure: { files: 1, added: 0, removed: 0, minutes: 5, statsAt: 900 },
+    })?.closure).toEqual({ files: 1, added: 0, removed: 0, minutes: 5, statsAt: 900 })
+    // files 非法（字符串/缺失）→ 整个 closure 丢弃，视同缺省
+    expect(parseExecution({
+      plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 1,
+      closure: { files: '3', added: 1, removed: 1, minutes: 1 },
+    })?.closure).toBeUndefined()
+    expect(parseExecution({
+      plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 1,
+      closure: { added: 1 },
+    })?.closure).toBeUndefined()
+    // closure 非对象 → 丢弃
+    expect(parseExecution({
+      plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 1, closure: 'x',
+    })?.closure).toBeUndefined()
+    // closure 缺省 → 不出现
+    expect(parseExecution({ plan: 'p', batch: 'B1', phase: '执行' })?.closure).toBeUndefined()
   })
 
   test('normalizePath 归一化分隔符并剥工作目录前缀', () => {
@@ -601,6 +641,64 @@ describe('parse', () => {
     expect(parseNumstat('junk line\n')).toEqual({ added: 0, removed: 0 })
   })
 
+  test('numstatByPath 逐文件聚合：多文件、空输出、非法行与二进制跳过', () => {
+    expect(numstatByPath('5\t3\ta.ts\n12\t0\tb.ts\n')).toEqual(
+      new Map([['a.ts', { a: 5, r: 3 }], ['b.ts', { a: 12, r: 0 }]]),
+    )
+    expect(numstatByPath('')).toEqual(new Map())
+    expect(numstatByPath('junk line\n')).toEqual(new Map())
+    // 二进制行（-\t-）沿用既有跳过口径，不计入任何文件
+    expect(numstatByPath('-\t-\tbinary.png\n2\t1\tc.ts\n')).toEqual(
+      new Map([['c.ts', { a: 2, r: 1 }]]),
+    )
+  })
+
+  test('numstatByPath rename 目标路径还原：全量记法与花括号压缩记法', () => {
+    // 全量记法取 => 右侧整段
+    expect(numstatByPath('3\t0\ta/old.ts => b/new.ts\n')).toEqual(
+      new Map([['b/new.ts', { a: 3, r: 0 }]]),
+    )
+    // 花括号压缩记法还原为 src/new/file.ts
+    expect(numstatByPath('1\t2\tsrc/{old => new}/file.ts\n')).toEqual(
+      new Map([['src/new/file.ts', { a: 1, r: 2 }]]),
+    )
+    // 深层目录的花括号记法
+    expect(numstatByPath('4\t1\ta/b/{x.ts => y.ts}\n')).toEqual(
+      new Map([['a/b/y.ts', { a: 4, r: 1 }]]),
+    )
+  })
+
+  test('numstatByPath 键归一化：反斜杠转正斜杠并小写折叠', () => {
+    expect(numstatByPath('2\t1\tSRC\\App.TS\n')).toEqual(
+      new Map([['src/app.ts', { a: 2, r: 1 }]]),
+    )
+    expect(numstatByPath('1\t0\tDocs/{A => B}/Readme.MD\n')).toEqual(
+      new Map([['docs/b/readme.md', { a: 1, r: 0 }]]),
+    )
+  })
+
+  test('numstatByPath 引号路径：剥引号并解码八进制转义（UTF-8 字节还原）', () => {
+    // 文档.md 的 UTF-8 字节序列的八进制转义形态
+    expect(numstatByPath('2\t1\t"\\346\\226\\207\\346\\241\\243.md"\n')).toEqual(
+      new Map([['文档.md', { a: 2, r: 1 }]]),
+    )
+    // 含空格路径双引号包裹，剥引号后原样保留
+    expect(numstatByPath('1\t0\t"path with space.txt"\n')).toEqual(
+      new Map([['path with space.txt', { a: 1, r: 0 }]]),
+    )
+    // \" 转义还原（文件名 we"ird.txt）；\\ 解码出的反斜杠按归一化口径转正斜杠（同 normalizePath 口径）
+    expect(numstatByPath('1\t1\t"we\\"ird.txt"\n')).toEqual(
+      new Map([['we"ird.txt', { a: 1, r: 1 }]]),
+    )
+    expect(numstatByPath('1\t1\t"a\\\\b.txt"\n')).toEqual(
+      new Map([['a/b.txt', { a: 1, r: 1 }]]),
+    )
+    // 不以引号包裹的路径原样保留
+    expect(numstatByPath('1\t0\tplain.md\n')).toEqual(
+      new Map([['plain.md', { a: 1, r: 0 }]]),
+    )
+  })
+
   test('buildGitStatus 组装快照并按 XY 分类', () => {
     const porcelain = parsePorcelain(
       [
@@ -615,7 +713,7 @@ describe('parse', () => {
       ].join('\n') + '\n',
     )
     if (porcelain === null) throw new Error('fixture 不可为 null')
-    const status: GitStatus = buildGitStatus(porcelain, { added: 45, removed: 3 }, { added: 7, removed: 9 }, 1000)
+    const status: GitStatus = buildGitStatus(porcelain, '45\t3\twa.ts\n', '7\t9\tca.ts\n', 1000)
     expect(status).toEqual({
       branch: 'main',
       upstream: 'origin/main',
@@ -635,7 +733,57 @@ describe('parse', () => {
       added: 52,
       removed: 12,
       fetchedAt: 1000,
+      numstatSides: { worktree: 'ok', cached: 'ok' },
+      byPath: { 'wa.ts': [45, 3], 'ca.ts': [7, 9] },
     })
+  })
+
+  test('buildGitStatus 侧状态装配：两侧均成功 → ok/ok', () => {
+    const porcelain = parsePorcelain('## main\nM  s.ts\n M w.ts\n')
+    if (porcelain === null) throw new Error('fixture 不可为 null')
+    const status = buildGitStatus(porcelain, '1\t0\tw.ts\n', '2\t0\ts.ts\n', 5)
+    expect(status.numstatSides).toEqual({ worktree: 'ok', cached: 'ok' })
+    expect(status.added).toBe(3)
+  })
+
+  test('buildGitStatus 侧状态装配：无 tracked 改动的一侧 skipped，对侧不受影响', () => {
+    // 仅未暂存改动：cached 侧本不应查询（staged 空）→ skipped；worktree 发起且成功 → ok
+    const porcelain = parsePorcelain('## main\n M w.ts\n')
+    if (porcelain === null) throw new Error('fixture 不可为 null')
+    const status = buildGitStatus(porcelain, '1\t0\tw.ts\n', null, 5)
+    expect(status.numstatSides).toEqual({ worktree: 'ok', cached: 'skipped' })
+    expect(status.added).toBe(1)
+    // 反向：仅暂存改动
+    const onlyStaged = parsePorcelain('## main\nM  s.ts\n')
+    if (onlyStaged === null) throw new Error('fixture 不可为 null')
+    const status2 = buildGitStatus(onlyStaged, null, '3\t1\ts.ts\n', 5)
+    expect(status2.numstatSides).toEqual({ worktree: 'skipped', cached: 'ok' })
+    expect(status2.removed).toBe(1)
+  })
+
+  test('buildGitStatus 侧状态装配：本应查询但返回 null → failed，与 skipped 可区分', () => {
+    const porcelain = parsePorcelain('## main\nM  s.ts\n M w.ts\n')
+    if (porcelain === null) throw new Error('fixture 不可为 null')
+    // 两侧都有 tracked 改动，cached 查询失败（null）
+    const status = buildGitStatus(porcelain, '1\t0\tw.ts\n', null, 5)
+    expect(status.numstatSides).toEqual({ worktree: 'ok', cached: 'failed' })
+    // 冲突文件计入 worktree 侧"本应查询"判定
+    const clashing = parsePorcelain('## main\nUU c.ts\n')
+    if (clashing === null) throw new Error('fixture 不可为 null')
+    const status2 = buildGitStatus(clashing, null, null, 5)
+    expect(status2.numstatSides).toEqual({ worktree: 'failed', cached: 'skipped' })
+  })
+
+  test('buildGitStatus byPath：同文件暂存+未暂存求和，键归一化，合计与 added/removed 一致', () => {
+    const porcelain = parsePorcelain('## main\nM  Src\\A.TS\n')
+    if (porcelain === null) throw new Error('fixture 不可为 null')
+    const status = buildGitStatus(porcelain, '2\t1\tsrc/a.ts\n', '3\t0\tSRC/A.ts\n', 5)
+    expect(status.byPath).toEqual({ 'src/a.ts': [5, 1] })
+    expect(status.added).toBe(5)
+    expect(status.removed).toBe(1)
+    // rename 花括号记法还原目标路径进入 byPath
+    const renamed = buildGitStatus(porcelain, '1\t2\tsrc/{old => new}/file.ts\n', null, 5)
+    expect(renamed.byPath).toEqual({ 'src/new/file.ts': [1, 2] })
   })
 
   test('isGitQuiet 判定干净且同步', () => {
@@ -725,5 +873,121 @@ describe('parse', () => {
     expect(parseSections('#nospace\n##X\n####### seven\nbody')).toEqual([
       { title: '全文', level: 0, start: 1, end: 4 },
     ])
+  })
+
+  test('skin 术语表双词表快照：7 条映射一词一义，default 词表与现行文案逐字一致', () => {
+    expect(SKIN_TERMS.default).toEqual({
+      batch: '批次',
+      execute: '执行',
+      verify: '验证',
+      score: '评分',
+      deps: '执行 DAG',
+      stall: '疑似停滞',
+      noTask: '当前无方案迭代或实施任务。',
+    })
+    expect(SKIN_TERMS['mission-control']).toEqual({
+      batch: '飞行阶段',
+      execute: '阶段进行',
+      verify: '数据校验',
+      score: '燃料余量',
+      deps: '轨道图',
+      stall: '遥测丢失',
+      noTask: '待命 · 当前无方案迭代或实施任务。',
+    })
+    // 两词表键集合一致（只换文案，不改信息量）
+    expect(Object.keys(SKIN_TERMS['mission-control']).sort())
+      .toEqual(Object.keys(SKIN_TERMS.default).sort())
+  })
+
+  test('creatureState 六态优先级阶梯：敬礼 > 捂脸 > 抖腿 > 分身 > 干活 > 睡觉（六态互斥）', () => {
+    const task: FlowTask = { kind: 'implement', plan: 'demo', batch: 'B2' }
+    const card = { plan: 'demo', batch: 'B2', closure: { files: 1, added: null, removed: null, minutes: null } }
+    const snapshot = (status: string): AgentSnapshot => ({
+      agents: [{ id: 'a1', description: '子代理', type: 'runner', status }],
+      loaded: true, error: false,
+    })
+    const base = {
+      closureCard: null, currentTask: null, guardWarned: [] as string[],
+      stall: null as number | null,
+      agents: { agents: [], loaded: true, error: false } as AgentSnapshot,
+    }
+    // 全空输入 → 睡觉兜底
+    expect(creatureState(base)).toBe('sleep')
+    // 单输入阶梯：六态各自命中且互斥
+    const ladder = [
+      creatureState({ ...base, closureCard: card }),
+      creatureState({ ...base, currentTask: task, guardWarned: ['src/a.ts'] }),
+      creatureState({ ...base, stall: 31 }),
+      creatureState({ ...base, agents: snapshot('running') }),
+      creatureState({ ...base, currentTask: task }),
+      creatureState(base),
+    ]
+    expect(ladder).toEqual(['salute', 'facepalm', 'legshake', 'clone', 'work', 'sleep'])
+    expect(new Set(ladder).size).toBe(6)
+    // 组合输入取最高优先级：敬礼压过全部低优先级输入；捂脸压过抖腿+分身
+    expect(creatureState({
+      ...base, closureCard: card, currentTask: task, guardWarned: ['src/a.ts'],
+      stall: 31, agents: snapshot('running'),
+    })).toBe('salute')
+    expect(creatureState({
+      ...base, currentTask: task, guardWarned: ['src/a.ts'], stall: 31, agents: snapshot('running'),
+    })).toBe('facepalm')
+  })
+
+  test('guardWarned 初始空数组不命中捂脸态，落到次优先级', () => {
+    const task: FlowTask = { kind: 'implement', plan: 'demo', batch: 'B2' }
+    const base = {
+      closureCard: null, currentTask: task, guardWarned: [] as string[],
+      stall: null as number | null,
+      agents: { agents: [], loaded: true, error: false } as AgentSnapshot,
+    }
+    expect(creatureState(base)).toBe('work')
+    expect(creatureState({ ...base, agents: { agents: [{ id: 'a1', description: 'x', type: 'runner', status: 'running' }], loaded: true, error: false } })).toBe('clone')
+    expect(creatureState({ ...base, stall: 5 })).toBe('legshake')
+  })
+
+  test('警告态作用域转换（状态机输入侧）：收口/idle 退位，切新任务落干活', () => {
+    const oldTask: FlowTask = { kind: 'implement', plan: 'demo', batch: 'B2' }
+    const newTask: FlowTask = { kind: 'implement', plan: 'demo', batch: 'B3' }
+    const base = {
+      closureCard: null, currentTask: null, guardWarned: [] as string[],
+      stall: null as number | null,
+      agents: { agents: [], loaded: true, error: false } as AgentSnapshot,
+    }
+    const alarmed = { ...base, currentTask: oldTask, guardWarned: ['src/a.ts'] }
+    expect(creatureState(alarmed)).toBe('facepalm')
+    // 告警 → 收口（收口分支 currentTask 置 null，guardWarned 不清——B1 条目 4）：捂脸退位
+    const closed = { ...alarmed, currentTask: null }
+    expect(creatureState(closed)).toBe('sleep')
+    // 收口态有 running 子代理 → 退位到次优先级分身而非睡觉
+    expect(creatureState({
+      ...closed, agents: { agents: [{ id: 'a1', description: 'x', type: 'runner', status: 'running' }], loaded: true, error: false },
+    })).toBe('clone')
+    // 告警 → idle（flow_task idle：currentTask 置 null）→ 同前退位
+    expect(creatureState({ ...alarmed, currentTask: null, guardWarned: [] })).toBe('sleep')
+    // 告警 → flow_task 切新任务（任务实际变化 → guardWarned 条件清理清空 + currentTask 换新）→ 干活
+    expect(creatureState({ ...alarmed, currentTask: newTask, guardWarned: [] })).toBe('work')
+    // 告警 → 收口 → flow_report 直接上报异批执行（不经 flow_task：非收口分支异批清理清空 + currentTask 换新）→ 干活
+    expect(creatureState({ ...alarmed, currentTask: newTask, guardWarned: [] })).toBe('work')
+    // 对照（输入侧语义）：若清理失效旧告警残留，新任务也会捂脸——B1 清理点保证 guardWarned 为空
+    expect(creatureState({ ...alarmed, currentTask: newTask })).toBe('facepalm')
+  })
+
+  test('creatureFrames：六态两帧盲文常量，每帧 ≤4 显示列、两帧不同', () => {
+    const states: CreatureState[] = ['salute', 'facepalm', 'legshake', 'clone', 'work', 'sleep']
+    expect(Object.keys(creatureFrames).sort()).toEqual([...states].sort())
+    for (const state of states) {
+      const [f0, f1] = creatureFrames[state]
+      for (const frame of [f0, f1]) {
+        // 盲文为窄字符：码点数即显示列
+        expect([...frame].length).toBeLessThanOrEqual(4)
+        for (const ch of frame) {
+          const code = ch.codePointAt(0) ?? 0
+          expect(code).toBeGreaterThanOrEqual(0x2800)
+          expect(code).toBeLessThanOrEqual(0x28ff)
+        }
+      }
+      expect(f0).not.toBe(f1)
+    }
   })
 })

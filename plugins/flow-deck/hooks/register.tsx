@@ -6,6 +6,8 @@ import {
   DOC_ALL_MAX_LINES,
   bannerPlan,
   collectChanges,
+  creatureFrames,
+  creatureState,
   depStatuses,
   gitSummaryParts,
   guardDecision,
@@ -20,6 +22,7 @@ import {
   progressBar,
   scoreGauge,
   selectTaskView,
+  skin,
   sortEntries,
   sparkline,
   spinnerWord,
@@ -32,9 +35,10 @@ import {
 import { createGitPoller, createPlanScanner, singleFlight } from './poll'
 import { agentStatus, agentSummary, createAgentPoller } from './agents'
 import { MARK, TONE } from './ui'
-import type { ChangeState } from './parse'
+import type { ChangeState, SkinKey } from './parse'
 import type {
   BatchScope,
+  ClosureStats,
   ExecutionReport,
   FlowTask,
   FsEntryLike,
@@ -52,6 +56,8 @@ const TOUCHED_CAP = 50
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
+/** 呼吸节拍周期（ms）：呼吸与小生物共用单一 clock（B2 条目 1/5）；硬编码不做配置，观察期后再议 */
+const BEAT_MS = 800
 const EXECUTION_STORE_KEY = 'lastExecution'
 /** 执行上报停滞阈值：超过该时长未续报视为疑似停滞 */
 const STALL_MS = 30 * 60_000
@@ -68,7 +74,12 @@ const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
 const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
 const agents = atom({ plugin: 'flow-deck', key: 'agents' } as const, { agents: [], loaded: false, error: false })
 const lastRun = atom({ plugin: 'flow-deck', key: 'lastRun' } as const, null)
+/** 全绿收口通关卡；清卡规则单一出处 B1 条目 4（生命周期表） */
+const closureCard = atom({ plugin: 'flow-deck', key: 'closureCard' } as const, null)
 const stall = atom({ plugin: 'flow-deck', key: 'stall' } as const, null)
+/** 呼吸节拍帧（0|1）：beatTimer 每 BEAT_MS 翻转、仅 deck 面板可见时写入。帧三红线 1——
+ *  帧状态只写本专用 atom，禁止写入其余任何 PluginState 键（防击穿 git 快照时间戳防抖） */
+const beat = atom({ plugin: 'flow-deck', key: 'beat' } as const, 0)
 /** 文档浏览面板装载的文档：text 为 null 表示读取失败（error 记原因） */
 const docFile = atom({ plugin: 'flow-deck', key: 'doc' } as const, null)
 /** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
@@ -92,6 +103,10 @@ let guardMode: 'warn' | 'deny' = 'warn'
 
 /** 会话工作目录；tool.call 事件不带 cwd，自 session.start 缓存（先于首个工具调用触发） */
 let sessionCwd = ''
+/** git 快照代次：session.start 同步递增（先于一切异步），poller publish 回调内比对拦截旧会话写入（B1 条目 2a） */
+let gitGeneration = 0
+/** 各批次首报起点（ms），键 <plan>#<batch>；flow_batch 首次声明记点、同键重声明不重置（条目 3） */
+const firstReportAt = new Map<string, number>()
 let scanPlans: ReturnType<typeof createPlanScanner> | undefined
 let refreshGit: (() => Promise<void>) | undefined
 let refreshAgents: (() => Promise<void>) | undefined
@@ -99,14 +114,20 @@ let refreshAgents: (() => Promise<void>) | undefined
 let refreshAll: (() => void) | undefined
 let planTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 let gitTimer: ReturnType<EngineInterface['clock']['every']> | undefined
+/** 呼吸与小生物共用的节拍器（单一 clock，B2 条目 5）；session.start 内创建，创建前取消旧例 */
+let beatTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 
 /** 自动侧边栏状态（官方 diff 面板范式）：本会话只自动试一次；用户手动开关过面板则不再打扰 */
 let autoOpened = false
 let manualDeck = false
 /** 最近一次 AbovePrompt 绘制观测到的全屏布局状态（侧边栏可停靠的前提） */
 let lastFullscreen = false
-/** 自动侧边栏开关；register 时按 userConfig 覆盖 */
+/** 自动侧边栏开关；register 时按 userConfig 读取 */
 let autoOpenMode: 'on' | 'off' = 'on'
+/** 任务控制台皮肤；register 时按 userConfig 覆盖（B1 条目 7） */
+let artDirection: 'default' | 'mission-control' = 'mission-control'
+/** 驻场小生物开关；register 时按 userConfig 覆盖（B2 条目 4，模式同 artDirection） */
+let companionMode: 'on' | 'off' = 'on'
 
 /** 越界拦截的 deny 文案 */
 function guardDenyMessage(hit: GuardHit): string {
@@ -153,8 +174,21 @@ function summarize(plan: PlanReview): string {
   return `「${plan.name}」评审 R${plan.round}/5 · 最新 ${latest.score} 分${mark}`
 }
 
-/** 一条执行上报的摘要文案（横条与 toast 共用的口径） */
-function describeExecution(report: ExecutionReport): string {
+/** 一条执行上报的摘要文案（横条与 toast 共用的口径）；全绿收口的战报为升级格式：
+ *  批次 · 文件数（声明边界） · ±行数 · 分钟数（自首次边界声明） · 全绿[ · 统计截至 HH:MM]，
+ *  统计不可用/无首报起点显示 —（与真实 0 可区分） */
+export function describeExecution(report: ExecutionReport): string {
+  const closure = report.closure
+  if (closure !== undefined) {
+    const lines = closure.added === null || closure.removed === null
+      ? '—'
+      : `+${closure.added} −${closure.removed}`
+    const minutes = closure.minutes === null ? '—' : `${closure.minutes} 分钟（自首次边界声明）`
+    const statsAt = closure.statsAt === undefined
+      ? ''
+      : ` · 统计截至 ${new Date(closure.statsAt).toTimeString().slice(0, 5)}`
+    return `${report.batch} · ${closure.files} 文件（声明边界） · ${lines} · ${minutes} · 全绿${statsAt}`
+  }
   const t = report.tLevel === undefined ? '' : ` · ${report.tLevel}`
   const tests =
     report.testsTotal === undefined ? '' : ` · 验证 ${report.testsPassed ?? 0}/${report.testsTotal}`
@@ -357,7 +391,28 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   const snapshot = await read($, agents)
   const crumbs = await read($, lastRun)
   const stallMinutes = await read($, stall)
+  // 小生物与呼吸的帧输入（B2 条目 2/3）：beat 为帧号，closureCard 上移供两分支共用
+  const beatFrame = await read($, beat)
+  const warned = await read($, guardWarned)
+  const card = await read($, closureCard)
+  // 驻场小生物（B2 条目 3/4）：六态状态机取当前帧；companion=off 时渲染层跳过（呼吸不受影响）
+  const creature = companionMode === 'on'
+    ? creatureFrames[creatureState({
+        closureCard: card,
+        currentTask: task,
+        guardWarned: warned,
+        stall: stallMinutes,
+        agents: snapshot,
+      })][beatFrame]
+    : null
+  // 呼吸两档（B2 条目 2）：仅限执行卡两处运行元素（阶段进度条当前段与执行阶段行）；
+  // stall 停跳恒灰档不再随 beat；beat=1 accent 高亮档、beat=0 dim 暗档
+  const breathAccent = stallMinutes === null && beatFrame === 1
   const wide = e.props.bodyColumns >= 44
+  // 皮肤取词与阶段换词（B1 条目 9）：五处点名文案按 artDirection 切换，只换文案不改结构
+  const label = (key: SkinKey) => skin.label(artDirection, key)
+  const phaseText = (phase: string): string =>
+    phase === '执行' ? label('execute') : phase === '验证' ? label('verify') : phase
   const nodes = graph === null ? [] : depStatuses(graph, progressMap)
   const links = pipelineLinks(nodes)
   const done = nodes.filter(node => node.status === 'done').length
@@ -400,13 +455,73 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   )
 
   if (task === null) {
+    // 通关卡（B1 条目 6）：独立装配分支，不经 selectTaskView（收口时 currentTask 已 null，
+    // 经它必得 null graph）；card 为 null 时本分支渲染树与既有空态仅多 companion=on 的小生物
+    // 占位（companion=off 与基线逐字一致）
+    const cardGraph = card === null ? null : await read($, deps)
+    const graphMatches = cardGraph !== null && card !== null && cardGraph.plan === card.plan
+    const cardNodes = graphMatches && card !== null ? depStatuses(cardGraph, progressMap) : []
+    const cardLinks = pipelineLinks(cardNodes)
+    const cardDone = cardNodes.filter(node => node.status === 'done').length
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
-          <Text>当前无方案迭代或实施任务。</Text>
+          {creature !== null
+            ? <Box><Text>{label('noTask')}</Text><Text dimColor> {creature}</Text></Box>
+            : <Text>{label('noTask')}</Text>}
           <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
           {crumbs !== null && <Text dimColor wrap="truncate-end">上次执行：{describeExecution(crumbs)}</Text>}
         </Box>
+        {card !== null && (
+          <Box key="closure-card" flexDirection="column" borderStyle={wide ? 'round' : undefined} borderColor={TONE.ok} paddingX={wide ? 1 : 0} hover={{ borderDimColor: false }}>
+            <Text bold color={TONE.ok} wrap="truncate-end">{MARK.done} 通关 · {card.plan} / {card.batch}</Text>
+            <Text color={TONE.ok} wrap="truncate-end">
+              {describeExecution({
+                plan: card.plan, batch: card.batch, phase: '收口',
+                closure: card.closure, updatedAt: 0,
+              })}
+            </Text>
+            {graphMatches && cardGraph !== null && (
+              <Box flexDirection="column" gap={1}>
+                <Text bold wrap="truncate-end">{MARK.title}{label('deps')}（{cardGraph.plan}）</Text>
+                <Text color={TONE.accent} wrap="truncate-end">
+                  {cardNodes.flatMap((node, index) => {
+                    const glyph = (
+                      <Text key={node.batch}
+                        color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined}
+                        dimColor={node.status === 'pending'}>
+                        {node.status === 'done' ? MARK.nodeDone : node.status === 'active' ? MARK.nodeRun : MARK.nodeWait}
+                      </Text>
+                    )
+                    if (index === cardNodes.length - 1) return [glyph]
+                    const linkStatus = cardLinks[index]
+                    const link = (
+                      <Text key={`${node.batch}-link`}
+                        color={linkStatus === 'done' ? TONE.ok : linkStatus === 'active' ? TONE.warn : undefined}
+                        dimColor={linkStatus === 'pending'}>
+                        {linkStatus === 'pending' ? '╌' : '━'}
+                      </Text>
+                    )
+                    return [glyph, link]
+                  })}
+                  {' '}{cardDone}/{cardNodes.length} 收口 · {cardNodes.filter(node => node.status === 'active').length} 进行中
+                </Text>
+                {cardNodes.map((node, index) => (
+                  <Box key={node.batch} flexDirection="column">
+                    <Text
+                      bold={node.batch === card.batch}
+                      dimColor={node.status === 'pending'}
+                      color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined}
+                      wrap="truncate-end">
+                      {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
+                    </Text>
+                    <Text dimColor wrap="truncate-end">{index === cardNodes.length - 1 ? '└' : '│'} {progressMap[`${cardGraph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
         {agentsSection}
         <Text dimColor wrap="truncate-end">/deck 关闭 · 面板内按 r 刷新</Text>
       </Box>
@@ -420,6 +535,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
         <Button key="task-plan-open" plain onPress={() => { void openPlanDoc($, task.plan) }}>
           <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}工作面板 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · </Text>
           <Text bold color={TONE.accent} underline wrap="truncate-end">{task.plan}</Text>
+          {creature !== null && <Text dimColor> {creature}</Text>}
         </Button>
         {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
         {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
@@ -432,23 +548,23 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
             <Text bold color={TONE.accent} wrap="truncate-end">{MARK.run} 当前执行 · </Text>
             <Text bold color={TONE.accent} underline wrap="truncate-end">{report.plan}</Text>
           </Button>
-          <Text wrap="truncate-end">
+          <Text wrap="truncate-end" color={breathAccent ? TONE.accent : undefined} dimColor={!breathAccent}>
             {report.batch}
             {report.tLevel !== undefined && <Text backgroundColor={TONE.accent} color="inverseText"> {report.tLevel} </Text>}
-            {' '}· {report.phase}
+            {' '}· {phaseText(report.phase)}
           </Text>
           {phase.total > 0 && (
             <Text wrap="truncate-end">
-              <Text color={TONE.ok}>{progressBar(phase.index, phase.total)}</Text>
+              <Text color={breathAccent ? TONE.accent : undefined} dimColor={!breathAccent}>{progressBar(phase.index, phase.total)}</Text>
               <Text> </Text>
-              <Text color={phase.index >= phase.total ? TONE.ok : TONE.warn} bold>{phase.current} · {phase.index}/{phase.total}</Text>
+              <Text color={phase.index >= phase.total ? TONE.ok : TONE.warn} bold>{phaseText(phase.current)} · {phase.index}/{phase.total}</Text>
             </Text>
           )}
           {phase.total === 0 && <Text dimColor wrap="truncate-end">{phase.current}</Text>}
-          {stallMinutes !== null && <Text color={TONE.warn} wrap="truncate-end">{MARK.alert} 疑似停滞 · 距上次上报 {stallMinutes} 分钟</Text>}
+          {stallMinutes !== null && <Text color={TONE.warn} wrap="truncate-end">{MARK.alert} {label('stall')} · 距上次上报 {stallMinutes} 分钟</Text>}
           {report.testsTotal !== undefined && (
             <Text color={report.testsTotal > 0 && report.testsPassed === report.testsTotal ? TONE.ok : TONE.warn} wrap="truncate-end">
-              验证 {progressBar(report.testsPassed ?? 0, report.testsTotal)} {report.testsPassed ?? 0}/{report.testsTotal}
+              {report.testsTotal > 0 && report.testsPassed === report.testsTotal ? `${MARK.done} ` : ''}{label('verify')} {progressBar(report.testsPassed ?? 0, report.testsTotal)} {report.testsPassed ?? 0}/{report.testsTotal}
             </Text>
           )}
           {report.evidenceDir !== undefined && <Text dimColor wrap="truncate-middle">证据 {report.evidenceDir}</Text>}
@@ -495,7 +611,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
       {passing.length > 0 && <Text color={TONE.ok} wrap="truncate-end">{MARK.done} 已达标 {passing.length} 个方案（已折叠）</Text>}
       {graph !== null && (
         <Box flexDirection="column" gap={1}>
-          <Text bold wrap="truncate-end">{MARK.title}执行 DAG（{graph.plan}）</Text>
+          <Text bold wrap="truncate-end">{MARK.title}{label('deps')}（{graph.plan}）</Text>
           <Text color={TONE.accent} wrap="truncate-end">
             {nodes.flatMap((node, index) => {
               const glyph = (
@@ -754,8 +870,13 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
 export const register: Register = (on, options) => {
   guardMode = options.guardMode === 'deny' ? 'deny' : 'warn'
   autoOpenMode = options.autoOpen === 'off' ? 'off' : 'on'
+  artDirection = options.artDirection === 'default' ? 'default' : 'mission-control'
+  companionMode = options.companion === 'off' ? 'off' : 'on'
 
   on('session.start', async ($, e, next) => {
+    // 代次门 ①：同步递增并捕获新值（无 await，先于本回调内一切异步操作）；旧会话在途
+    // publish 的 update 回调执行时读到已递增的代次，原样返回 prev 丢弃旧快照（B1 条目 2a 顺序契约）
+    const capturedGeneration = ++gitGeneration
     sessionCwd = e.cwd
     lastStatus = undefined
     await update($, currentTask, () => null)
@@ -775,10 +896,18 @@ export const register: Register = (on, options) => {
     await update($, treeDir, () => null)
     await update($, treeEntries, () => null)
     await update($, touched, () => [])
+    // git 快照跨会话隔离：清空旧 cwd 快照待新一轮查询；通关卡与首报时间不跨会话（B1 条目 2a/生命周期表）
+    await update($, gitStatus, () => null)
+    await update($, closureCard, () => null)
+    firstReportAt.clear()
     autoOpened = false
     manualDeck = false
     planTimer?.cancel()
     gitTimer?.cancel()
+    // 节拍器生命周期（B2 条目 1，模式同上方 planTimer/gitTimer）：先取消旧例再重置帧号，
+    // 防重复 session.start 累积定时器；新会话从帧 0 起（生命周期表：不残留定时器、不持久化）
+    beatTimer?.cancel()
+    await update($, beat, () => 0)
     scanPlans = createPlanScanner({
       list: path => path === undefined ? $.fs.list() : $.fs.list(path),
       read: path => $.fs.read(path),
@@ -875,7 +1004,9 @@ export const register: Register = (on, options) => {
       }
     })
     const gitPoller = createGitPoller(args => runGit($, args), async status => {
-      await update($, gitStatus, () => status)
+      // 代次门 ②：比对与写入在同一 update 回调内完成（原子性契约，B1 条目 2a），
+      // 回调执行时代次已变则原样返回 prev（丢弃旧会话在途 publish 的旧 cwd 快照）
+      await update($, gitStatus, prev => (capturedGeneration === gitGeneration ? status : prev))
     })
     const tickGit = singleFlight(async () => {
       try {
@@ -909,6 +1040,23 @@ export const register: Register = (on, options) => {
       await Promise.all([refreshPlans(), refreshAgentPane(), refreshStall($)])
     })
     gitTimer = $.clock.every(GIT_POLL_MS, tickGit)
+    // 呼吸节拍（B2 条目 1，帧三红线 1-3 的全部体现）：回调仅两件事——panes 含 deck 判定与帧号
+    // 翻转，无任何数据面 IO；panes 查询失败跳过本次翻转（fail-closed：吞错、定时器保活下一
+    // tick 重试，模式同 refreshAgentPane）。呼吸与小生物共用本定时器（条目 5）
+    beatTimer = $.clock.every(BEAT_MS, async () => {
+      try {
+        const panes = await $.ui.panes()
+        if (Array.isArray(panes) && panes.some(pane => pane.id === DECK_PANE_ID)) {
+          await update($, beat, b => (b === 1 ? 0 : 1))
+        }
+      } catch (error) {
+        try {
+          $.ui.log(`flow-deck 呼吸节拍失败：${String(error)}`, { to: 'debug' })
+        } catch {
+          // 日志设施不可用时静默跳过；节拍器保持存活，下一 tick 重试（红线 3 fail-closed）
+        }
+      }
+    })
     return next(e)
   })
 
@@ -963,6 +1111,13 @@ export const register: Register = (on, options) => {
       kind: e.kind, plan: e.plan as string,
       ...(typeof e.batch === 'string' && e.batch !== '' ? { batch: e.batch } : {}),
     }
+    // guardWarned 的去重语义属于「批次边界 + 文件」：仅在任务/批次实际变化时清理（B1 条目 4）
+    const prevTask = await read($, currentTask)
+    const sameTask = prevTask !== null && task !== null &&
+      prevTask.plan === task.plan && prevTask.batch === task.batch
+    if (!sameTask) await update($, guardWarned, () => [])
+    // 新任务声明即清旧通关卡（清卡四直接出口之一，条目 4；含 idle）
+    await update($, closureCard, () => null)
     await update($, execution, () => null)
     await update($, batchScope, () => null)
     await update($, currentTask, () => task)
@@ -976,16 +1131,76 @@ export const register: Register = (on, options) => {
     if (report === null) {
       return { result: 'plan、batch、phase 为必填字符串', isError: true }
     }
-    const stamped: ExecutionReport = { ...report, updatedAt: Date.now() }
+    // 收口组装（B1 条目 3 语句顺序契约）：① minutes 判定读首报 map → ② scope 前置校验 →
+    // ③ gitStatus 取数组装行数与 statsAt → ④ 并入 stamped，四步先于下方 execution/progress 更新
+    const closurePhase = report.phase === '收口' &&
+      report.testsTotal !== undefined && report.testsTotal >= 1 &&
+      report.testsPassed === report.testsTotal
+    const startAt = firstReportAt.get(`${report.plan}#${report.batch}`)
+    const minutes = closurePhase && startAt !== undefined
+      ? Math.floor((Date.now() - startAt) / 60_000)
+      : null
+    const scope = await read($, batchScope)
+    const scopeOk = scope !== null && scope.plan === report.plan && scope.batch === report.batch
+    let closure: ClosureStats | undefined
+    if (closurePhase && scopeOk) {
+      const git = await read($, gitStatus)
+      if (git !== null && git.byPath !== undefined && git.numstatSides !== undefined &&
+          git.numstatSides.worktree !== 'failed' && git.numstatSides.cached !== 'failed') {
+        // 统计可用：byPath 中 scope 内文件合计（同一归一化，调用模式同 scopeSet）
+        let added = 0
+        let removed = 0
+        for (const file of scope.files) {
+          const hit = git.byPath[normalizePath(file, sessionCwd).toLowerCase()]
+          if (hit !== undefined) { added += hit[0]; removed += hit[1] }
+        }
+        closure = { files: scope.files.length, added, removed, minutes, statsAt: git.fetchedAt }
+      } else {
+        // 统计不可用（git 快照为 null，或任一必需侧 failed）：整体置 null、statsAt 缺省
+        closure = { files: scope.files.length, added: null, removed: null, minutes }
+      }
+    } else if (closurePhase) {
+      // 前置校验不过：唯一例外为同 plan#batch 全绿重复收口 → 以现存卡 closure 重放（条目 4）
+      const existing = await read($, closureCard)
+      if (existing !== null && existing.plan === report.plan && existing.batch === report.batch) {
+        closure = existing.closure
+      }
+    }
+    const stamped: ExecutionReport = {
+      ...report,
+      updatedAt: Date.now(),
+      ...(closure === undefined ? {} : { closure }),
+    }
+    // 清卡统一规则（条目 4）：能组装新卡 → 写新卡；否则清卡；
+    // 同 plan#batch 全绿重复收口（closure 经重放重建）→ 幂等保留，三出口一致
+    if (closurePhase) {
+      if (scopeOk && closure !== undefined) {
+        await update($, closureCard, () => ({ plan: stamped.plan, batch: stamped.batch, closure }))
+      } else if (closure === undefined) {
+        await update($, closureCard, () => null)
+      }
+    } else {
+      await update($, closureCard, () => null)
+    }
     await update($, execution, () => stamped)
     await update($, progress, prev => ({
       ...prev,
       [`${stamped.plan}#${stamped.batch}`]: stamped.phase,
     }))
+    // 空态摘要读 lastRun atom 而非 store，收口同步写入（4b）；重复收口经重放与 store 同源一致
+    if (stamped.phase === '收口') {
+      await update($, lastRun, () => stamped)
+    }
+    // 非收口分支激活新任务时按任务/批次实际变化清理 guardWarned（同批阶段推进不清，条目 4）
+    if (stamped.phase !== '收口') {
+      const prevTask = await read($, currentTask)
+      if (prevTask === null || prevTask.plan !== stamped.plan || prevTask.batch !== stamped.batch) {
+        await update($, guardWarned, () => [])
+      }
+    }
     await update($, currentTask, () => stamped.phase === '收口' ? null : {
       kind: 'implement', plan: stamped.plan, batch: stamped.batch,
     })
-    const scope = await read($, batchScope)
     if (stamped.phase === '收口' || (scope !== null && (scope.plan !== stamped.plan || scope.batch !== stamped.batch))) {
       await update($, batchScope, () => null)
     }
@@ -1004,6 +1219,11 @@ export const register: Register = (on, options) => {
     if (scope === null) {
       return { result: 'plan、batch 为必填字符串，files 为非空字符串数组', isError: true }
     }
+    // 首报起点三态（条目 3/生命周期表）：首次声明该键记起点；同键重新声明（边界调整）不重置；
+    // 异批声明记新键、旧键保留
+    const key = `${scope.plan}#${scope.batch}`
+    if (!firstReportAt.has(key)) firstReportAt.set(key, Date.now())
+    await update($, closureCard, () => null)
     await update($, batchScope, () => scope)
     // 边界变了越界集合随之变化，应允许再次提醒
     await update($, guardWarned, () => [])

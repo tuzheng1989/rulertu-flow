@@ -1,6 +1,8 @@
 import type {
+  AgentSnapshot,
   BatchDep,
   BatchScope,
+  ClosureStats,
   DepGraph,
   ExecutionReport,
   FlowTask,
@@ -289,6 +291,22 @@ export function parseExecution(value: unknown): ExecutionReport | null {
   if (typeof record.testsPassed === 'number') report.testsPassed = record.testsPassed
   if (typeof record.testsTotal === 'number') report.testsTotal = record.testsTotal
   if (typeof record.evidenceDir === 'string') report.evidenceDir = record.evidenceDir
+  // closure 透传（与组装侧同一契约）：files 必填 number（非法整个丢弃，视同缺省不产出卡）；
+  // added/removed/minutes 接受 number 或 null，缺失规范化为 null（缺省与 null 等价，不出 undefined）；
+  // statsAt 为 number 时透传、可缺省
+  if (typeof record.closure === 'object' && record.closure !== null && !Array.isArray(record.closure)) {
+    const raw = record.closure as Record<string, unknown>
+    if (typeof raw.files === 'number') {
+      const closure: ExecutionReport['closure'] = {
+        files: raw.files,
+        added: typeof raw.added === 'number' ? raw.added : null,
+        removed: typeof raw.removed === 'number' ? raw.removed : null,
+        minutes: typeof raw.minutes === 'number' ? raw.minutes : null,
+      }
+      if (typeof raw.statsAt === 'number') closure.statsAt = raw.statsAt
+      report.closure = closure
+    }
+  }
   return report
 }
 
@@ -366,6 +384,72 @@ export function depStatuses(graph: DepGraph, progress: Record<string, string>): 
     if (phase === undefined) return { ...node, status: 'pending' as const }
     return { ...node, status: phase === '收口' ? ('done' as const) : ('active' as const) }
   })
+}
+
+/** 任务控制台皮肤术语表（B1 条目 9）：7 条映射一词一义，只换文案不改图形结构与信息量；
+ *  default 词表产出与现行文案逐字一致（基线回归前提），映射外的渲染文案一律不动 */
+export const SKIN_TERMS = {
+  default: {
+    batch: '批次',
+    execute: '执行',
+    verify: '验证',
+    score: '评分',
+    deps: '执行 DAG',
+    stall: '疑似停滞',
+    noTask: '当前无方案迭代或实施任务。',
+  },
+  'mission-control': {
+    batch: '飞行阶段',
+    execute: '阶段进行',
+    verify: '数据校验',
+    score: '燃料余量',
+    deps: '轨道图',
+    stall: '遥测丢失',
+    noTask: '待命 · 当前无方案迭代或实施任务。',
+  },
+} as const
+
+export type SkinMode = keyof typeof SKIN_TERMS
+export type SkinKey = keyof typeof SKIN_TERMS.default
+
+/** skin = { label }：渲染层取文案处（标题行、进度条标签、DAG 区标题、空态行、停滞提示）按皮肤切换 */
+export const skin = {
+  label: (mode: SkinMode, key: SkinKey): string => SKIN_TERMS[mode][key],
+}
+
+/** 驻场小生物六态（B2 条目 3）：敬礼 > 捂脸 > 抖腿 > 分身 > 干活 > 睡觉 */
+export type CreatureState = 'salute' | 'facepalm' | 'legshake' | 'clone' | 'work' | 'sleep'
+
+/** 小生物状态机输入：全部为现有 atoms 的只读快照（B2 条目 3） */
+export type CreatureSources = {
+  closureCard: { plan: string; batch: string; closure: ClosureStats } | null
+  currentTask: FlowTask | null
+  /** 必须按长度判定：初始空数组不得命中捂脸态（警告属于活动任务） */
+  guardWarned: readonly string[]
+  stall: number | null
+  agents: AgentSnapshot
+}
+
+/** 小生物状态取态：按优先级取首个命中的态，睡觉兜底。
+ *  捂脸以活动任务为门（收口后 currentTask 置 null 即退位；guardWarned 清理点单一出处 B1 条目 4） */
+export function creatureState(sources: CreatureSources): CreatureState {
+  if (sources.closureCard !== null) return 'salute'
+  if (sources.currentTask !== null && sources.guardWarned.length > 0) return 'facepalm'
+  if (sources.stall !== null) return 'legshake'
+  if (sources.agents.agents.some(agent => agent.status === 'running')) return 'clone'
+  if (sources.currentTask !== null) return 'work'
+  return 'sleep'
+}
+
+/** 小生物六态两帧盲文图案（B2 条目 3）：静态常量、无独立生命周期，帧选择 frames[beat]；
+ *  每帧 ≤4 显示列（盲文为窄字符），两帧图案不同使动画可感知 */
+export const creatureFrames: Record<CreatureState, [string, string]> = {
+  salute: ['⠛⠉', '⠛⠋'],
+  facepalm: ['⠋⠿', '⠙⠷'],
+  legshake: ['⠟⠂', '⠷⠆'],
+  clone: ['⠿⠋', '⠿⠙'],
+  work: ['⠋⠂', '⠙⠆'],
+  sleep: ['⠣⠴', '⠤⠶'],
 }
 
 /** 组装一个方案的评审概览；stateText 为 null 时仅靠评审文件推导 */
@@ -480,26 +564,88 @@ export function parsePorcelain(stdout: string): PorcelainStatus | null {
   return { branch, upstream, ahead, behind, files }
 }
 
-/** 解析 git diff --numstat 的 stdout，累加行级增删；二进制行（-\t-）与非法行跳过 */
-export function parseNumstat(stdout: string): { added: number; removed: number } {
-  let added = 0
-  let removed = 0
+/** 剥 numstat 输出的引号路径并解码转义：quotePath 形态下 \\"、\\\\ 与 \\nnn 八进制字节序列按 UTF-8 还原 */
+function decodeQuotedPath(path: string): string {
+  if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) return path
+  const body = path.slice(1, -1)
+  const bytes: number[] = []
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (ch !== '\\' || i + 1 >= body.length) {
+      bytes.push(body.charCodeAt(i))
+      continue
+    }
+    const next = body[i + 1]
+    if (next === '\\') { bytes.push(92); i += 1; continue }
+    if (next === '"') { bytes.push(34); i += 1; continue }
+    const octal = /^[0-7]{1,3}/.exec(body.slice(i + 1, i + 4))
+    if (octal !== null) {
+      bytes.push(parseInt(octal[0], 8))
+      i += octal[0].length
+      continue
+    }
+    bytes.push(ch.charCodeAt(0), next.charCodeAt(0))
+    i += 1
+  }
+  return new TextDecoder().decode(new Uint8Array(bytes))
+}
+
+/** numstat 路径列还原 rename 目标路径：全量记法 `old => new` 取右侧整段；
+ *  花括号压缩记法 `src/{old => new}/file.ts` 取花括号内右侧并拼接前后段 */
+function numstatTargetPath(raw: string): string {
+  const brace = raw.indexOf('{')
+  if (brace !== -1) {
+    const close = raw.lastIndexOf('}')
+    const inner = close > brace ? raw.slice(brace + 1, close) : ''
+    const arrow = inner.indexOf('=>')
+    if (arrow !== -1) {
+      return raw.slice(0, brace) + inner.slice(arrow + 2).trim() + raw.slice(close + 1)
+    }
+    return raw
+  }
+  const arrow = raw.indexOf('=>')
+  return arrow === -1 ? raw : raw.slice(arrow + 2).trim()
+}
+
+/** 解析 git diff --numstat 的 stdout 为逐文件聚合；键经反斜杠转正斜杠 + 小写归一化，
+ *  rename 还原为目标路径，引号路径剥引号并解码转义；二进制行（-\t-）与非法行跳过 */
+export function numstatByPath(stdout: string): Map<string, { a: number; r: number }> {
+  const byPath = new Map<string, { a: number; r: number }>()
   for (const line of stdout.split('\n')) {
     const parts = line.split('\t')
     if (parts.length < 3) continue
     const lineAdded = Number(parts[0])
     const lineRemoved = Number(parts[1])
-    if (!Number.isNaN(lineAdded)) added += lineAdded
-    if (!Number.isNaN(lineRemoved)) removed += lineRemoved
+    if (Number.isNaN(lineAdded) || Number.isNaN(lineRemoved)) continue
+    const path = numstatTargetPath(decodeQuotedPath(parts.slice(2).join('\t')))
+      .replace(/\\/g, '/').toLowerCase()
+    if (path === '') continue
+    const hit = byPath.get(path)
+    if (hit === undefined) byPath.set(path, { a: lineAdded, r: lineRemoved })
+    else { hit.a += lineAdded; hit.r += lineRemoved }
+  }
+  return byPath
+}
+
+/** 解析 git diff --numstat 的 stdout，累加行级增删（对逐文件聚合求和）；二进制行（-\t-）与非法行跳过 */
+export function parseNumstat(stdout: string): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const { a, r } of numstatByPath(stdout).values()) {
+    added += a
+    removed += r
   }
   return { added, removed }
 }
 
-/** 组装 git 状态快照：XY 码分类 + 两次 numstat 合计行级增删 */
+/** 组装 git 状态快照：XY 码分类 + 两侧 numstat（原始输出，null = 未查询或查询失败）
+ *  合计行级增删并装配逐文件 byPath 与侧状态 numstatSides。
+ *  侧状态判定与查询条件同源：worktree 本应查询 ⇔ unstaged+conflicts 非空，cached ⇔ staged 非空；
+ *  发起且成功 → ok，未发起 → skipped，本应查询但返回 null → failed。 */
 export function buildGitStatus(
   porcelain: PorcelainStatus,
-  worktreeNumstat: { added: number; removed: number },
-  cachedNumstat: { added: number; removed: number },
+  worktreeNumstat: string | null,
+  cachedNumstat: string | null,
   fetchedAt: number,
 ): GitStatus {
   const staged: GitFileState[] = []
@@ -517,6 +663,22 @@ export function buildGitStatus(
       if ('MD'.includes(file.code.charAt(1))) unstaged.push(file)
     }
   }
+  const worktreeLines = numstatByPath(worktreeNumstat ?? '')
+  const cachedLines = numstatByPath(cachedNumstat ?? '')
+  let added = 0
+  let removed = 0
+  const byPath: Record<string, [number, number]> = {}
+  for (const lines of [worktreeLines, cachedLines]) {
+    for (const [path, { a, r }] of lines) {
+      added += a
+      removed += r
+      const hit = byPath[path]
+      if (hit === undefined) byPath[path] = [a, r]
+      else { hit[0] += a; hit[1] += r }
+    }
+  }
+  const sideState = (raw: string | null, should: boolean): 'ok' | 'skipped' | 'failed' =>
+    raw !== null ? 'ok' : should ? 'failed' : 'skipped'
   return {
     branch: porcelain.branch,
     upstream: porcelain.upstream,
@@ -526,9 +688,14 @@ export function buildGitStatus(
     unstaged,
     untracked,
     conflicts,
-    added: worktreeNumstat.added + cachedNumstat.added,
-    removed: worktreeNumstat.removed + cachedNumstat.removed,
+    added,
+    removed,
     fetchedAt,
+    byPath,
+    numstatSides: {
+      worktree: sideState(worktreeNumstat, unstaged.length + conflicts.length > 0),
+      cached: sideState(cachedNumstat, staged.length > 0),
+    },
   }
 }
 

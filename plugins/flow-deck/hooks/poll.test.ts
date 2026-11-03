@@ -114,6 +114,67 @@ describe('polling cost and freshness', () => {
     expect(calls).toBe(3)
   })
 
+  test('numstat 逐文件贯通：rename 还原、引号路径解码、同文件两段求和，合计与 byPath 一致', async () => {
+    const snapshots: (GitStatus | null)[] = []
+    const poll = createGitPoller(async args => {
+      if (args.includes('status')) {
+        return [
+          '## main',
+          'M  src/{moved => new}/renamed.ts',
+          ' M "docs/\\346\\226\\207\\346\\241\\243 with space.md"',
+          'A  plain.ts',
+          'R  a/old.ts => b/new.ts',
+        ].join('\n') + '\n'
+      }
+      // 真实 numstat 形态：花括号压缩 rename、引号 + 八进制转义中文 + 空格、全量 rename；
+      // 暂存侧补一段 plain.ts 供同文件两段求和
+      return args.includes('--cached')
+        ? '1\t0\tplain.ts\n'
+        : [
+            '1\t2\tsrc/{old => new}/renamed.ts',
+            '3\t4\t"docs/\\346\\226\\207\\346\\241\\243 with space.md"',
+            '5\t0\tplain.ts',
+            '2\t1\ta/old.ts => b/new.ts',
+          ].join('\n') + '\n'
+    }, async status => { snapshots.push(status) })
+    await poll(0)
+    const snap = snapshots.at(-1)
+    expect(snap?.numstatSides).toEqual({ worktree: 'ok', cached: 'ok' })
+    expect(snap?.byPath).toEqual({
+      'src/new/renamed.ts': [1, 2],
+      'docs/文档 with space.md': [3, 4],
+      'plain.ts': [6, 0],
+      'b/new.ts': [2, 1],
+    })
+    // 合计与既有 added/removed 口径一致
+    expect(snap?.added).toBe(12)
+    expect(snap?.removed).toBe(7)
+    // 同文件暂存+未暂存两段求和（worktree 与 cached 两段 numstat 合并）
+    const merged: (GitStatus | null)[] = []
+    const poll2 = createGitPoller(async args => {
+      if (args.includes('status')) return '## main\nMM both.ts\n'
+      return args.includes('--cached') ? '3\t0\tboth.ts\n' : '2\t1\tboth.ts\n'
+    }, async status => { merged.push(status) })
+    await poll2(0)
+    expect(merged.at(-1)?.byPath).toEqual({ 'both.ts': [5, 1] })
+    expect(merged.at(-1)?.numstatSides).toEqual({ worktree: 'ok', cached: 'ok' })
+  })
+
+  test('numstat 侧状态贯通：单侧失败 failed、对侧 skipped、统计不掺部分数据', async () => {
+    const snapshots: (GitStatus | null)[] = []
+    const poll = createGitPoller(async args => {
+      if (args.includes('status')) return '## main\nM  s.ts\n M w.ts\n'
+      // 该侧本应查询但 run 返回 null → failed
+      if (args.includes('--cached')) return null
+      return '2\t0\tw.ts\n'
+    }, async status => { snapshots.push(status) })
+    await poll(0)
+    const snap = snapshots.at(-1)
+    expect(snap?.numstatSides).toEqual({ worktree: 'ok', cached: 'failed' })
+    // 单侧失败：合计仍如实累计可用侧（不可用判定由收口组装按 numstatSides 整体置 null）
+    expect(snap?.added).toBe(2)
+  })
+
   test('timer and forced git refresh share one in-flight query', async () => {
     let calls = 0
     let finish: (value: string) => void = () => {}

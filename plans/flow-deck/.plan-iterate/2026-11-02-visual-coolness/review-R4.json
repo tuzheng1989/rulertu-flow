@@ -1,0 +1,43 @@
+{
+  "overall_quality": "未通过。已完整重读当前方案并逐条复核上一轮六项：单侧查询状态、计时口径、警告清理、跨会话隔离和解析类型均有明确修订；重复收口的数据通路与跨会话隔离顺序仍有 P1 缺口，警告态也有一条未覆盖的任务切换路径。",
+  "score": 7.8,
+  "issues": [
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:53,59,62,85-86",
+      "problem": "重复全绿收口只保留通关卡，却会覆盖摘要和持久化战报。",
+      "evidence": "首次收口后 batchScope 被清空；重复上报同一批次时，方案规定保留现有 closureCard，但本次 stamped 不含 closure。方案同时要求每次收口用 stamped 更新 lastRun，并沿 hooks/register.tsx:995 写入 store。",
+      "impact": "重复上报后卡片仍显示战报，但 idle 清卡后的“上次执行”摘要和新会话恢复 toast 会退回普通格式，违反战报恢复验收。现有重复上报测试只检查卡片，未检查 lastRun 和 store。",
+      "recommendation": "让同批重复收口对卡片、lastRun 和 store 采用一致的幂等处理，保留原战报数据；增加“成功收口→重复收口→idle→新会话恢复”的序列测试。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:34,51,91",
+      "problem": "跨会话代次门的执行顺序仍留有旧快照写回窗口。",
+      "evidence": "方案条目 2a 先将异步清空 gitStatus 列为步骤①，再将递增 generation 列为步骤②。若旧 poller 在清空完成后、代次递增前执行 publish 比对，代次仍相同，旧快照可以写回；随后递增代次不会再次清除它。",
+      "impact": "新会话首轮查询尚未完成时，收口仍可能读取上一工作目录的统计。现有测试只要求旧查询在第二次 session.start 之后完成，没有限定其完成于清空与递增之间。",
+      "recommendation": "在 session.start 的任何异步重置前同步递增并捕获新代次，再清空快照；确保写入时的代次校验覆盖异步写入竞争，并测试清空与旧 publish 交错的时序。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:63,120,126",
+      "problem": "新任务也可以由 flow_report 激活，未必经过清理警告的 flow_task。",
+      "evidence": "方案在 flow_task 和 flow_batch 清空 guardWarned，但 hooks/register.tsx:985-987 会让任意非收口 flow_report 直接设置新的 currentTask；flow_report 不清空 guardWarned。",
+      "impact": "旧批次告警并收口后，直接上报另一方案的执行阶段会重新使 currentTask 非空，历史告警随即触发新任务的捂脸态。",
+      "recommendation": "在判断警告态时关联当前任务与有效批次边界，或在 flow_report 切换任务时清理旧警告；补充告警收口后直接上报异批执行的测试。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:66,98",
+      "problem": "default 皮肤的基线快照验收范围不明确。",
+      "evidence": "方案要求 artDirection=default 的渲染树与改动前基线一致，同时无论皮肤如何，全绿收口都会新增通关卡，后续批次还会新增小生物和呼吸效果。",
+      "impact": "若对包含新功能状态的完整渲染树直接比较改动前快照，验收条件无法成立；若只选取不触发新功能的状态，则不能证明新旧皮肤的结构一致。",
+      "recommendation": "限定旧基线回归所覆盖的未触发新功能场景，并另用相同新功能状态比较两种皮肤的节点结构和非文案信息。"
+    }
+  ],
+  "suggestions": [
+    "将重复上报的幂等行为覆盖到卡片、lastRun 和 store 三个出口，并验证跨会话恢复。",
+    "把新会话代次切换放在任何 await 之前，以可控的异步查询测试关键交错时序。",
+    "继续保留本轮新增的 numstat 侧状态、缺失值规范化和真实路径样例测试。"
+  ]
+}

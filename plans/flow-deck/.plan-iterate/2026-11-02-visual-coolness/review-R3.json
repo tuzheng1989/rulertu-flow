@@ -1,0 +1,59 @@
+{
+  "overall_quality": "未通过。已完整重读当前方案并逐条复核上一轮七项：缺失值类型、路径解析、依赖图着色和计时事件顺序已有明确修订；边界校验、Git 查询失败处理、计时重声明和警告态仍有未闭合的情况。当前存在 P1 问题，未达到通过标准。",
+  "score": 7.6,
+  "issues": [
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:34,55,77,95",
+      "problem": "单侧 numstat 查询失败仍会被当成有效统计，显示为真实零值或不完整的数值。",
+      "evidence": "hooks/poll.ts:125-128 中，worktree 和 cached 查询分别可能返回 null，现有代码用 worktree ?? '' 和 cached ?? '' 继续构造非 null 的 GitStatus。方案只以整个 gitStatus 是否为 null 判断统计是否可用，并要求查询命令及轮询判定路径保持不变。",
+      "impact": "例如 status 成功而 worktree diff 失败时，gitStatus 仍非 null；方案会把缺失的该侧结果当成 0，并显示“统计截至”时间，不能区分查询失败与真实零行。",
+      "recommendation": "在逐文件数据装配中保留每一侧是未查询、查询成功还是查询失败；任何必需侧失败时将战报统计标为不可用或明确标为部分数据。增加 status 成功但单侧 diff 失败的贯通测试，同时维持既有查询和节流策略。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:30,51-52,59,76",
+      "problem": "全绿收口但 scope 校验失败时，方案没有清除已有的通关卡。",
+      "evidence": "方案要求校验失败时不写 closureCard，但五个清卡出口只包括非收口、非全绿收口、flow_task 和 flow_batch。现有 hooks/register.tsx:988-991 在首次收口后清空 batchScope，而收口本身把 currentTask 设为 null。",
+      "impact": "一次成功收口后若重复发送全绿收口报告，第二次因 scope 已清空而校验失败；旧 closureCard 仍可留在无活动任务的面板上，与“校验失败时战报不出现”的验收要求冲突。",
+      "recommendation": "将所有不产生新通关卡的收口分支纳入清卡条件，并测试“成功收口后重复全绿收口”和“已有旧卡后错配收口”的完整序列。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:32,56,83",
+      "problem": "同批更新边界会被当成批次重开，重置计时起点。",
+      "evidence": "方案规定同一 plan#batch 每次重新调用 flow_batch 都重置起点；plugins/rulertu-flow/skills/implement-plan/SKILL.md:20 明确允许实施中重新调用 flow_batch 更新边界。该调用本身没有区分边界调整与重开。",
+      "impact": "一次正常的边界调整会使战报分钟数从调整时刻重新计算，不能代表该批次自首次声明以来的耗时。",
+      "recommendation": "区分活动批次的边界调整和真正重开；或明确将展示文案定义为“自最近一次边界声明”，并增加调整边界后的计时测试。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:111,117",
+      "problem": "警告态以 currentTask 非空为门，仍可能在新任务中重新显示上一批的告警。",
+      "evidence": "hooks/register.tsx:955-968 的非 idle flow_task 会设置新 currentTask 并清空 batchScope，但不清空 guardWarned；方案的判断只要求 currentTask 非空且 guardWarned.length > 0。",
+      "impact": "旧批次告警后，启动一个新的迭代或实施任务、但尚未调用 flow_batch 时，小生物会再次进入捂脸态，显示历史告警。",
+      "recommendation": "将警告态限定在与当前实施任务匹配的活动 batchScope 内，或明确在任务切换时清理相关告警；补充告警后切换到新方案及迭代任务的测试。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:34,55",
+      "problem": "新会话首次 Git 查询完成前，战报可能读取上一会话的 Git 快照。",
+      "evidence": "hooks/register.tsx:758-777 重置多项会话 atom，但没有重置 gitStatus；首次 tickGit 在 session.start 中以异步方式启动。方案将非 null 的 gitStatus 直接作为本次战报统计依据。",
+      "impact": "若同一插件实例连续启动不同工作目录的会话，并在新查询完成前收口，可能将上一工作目录的统计写入新战报。",
+      "recommendation": "为新会话隔离或清空 Git 快照，并考虑旧查询在切换后才完成的情况；增加连续启动两个不同 cwd 且第二次查询尚未完成时的收口测试。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:49,57,71",
+      "problem": "closure 的解析规则仍允许生成不符合声明类型的对象。",
+      "evidence": "类型要求 added、removed、minutes 三个字段必填且各为 number 或 null；parseExecution 规则却写明这些字段缺省时“不补”，并只在 files 非法时整体丢弃 closure。",
+      "impact": "恢复缺字段的 store 值时，解析结果可能缺少类型要求的字段；战报渲染对 undefined 的处理没有确定契约。",
+      "recommendation": "统一类型和解析规则：要么把三个字段声明为可选并明确缺省展示，要么对缺失或非法字段规范化为 null 或丢弃该 closure；覆盖部分缺失和非法值。"
+    }
+  ],
+  "suggestions": [
+    "优先补齐 Git 各侧查询结果的可用性传递，以及所有收口失败分支的清卡规则。",
+    "保留本轮新增的真实格式路径样例、依赖图多批次测试和可控时钟测试，并补充跨会话及任务切换序列。",
+    "统一战报中各字段的含义、类型和缺失值处理，使生成、持久化、恢复和渲染使用同一套契约。"
+  ]
+}

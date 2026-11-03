@@ -1,0 +1,5 @@
+2026-11-02T12:38:38.590568Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-11-02T12:38:39.699262Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-11-02T12:40:03.396651Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-11-02T12:41:47.692409Z ERROR codex_core::tools::router: error=timed out negotiating with the code-mode host
+2026-11-02T12:43:13.666780Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out

@@ -1,0 +1,67 @@
+{
+  "overall_quality": "未通过。已重新完整阅读当前磁盘方案并逐条复核上一轮九项：逐文件数据贯通、依赖图独立装配、警告数组判断、定时器生命周期、旧卡清理、动画断言冲突及真机验收均已补充；统计口径和计时生命周期有所改善，但仍有关键边界未闭合。另发现战报缺失值的类型冲突及依赖图完成状态误导问题。",
+  "score": 7.2,
+  "issues": [
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:49,54-55",
+      "problem": "战报的类型无法表达方案要求的缺失值。",
+      "evidence": "closure 定义为包含四个必填 number 的对象，但方案同时要求 ±行数无数据和分钟数缺失时显示“—”。parseExecution 又需要将该对象持久化并跨会话恢复。",
+      "impact": "实现者无法按所列类型区分真实的 0 与不可用数据；若强行填 0，通关卡和恢复后的摘要会显示错误数值。",
+      "recommendation": "将不可用字段设计为可选或可为 null，明确序列化和 parseExecution 校验规则，并测试无数据、真实零值及跨会话恢复。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:51-54",
+      "problem": "收口统计没有定义边界缺失或与报告不匹配时的行为。",
+      "evidence": "现有 hooks/register.tsx:974-991 接受独立的 flow_report，并在读取 scope 后检查其 plan 和 batch；scope 可以为 null，也可能属于其他批次。方案直接使用 batchScope.files.length 并按该 scope 聚合。",
+      "impact": "未声明边界时可能读取 null；边界属于其他批次时可能把其他批次的文件数和增删行数记入本次战报。",
+      "recommendation": "组装前校验 scope 非空且 plan、batch 均匹配当前报告；缺失或不匹配时采用明确的不可用展示，并为两种场景增加收口测试。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:50,53,70-73",
+      "problem": "numstat 路径解析和归一化仍不足以覆盖实际 Git 输出。",
+      "evidence": "方案规定从包含“{old => new}”的路径列取 new 段，但例如 src/{old => new}/file.ts 的目标路径需要保留前后缀。现有 hooks/poll.ts:125-126 的 diff 命令也没有像 status 命令那样设置 core.quotePath=false，非 ASCII 路径可能以 Git 引号和转义形式输出；normalizePath 只处理斜杠和 cwd 前缀。",
+      "impact": "目录重命名及中文等路径可能无法与批次边界匹配，导致战报漏计，尽管方案声称路径已统一。",
+      "recommendation": "明确完整的 Git numstat 路径解析方式，包括重命名目标的前后缀和 Git 引号转义；使用真实格式样例测试目录重命名、普通重命名、中文和特殊字符路径，再验证与 scope 的匹配。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:60",
+      "problem": "每批全绿收口都把整个方案的依赖图画成完成态。",
+      "evidence": "deps 是方案级批次图；hooks/parse.ts:363-367 根据各批次实际 progress 分别计算 pending、active 和 done。方案却要求在任意一次通关卡中将所有节点和连线设为 done 色。",
+      "impact": "例如 B1 收口时 B2 尚未执行，通关卡仍会把 B2 显示为完成，传达错误的实施状态。",
+      "recommendation": "依赖图按各批实际状态渲染；若需要全图完成庆祝，应仅在所有节点均已收口时启用，并测试前置批次收口而后续批次仍待执行的场景。"
+    },
+    {
+      "severity": "P1",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:34,54,91",
+      "problem": "统计数据的成功状态与时效披露仍不能由现有轮询保证。",
+      "evidence": "hooks/poll.ts:125-128 将 diff 查询返回的 null 用空字符串处理，因此单侧 diff 失败会被当作空结果；gitSnapshotKey 排除 fetchedAt，相同内容不重新发布。方案要求查询和防抖逻辑不变，却称展示的是最近一次成功 numstat 快照且可能滞后 5–60 秒。",
+      "impact": "单侧查询失败时可能展示不完整的数字，并被描述为成功快照；轮询延迟、失败或快照未重新发布时，5–60 秒也不是可靠上限。",
+      "recommendation": "明确区分未查询、查询失败和成功空结果，至少让战报知道统计是否完整；取消无法保证的时间上限，或另行设计并验证可靠的新鲜度数据通路。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:32,55,79",
+      "problem": "首报计时的事件顺序与缺失起点测试互相矛盾。",
+      "evidence": "方案规定 progress 首次收到 plan#batch 时记录时间，而直接收口本身也会写 progress；同时要求新会话直接收口时显示缺失起点。方案还把同键 flow_batch 声明视为重开，但 implement-plan 在开工、派单上报后声明边界，并允许实施中重新声明边界。",
+      "impact": "直接收口可能得到 0 分钟而非“—”；正常声明或调整边界也可能把已有计时起点重置，低估批次耗时。",
+      "recommendation": "规定先判定收口前是否存在起点，再处理 progress；区分首次边界声明、边界调整和真正重开，并分别使用可控时钟测试。"
+    },
+    {
+      "severity": "P2",
+      "location": "plans/flow-deck/2026-11-02-visual-coolness.md:107",
+      "problem": "小生物警告态可能在任务结束后继续表示历史告警。",
+      "evidence": "现有 guardWarned 在 session.start 和 flow_batch 时清空，但 flow_task idle 与 flow_report 收口不会清空；方案直接以数组非空作为高于睡觉态的条件。",
+      "impact": "曾发生一次越界提醒的批次结束并清除通关卡后，小生物仍可能长期停留在捂脸态，用户无法区分当前警告和历史记录。",
+      "recommendation": "明确警告态是否仅属于当前活动批次；若是，应同时检查活动任务和匹配的 batchScope，覆盖告警后收口及 idle 的状态转换。"
+    }
+  ],
+  "suggestions": [
+    "先统一 closure 的可用性类型和持久化契约，再补齐无边界、错批次、查询失败及部分数据的验收样例。",
+    "用真实 Git 输出样例验证逐文件解析和路径匹配，避免仅通过手工构造的简单 rename 样例。",
+    "保留本轮新增的生命周期表和真机验收清单；完成修订后，重点复测正常批次事件顺序及多批次依赖图。"
+  ]
+}

@@ -1,5 +1,5 @@
 import type { FsEntry } from 'claude-code'
-import { buildGitStatus, buildPlanReview, extractRound, parseNumstat, parsePorcelain } from './parse'
+import { buildGitStatus, buildPlanReview, extractRound, parsePorcelain } from './parse'
 import type { GitStatus, PlanReview } from '../types'
 
 export const DISCOVERY_MS = 30_000
@@ -120,12 +120,12 @@ export function createGitPoller(
       const porcelain = parsePorcelain(text)
       if (porcelain === null) return
       // 无对应 tracked 更改时省掉 diff；不按 porcelain 缓存行数，同一 M 状态内容仍会变化。
-      const base = buildGitStatus(porcelain, { added: 0, removed: 0 }, { added: 0, removed: 0 }, now)
+      const base = buildGitStatus(porcelain, null, null, now)
       const [worktree, cached] = await Promise.all([
         base.unstaged.length + base.conflicts.length > 0 ? run(['diff', '--no-ext-diff', '--no-textconv', '--numstat']) : null,
         base.staged.length > 0 ? run(['diff', '--cached', '--no-ext-diff', '--no-textconv', '--numstat']) : null,
       ])
-      status = buildGitStatus(porcelain, parseNumstat(worktree ?? ''), parseNumstat(cached ?? ''), now)
+      status = buildGitStatus(porcelain, worktree, cached, now)
       nextAt = now + (porcelain.files.length > 0 ? GIT_ACTIVE_MS : GIT_IDLE_MS)
     } else {
       nextAt = now + GIT_RETRY_MS
