@@ -3,6 +3,10 @@ import { describeExecution } from './register'
 import { creatureFrames } from './parse'
 import type { AgentSnapshot } from '../types'
 
+/** 帧字符串含 \ ( ) 等 regex 元字符，按帧查渲染节点前先转义；^$ 锚定整行精确匹配
+ *  （帧行间存在前缀包含，如 facepalm 行1 是 salute 行1 的前缀，子串匹配会串态） */
+const frameRe = (line: string): RegExp => new RegExp(`^${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+
 function paneProps(title: string) {
   return {
     title,
@@ -1997,13 +2001,13 @@ describe('pane', () => {
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
       props: paneProps('Flow'),
     })
-    const creature0 = await ui.find({ type: 'Text', text: new RegExp(creatureFrames.legshake[0]) })
+    const creature0 = await ui.find({ type: 'Text', text: frameRe(creatureFrames.legshake[0][0]) })
     const bar0 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
     expect(creature0).not.toBeUndefined()
     expect(bar0?.props.dimColor).toBe(true)
     await clock.advance(800)
     // 呼吸元素两帧固定 dim（停跳即死）；小生物抖腿态两帧继续切换
-    const creature1 = await ui.find({ type: 'Text', text: new RegExp(creatureFrames.legshake[1]) })
+    const creature1 = await ui.find({ type: 'Text', text: frameRe(creatureFrames.legshake[1][0]) })
     const bar1 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
     expect(creature1).not.toBeUndefined()
     expect(bar1?.props.dimColor).toBe(true)
@@ -2032,8 +2036,7 @@ describe('pane', () => {
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
       props: paneProps('Flow'),
     })
-    const braille = await ui.findAll({ type: 'Text', text: /^\s*[\u2800-\u28FF]+\s*$/ })
-    expect(braille).toHaveLength(0)
+    expect(await ui.find({ type: 'Text', text: frameRe(creatureFrames.work[0][0]) })).toBeUndefined()
     flips.length = 0
     await clock.advance(800)
     expect(flips).toEqual([1])
@@ -2064,9 +2067,9 @@ describe('pane', () => {
       plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
       props: paneProps('Flow'),
     })
-    const salute = await ui.find({ type: 'Text', text: new RegExp(creatureFrames.salute[0]) })
-    expect(salute?.props.dimColor).toBe(true)
-    expect(await ui.find({ type: 'Text', text: new RegExp(creatureFrames.facepalm[0]) })).toBeUndefined()
+    const salute = await ui.find({ type: 'Text', text: frameRe(creatureFrames.salute[0][0]) })
+    expect(salute?.props.dimColor).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: frameRe(creatureFrames.facepalm[0][0]) })).toBeUndefined()
     await ui.unmount()
   })
 
@@ -2079,11 +2082,11 @@ describe('pane', () => {
     const texts = await ui.findAll({ type: 'Text' })
     // 与拆组③（B）mission-control 测试一一对应的锚点值：结构与非文案信息一致，仅文案不同
     expect(boxes.length).toBe(7)
-    expect(texts.length).toBe(6)
-    expect(texts.filter(node => node.props.dimColor === true).length).toBe(4)
+    expect(texts.length).toBe(9)
+    expect(texts.filter(node => node.props.dimColor === true).length).toBe(3)
     expect(texts.filter(node => typeof node.props.color === 'string').length).toBe(0)
-    const creature = await ui.find({ type: 'Text', text: new RegExp(creatureFrames.sleep[0]) })
-    expect(creature?.props.dimColor).toBe(true)
+    const creature = await ui.find({ type: 'Text', text: frameRe(creatureFrames.sleep[0][0]) })
+    expect(creature?.props.dimColor).toBeUndefined()
     // 文案为 default 词表
     expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).not.toBeUndefined()
     await ui.unmount()
@@ -2098,11 +2101,11 @@ describe('pane', () => {
     const texts = await ui.findAll({ type: 'Text' })
     // 与拆组③（A）default 测试一一对应的锚点值：结构与非文案信息一致，仅文案不同
     expect(boxes.length).toBe(7)
-    expect(texts.length).toBe(6)
-    expect(texts.filter(node => node.props.dimColor === true).length).toBe(4)
+    expect(texts.length).toBe(9)
+    expect(texts.filter(node => node.props.dimColor === true).length).toBe(3)
     expect(texts.filter(node => typeof node.props.color === 'string').length).toBe(0)
-    const creature = await ui.find({ type: 'Text', text: new RegExp(creatureFrames.sleep[0]) })
-    expect(creature?.props.dimColor).toBe(true)
+    const creature = await ui.find({ type: 'Text', text: frameRe(creatureFrames.sleep[0][0]) })
+    expect(creature?.props.dimColor).toBeUndefined()
     // 文案为 mission-control 词表
     expect(await ui.find({ text: /待命 · 当前无方案迭代或实施任务/ })).not.toBeUndefined()
     await ui.unmount()

@@ -973,21 +973,25 @@ describe('parse', () => {
     expect(creatureState({ ...alarmed, currentTask: newTask })).toBe('facepalm')
   })
 
-  test('creatureFrames：六态两帧盲文常量，每帧 ≤4 显示列、两帧不同', () => {
+  test('creatureFrames：六态两帧驻场猫卡通块，每帧 3-4 行、每行 ≤8 显示列、两帧整块不同', () => {
     const states: CreatureState[] = ['salute', 'facepalm', 'legshake', 'clone', 'work', 'sleep']
     expect(Object.keys(creatureFrames).sort()).toEqual([...states].sort())
     for (const state of states) {
       const [f0, f1] = creatureFrames[state]
       for (const frame of [f0, f1]) {
-        // 盲文为窄字符：码点数即显示列
-        expect([...frame].length).toBeLessThanOrEqual(4)
-        for (const ch of frame) {
-          const code = ch.codePointAt(0) ?? 0
-          expect(code).toBeGreaterThanOrEqual(0x2800)
-          expect(code).toBeLessThanOrEqual(0x28ff)
+        expect(frame.length).toBeGreaterThanOrEqual(3)
+        expect(frame.length).toBeLessThanOrEqual(4)
+        for (const line of frame) {
+          // 窄字符假设：码点数即显示列（限定非 CJK 可打印区，防宽字符混入破坏对齐）
+          expect([...line].length).toBeLessThanOrEqual(8)
+          for (const ch of line) {
+            const code = ch.codePointAt(0) ?? 0
+            expect(code).toBeGreaterThanOrEqual(0x20)
+            expect(code).toBeLessThan(0x2e80)
+          }
         }
       }
-      expect(f0).not.toBe(f1)
+      expect(f0).not.toEqual(f1)
     }
   })
 })

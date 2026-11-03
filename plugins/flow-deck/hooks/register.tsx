@@ -395,7 +395,8 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   const beatFrame = await read($, beat)
   const warned = await read($, guardWarned)
   const card = await read($, closureCard)
-  // 驻场小生物（B2 条目 3/4）：六态状态机取当前帧；companion=off 时渲染层跳过（呼吸不受影响）
+  // 驻场小生物（B2 条目 3/4 · 0.18.1 定稿驻场猫）：六态状态机取当前帧（3-4 行卡通块）；
+  // companion=off 时渲染层跳过（呼吸不受影响）
   const creature = companionMode === 'on'
     ? creatureFrames[creatureState({
         closureCard: card,
@@ -456,8 +457,8 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
 
   if (task === null) {
     // 通关卡（B1 条目 6）：独立装配分支，不经 selectTaskView（收口时 currentTask 已 null，
-    // 经它必得 null graph）；card 为 null 时本分支渲染树与既有空态仅多 companion=on 的小生物
-    // 占位（companion=off 与基线逐字一致）
+    // 经它必得 null graph）；card 为 null 时本分支渲染树与既有空态仅多 companion=on 的顶部
+    // 小生物驻场猫（companion=off 与基线逐字一致）
     const cardGraph = card === null ? null : await read($, deps)
     const graphMatches = cardGraph !== null && card !== null && cardGraph.plan === card.plan
     const cardNodes = graphMatches && card !== null ? depStatuses(cardGraph, progressMap) : []
@@ -465,10 +466,13 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
     const cardDone = cardNodes.filter(node => node.status === 'done').length
     return (
       <Box flexDirection="column" gap={1}>
+        {creature !== null && (
+          <Box flexDirection="column">
+            {creature.map((line, index) => <Text key={index}>{line}</Text>)}
+          </Box>
+        )}
         <Box flexDirection="column">
-          {creature !== null
-            ? <Box><Text>{label('noTask')}</Text><Text dimColor> {creature}</Text></Box>
-            : <Text>{label('noTask')}</Text>}
+          <Text>{label('noTask')}</Text>
           <Text dimColor>运行 plan-iterate 开始方案迭代，或 implement-plan 开始实施。</Text>
           {crumbs !== null && <Text dimColor wrap="truncate-end">上次执行：{describeExecution(crumbs)}</Text>}
         </Box>
@@ -531,11 +535,15 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   const phase = report === null ? null : phaseProgress(report.phase)
   return (
     <Box flexDirection="column" gap={1}>
+      {creature !== null && (
+        <Box flexDirection="column">
+          {creature.map((line, index) => <Text key={index}>{line}</Text>)}
+        </Box>
+      )}
       <Box flexDirection="column">
         <Button key="task-plan-open" plain onPress={() => { void openPlanDoc($, task.plan) }}>
           <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}工作面板 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · </Text>
           <Text bold color={TONE.accent} underline wrap="truncate-end">{task.plan}</Text>
-          {creature !== null && <Text dimColor> {creature}</Text>}
         </Button>
         {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
         {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
