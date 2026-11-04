@@ -11,3 +11,17 @@
 | 仓库级测试 | `tests/` |
 
 历史归档已统一迁移：`plugins/copyright-skills/plans/` → `plans/copyright-skills/`（2026-10-29，内部引用已同步改写）。
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues（tuzheng1989/rulertu-flow，经 gh CLI 操作）。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+五角色默认词表（needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix）。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context：仓库根 `GLOSSARY.md` + `docs/adr/`，缺失时静默跳过。See `docs/agents/domain.md`.
