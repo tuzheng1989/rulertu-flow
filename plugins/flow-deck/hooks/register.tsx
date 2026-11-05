@@ -16,6 +16,7 @@ import {
   parseBatchScope,
   parseDepGraph,
   parseExecution,
+  parseGhIssues,
   parseSections,
   phaseProgress,
   pipelineLinks,
@@ -56,6 +57,8 @@ const TOUCHED_CAP = 50
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
+/** GitHub Issues 轮询周期：issue 变化慢，不随 2s 主轮询；仅面板可见时拉取（D14） */
+const GH_ISSUE_POLL_MS = 60_000
 /** 呼吸节拍周期（ms）：呼吸与小生物共用单一 clock（B2 条目 1/5）；硬编码不做配置，观察期后再议 */
 const BEAT_MS = 800
 const EXECUTION_STORE_KEY = 'lastExecution'
@@ -73,6 +76,8 @@ const progress = atom({ plugin: 'flow-deck', key: 'progress' } as const, {})
 const deps = atom({ plugin: 'flow-deck', key: 'deps' } as const, null)
 const gitStatus = atom({ plugin: 'flow-deck', key: 'git' } as const, null)
 const agents = atom({ plugin: 'flow-deck', key: 'agents' } as const, { agents: [], loaded: false, error: false })
+/** GitHub 仓库 open issue 清单：失败静默（error 态区块不绘制），空列表本身即信息（D13） */
+const ghIssues = atom({ plugin: 'flow-deck', key: 'ghIssues' } as const, { issues: [], loaded: false, error: false })
 const lastRun = atom({ plugin: 'flow-deck', key: 'lastRun' } as const, null)
 /** 全绿收口通关卡；清卡规则单一出处 B1 条目 4（生命周期表） */
 const closureCard = atom({ plugin: 'flow-deck', key: 'closureCard' } as const, null)
@@ -110,10 +115,13 @@ const firstReportAt = new Map<string, number>()
 let scanPlans: ReturnType<typeof createPlanScanner> | undefined
 let refreshGit: (() => Promise<void>) | undefined
 let refreshAgents: (() => Promise<void>) | undefined
+let refreshIssues: (() => Promise<void>) | undefined
 /** 面板「刷新」按钮的全部数据重取；session.start 装配后可用 */
 let refreshAll: (() => void) | undefined
 let planTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 let gitTimer: ReturnType<EngineInterface['clock']['every']> | undefined
+/** GitHub Issues 独立轮询（60s，仅面板可见时拉取）；session.start 内创建，创建前取消旧例 */
+let issuesTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 /** 呼吸与小生物共用的节拍器（单一 clock，B2 条目 5）；session.start 内创建，创建前取消旧例 */
 let beatTimer: ReturnType<EngineInterface['clock']['every']> | undefined
 
@@ -227,6 +235,27 @@ async function loadDoc($: EngineInterface, path: string): Promise<void> {
   await update($, docMode, () => 'all')
 }
 
+/** 装载一个文件的未提交变更对比（D2-D5）：untracked 走 --no-index 全 + 视图（POSIX 退出码
+ *  口径见 runNoIndexDiff），其余 git 态走 HEAD 合并口径（unborn HEAD 退工作区口径，退出码恒 0
+ *  保持 runGit）；命令失败退 loadDoc 全文。文本含空串（无未提交变更）也是合法结果；
+ *  装入前重置节导航与浏览模式（与 loadDoc 同口径） */
+async function loadDiff($: EngineInterface, path: string, state: ChangeState): Promise<void> {
+  let text: string | null
+  if (state === 'untracked') {
+    text = await runNoIndexDiff($, path)
+  } else {
+    text = await runGit($, ['diff', 'HEAD', '--', path])
+    if (text === null) text = await runGit($, ['diff', '--', path])
+  }
+  if (text === null) {
+    await loadDoc($, path)
+    return
+  }
+  await update($, docFile, () => ({ path, text, kind: 'diff' }))
+  await update($, docSection, () => 0)
+  await update($, docMode, () => 'all')
+}
+
 /** 记录本会话 Edit/Write 改动路径（去重保序，cap 50）；守卫钩子放行分支调用，不阻塞链路 */
 async function recordTouch($: EngineInterface, file_path: unknown): Promise<void> {
   if (typeof file_path !== 'string' || file_path === '' || sessionCwd === '') return
@@ -263,9 +292,11 @@ async function openDeckPane($: EngineInterface): Promise<string> {
   return opened.isPlaced ? '' : `；面板暂未停靠：${opened.reason}`
 }
 
-/** 在文档页签装载一个文件并切过去（文件页签点击文件行的入口） */
-async function openInDoc($: EngineInterface, path: string): Promise<void> {
-  await loadDoc($, path)
+/** 在文档页签装载一个文件并切过去（文件页签点击文件行的入口）；
+ *  state 为 git 四态之一时装载变更对比（D1/D5），缺省或 null 保持原文全文 */
+async function openInDoc($: EngineInterface, path: string, state?: ChangeState | null): Promise<void> {
+  if (state === undefined || state === null) await loadDoc($, path)
+  else await loadDiff($, path, state)
   await update($, activeTab, () => 'doc')
 }
 
@@ -322,6 +353,26 @@ async function refreshStall($: EngineInterface): Promise<void> {
   const minutes = task?.kind === 'implement' && age >= STALL_MS ? Math.floor(age / 60_000) : null
   if ((await read($, stall)) === minutes) return
   await update($, stall, () => minutes)
+}
+
+/** untracked 的 --no-index 取数：遵循 POSIX diff 约定，0=无差异、1=有差异均视为成功取 stdout，
+ *  仅其余退出码或进程抛错返回 null 走兜底（P0-1：runGit 的 exitCode!==0 判失败会把「有差异」的
+ *  exit 1 当失败，untracked 非空文件必退全文）。
+ *  本机 Git for Windows 2.49 实测：有差异 exit 1 全 hunk；空文件 vs /dev/null 亦 exit 1 但 stdout
+ *  仅 diff 头无 @@ hunk 行；路径不存在 exit 1 空 stdout（异常态 >1 未在本版出现，保留为防御）。
+ *  无 hunk 行的输出规整为空串：空文件本无可展示变更，归渲染层「无未提交变更」空态，
+ *  也避免仅头文本进 Code(format=diff) 触发引擎 unified-diff 校验风险 */
+async function runNoIndexDiff($: EngineInterface, path: string): Promise<string | null> {
+  try {
+    const result = await $.process.run(
+      ['git', 'diff', '--no-index', '--', '/dev/null', path],
+      { timeoutMs: GIT_TIMEOUT_MS },
+    )
+    if (result.exitCode !== 0 && result.exitCode !== 1) return null
+    return result.stdout.includes('@@') ? result.stdout : ''
+  } catch {
+    return null
+  }
 }
 
 /** 跑一个 git 子命令；非零退出（含非 git 仓库的 128）或超时返回 null */
@@ -384,7 +435,7 @@ async function poll($: EngineInterface): Promise<void> {
 }
 
 const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
-  const { Box, Text, Button } = $.ui.resolve(e)
+  const { Box, Text, Button, Link } = $.ui.resolve(e)
   const task = await read($, currentTask)
   const { plans: list, graph, report, scope } = await readTaskView($)
   const progressMap: Record<string, string> = await read($, progress)
@@ -452,6 +503,23 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
           </Box>
         )
       })}
+    </Box>
+  )
+
+  // GitHub Issues 区块（D12/D13，主控裁决补：空态/通关后同样绘制——「通关后开展下一步」是区块的存在理由）：
+  // 仅 loaded && !error 绘制——失败（gh 不在/非 GitHub 仓库/查询失败）整体静默零噪音，
+  // 空列表显示「无 open issue」（空态即信息）；主分支与 task===null 空态分支共用本片段
+  const issues = await read($, ghIssues)
+  const issuesSection = issues.loaded && !issues.error && (
+    <Box flexDirection="column" gap={1}>
+      <Text bold wrap="truncate-end">{MARK.title}GitHub Issues · {issues.issues.length} open</Text>
+      {issues.issues.length === 0 && <Text color={TONE.ok} wrap="truncate-end">{MARK.done} 无 open issue</Text>}
+      {issues.issues.map(issue => (
+        <Link key={`issue-${issue.number}`} href={issue.url}>
+          <Text wrap="truncate-end">#{issue.number} {issue.title}</Text>
+          {issue.labels.length > 0 && <Text dimColor> · {issue.labels.join(' ')}</Text>}
+        </Link>
+      ))}
     </Box>
   )
 
@@ -527,6 +595,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
           </Box>
         )}
         {agentsSection}
+        {issuesSection}
         <Text dimColor wrap="truncate-end">/deck 关闭 · 面板内按 r 刷新</Text>
       </Box>
     )
@@ -653,19 +722,35 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
         </Box>
       )}
       {agentsSection}
+      {issuesSection}
       <Text dimColor wrap="truncate-end">/deck 关闭 · 点方案名看文档 · 面板内按 r 刷新</Text>
     </Box>
   )
 }
 
 const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
-  const { Box, Text, Button, Select, Markdown } = $.ui.resolve(e)
+  const { Box, Text, Button, Select, Markdown, Code, Input } = $.ui.resolve(e)
   const doc = await read($, docFile)
   const wide = e.props.bodyColumns >= 44
   if (doc === null) {
+    // 空态给地址输入栏（D10/D11）：直接输入路径打开文件，不做存在性预检（读取失败既有错误视图即反馈）
     return (
       <Box flexDirection="column">
         <Text>未打开文档。</Text>
+        <Input
+          key="doc-open"
+          label="打开文件"
+          placeholder="文件路径，如 docs/plan.md"
+          submitLabel="打开"
+          autoFocus
+          onSubmit={value => {
+            const path = value.trim()
+            if (path === '') return
+            void openInDoc($, normalizePath(path, sessionCwd)).catch(error => {
+              $.ui.log(`flow-deck 文档打开失败：${String(error)}`, { to: 'debug' })
+            })
+          }}
+        />
         <Text dimColor>用法：/doc &lt;相对路径&gt; 打开要浏览的文档。</Text>
       </Box>
     )
@@ -709,13 +794,62 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
       </Box>
     )
   }
+  // 「查看变更」「重读变更」的重算口径（D8）：与改动清单同源（collectChanges），路径小写折叠匹配
+  const changeState = collectChanges(await read($, gitStatus), await read($, touched))
+    .find(row => row.path.toLowerCase() === doc.path.toLowerCase())?.state ?? null
+  const viewFile = () => {
+    void loadDoc($, doc.path).catch(error => {
+      $.ui.log(`flow-deck 文档读取失败：${String(error)}`, { to: 'debug' })
+    })
+  }
+  const reloadDiff = () => {
+    // 快照过期（该文件已不在变更清单）时退回全文重读，与 loadDiff 的兜底口径一致
+    if (changeState === null) { reload(); return }
+    void loadDiff($, doc.path, changeState).catch(error => {
+      $.ui.log(`flow-deck 变更重读失败：${String(error)}`, { to: 'debug' })
+    })
+  }
+  const viewDiff = () => {
+    if (changeState === null) return
+    void openInDoc($, doc.path, changeState).catch(error => {
+      $.ui.log(`flow-deck 变更查看失败：${String(error)}`, { to: 'debug' })
+    })
+  }
+  if (doc.kind === 'diff') {
+    // diff 视图不绘制节导航与「发给 Claude」（D7）；diff 文本不截断（D9，引擎单次绘制上限 100000 字符）
+    if (doc.text === '') {
+      // 空串是合法结果（无未提交变更，含空 untracked 文件与 /dev/null 无实质 hunk 的口径），
+      // 多半是 git 快照滞后于点击（D3 口径下快照可能已过期）——「重读变更」给重试入口
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}变更对比 · {doc.path}</Text>
+          <Text dimColor wrap="truncate-end">无未提交变更（快照可能已过期）。</Text>
+          <Box gap={2}>
+            <Button key="doc-view-file" plain onPress={viewFile}>查看全文</Button>
+            <Button key="doc-reload-diff" hotkey="r" plain onPress={reloadDiff}>重读变更</Button>
+          </Box>
+        </Box>
+      )
+    }
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}变更对比 · {doc.path}</Text>
+        <Code key="doc-diff" format="diff" source={doc.text} wrap="truncate-end" />
+        <Box gap={2}>
+          <Button key="doc-view-file" plain onPress={viewFile}>查看全文</Button>
+          <Button key="doc-reload-diff" hotkey="r" plain onPress={reloadDiff}>重读变更</Button>
+        </Box>
+      </Box>
+    )
+  }
   const sections = parseSections(doc.text)
   if (sections.length === 0) {
     return (
       <Box flexDirection="column" gap={1}>
         <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}文件查看器 · {doc.path} · 空文档</Text>
         <Text dimColor>文档没有内容：/doc &lt;另一路径&gt; 换一篇，或按 r 重读。</Text>
-        <Box>
+        <Box gap={2}>
+          {changeState !== null && <Button key="doc-view-diff" onPress={viewDiff}>查看变更</Button>}
           <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
         </Box>
       </Box>
@@ -771,6 +905,7 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
       </Box>
       <Box gap={2}>
         <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>
+        {changeState !== null && <Button key="doc-view-diff" onPress={viewDiff}>查看变更</Button>}
         <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
       </Box>
       <Text dimColor wrap="truncate-end">/deck doc &lt;路径&gt; 换一篇 · e 把修改请求填入输入框（补意图后回车）</Text>
@@ -828,7 +963,7 @@ const renderFilesBody = async ($: EngineInterface, e: PaneArgs) => {
         {rows.map(row => {
           const mark = row.state === null ? null : STATE_MARK[row.state]
           return (
-            <Button key={`file-open-${row.path}`} plain wrap="truncate-middle" onPress={() => { void openInDoc($, row.path) }}>
+            <Button key={`file-open-${row.path}`} plain wrap="truncate-middle" onPress={() => { void openInDoc($, row.path, row.state) }}>
               <Text>{`${row.touched ? MARK.run : MARK.idle} `}</Text><Text underline>{row.path}</Text>
               {mark !== null && <Text color={mark.color} dimColor={mark.dim === true}> · {mark.label}</Text>}
               {scopeSet.has(row.path.toLowerCase()) && <Text color={TONE.accent}> {MARK.pin} 本批</Text>}
@@ -897,6 +1032,8 @@ export const register: Register = (on, options) => {
     await update($, progress, () => ({}))
     await update($, deps, () => null)
     await update($, agents, () => ({ agents: [], loaded: false, error: false }))
+    // GitHub Issues 跨会话隔离：新 cwd 可能不是同一仓库，清空待首拉（模式同 agents）
+    await update($, ghIssues, () => ({ issues: [], loaded: false, error: false }))
     await update($, stall, () => null)
     await update($, docFile, () => null)
     await update($, docSection, () => 0)
@@ -915,6 +1052,7 @@ export const register: Register = (on, options) => {
     // 节拍器生命周期（B2 条目 1，模式同上方 planTimer/gitTimer）：先取消旧例再重置帧号，
     // 防重复 session.start 累积定时器；新会话从帧 0 起（生命周期表：不残留定时器、不持久化）
     beatTimer?.cancel()
+    issuesTimer?.cancel()
     await update($, beat, () => 0)
     scanPlans = createPlanScanner({
       list: path => path === undefined ? $.fs.list() : $.fs.list(path),
@@ -1026,6 +1164,22 @@ export const register: Register = (on, options) => {
     refreshGit = singleFlight(async () => {
       await gitPoller(Date.now(), true)
     })
+    // GitHub Issues 拉取（D12/D13）：gh 在 clone 内自动推断 repo；失败（exit≠0/抛错/解析为 null）
+    // 归入 error 态静默，下一轮询自愈；singleFlight 防刷新按钮与定时器并发堆积
+    refreshIssues = singleFlight(async () => {
+      try {
+        const result = await $.process.run(
+          ['gh', 'issue', 'list', '--state', 'open', '--limit', '20', '--json', 'number,title,url,labels'],
+          { timeoutMs: GIT_TIMEOUT_MS },
+        )
+        const issues = result.exitCode === 0 ? parseGhIssues(result.stdout) : null
+        await update($, ghIssues, () => issues === null
+          ? { issues: [], loaded: true, error: true }
+          : { issues, loaded: true, error: false })
+      } catch {
+        await update($, ghIssues, () => ({ issues: [], loaded: true, error: true }))
+      }
+    })
     const refreshAgentList = createAgentPoller(() => $.agent.list(), async snapshot => {
       await update($, agents, () => snapshot)
     })
@@ -1043,6 +1197,7 @@ export const register: Register = (on, options) => {
       void refreshPlans()
       void refreshGit?.()
       void refreshAgents?.()
+      void refreshIssues?.()
     }
     planTimer = $.clock.every(POLL_MS, async () => {
       await Promise.all([refreshPlans(), refreshAgentPane(), refreshStall($)])
@@ -1065,6 +1220,16 @@ export const register: Register = (on, options) => {
         }
       }
     })
+    // GitHub Issues 独立轮询（D14）：panes 含 deck 才拉（beatTimer 判定模式），无 gh 进程空转
+    issuesTimer = $.clock.every(GH_ISSUE_POLL_MS, async () => {
+      try {
+        const panes = await $.ui.panes()
+        if (Array.isArray(panes) && panes.some(pane => pane.id === DECK_PANE_ID)) await refreshIssues()
+      } catch (error) {
+        $.ui.log(`flow-deck Issues 轮询失败：${String(error)}`, { to: 'debug' })
+      }
+    })
+    void refreshIssues()
     return next(e)
   })
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- flow-deck 0.19.0：变更对比视图 + 文件查看器地址输入栏 + GitHub Issues 区块（方案 `plans/flow-deck/2026-11-06-deck-diff-view-and-doc-input.md` B1 批）——**变更对比视图**：文件树页签「改动」清单的 git 变更文件（conflict/staged/unstaged/untracked）点击后装载 diff 而非全文（复用文件查看器，`doc.kind='diff'` 契约加法扩展）：tracked 走 `git diff HEAD` 合并口径（unborn HEAD 退工作区口径），untracked 走 `--no-index` 全 + 视图，两级命令均失败退全文（不产生死视图）；渲染用引擎 `Code format='diff'` 原生增删着色（不自写行分类），不截断；diff 视图不绘制节导航与「发给 Claude」，给「重读变更」（r）；全文视图对变更清单内的文件加「查看变更」按钮（渲染时重算 `collectChanges`，小写折叠匹配）双向闭环；state=null 的仅本会话记录行保持原文不变。**地址输入栏**：文件查看器空态由纯提示改为 `Input` 输入栏（autoFocus），submit 有效路径装载（路径经 cwd 归一化，不做存在性预检——读取失败既有错误视图即反馈），空白输入忽略。**GitHub Issues 区块**：工作面板尾部列当前仓库 open issue（`gh issue list --state open --limit 20 --json`，repo 由 gh 自动推断），条目含 #号+标题（OSC 8 链接）与 dim 标签行；`ghIssues` 状态契约加法扩展，60s 独立轮询且仅面板可见时拉取（不随 2s 主轮询），「刷新」按钮随拉，失败（gh 不在/非 GitHub 仓库/解析失败）区块整体静默，空列表显示「无 open issue」；新增 `parseGhIssues` 纯函数（L1 四例）。L2 新增 9 个 mount 用例（diff 装载/兜底/双向闭环、输入栏、Issues 三态）。双 manifest 同步升版 0.19.0。
+
+- flow-deck 0.18.1 补录：驻场小生物重设计为顶部驻场猫——真机目检发现行尾盲文挂件（2×4 列 dimColor）感知不可见，经两轮迭代与四方案比选定稿面板顶部独立驻场区 3-4 行字符画（耳/脸/爪/尾动画语言，普通前景色），删除两处行尾挂件，加大各态两帧动作幅度；帧表契约重写（每帧 3-4 行、显示列断言防宽字符、两帧整块不同），`companion=off` 与基线逐字一致的约束保持（提交 51ac5c9，发布时未写 CHANGELOG，补录）。
+
+- flow-deck 0.18.0 补录：收口仪式通关卡、控制台皮肤、呼吸面板与驻场小生物——全绿收口后空态渲染通关卡战报（声明边界文件数、numstat 逐文件 ±行数、耗时自首次边界声明起算，统计不可用显示 — 与真实 0 可区分，重复收口幂等保留；numstat 解析贯通到逐文件并区分每侧查询状态，session.start 代次门拦截旧会话在途 git 快照）；800ms 节拍器驱动执行卡两档呼吸、停滞停跳；`artDirection` 配置切换飞行控制台词表皮肤（只换文案不改结构）；`companion=off` 关闭小生物（提交 fa773e5，发布时未写 CHANGELOG，补录）。
+
 - flow-deck 0.17.0：工作面板方案名点击直达文件查看器 + 主色调改蓝——标题行、当前执行行与 plan-iterate 评审卡的方案名改为可点击（`plain` 按钮 + 方案名下划线，沿 0.16.3 整行链接约定），点击装载方案文档并切到文件查看器页签：优先取评审目录 `state.json` 的 `plan_path`（新增 `PlanReview.docPath` 契约，绝对路径经 cwd 归一化），implement 任务常无评审目录，退而按仓库约定即时扫 `plans/<插件>/<方案名>.md`，两处皆无时 toast 说明不切页签。主色调 `TONE.accent` 由 `claude`（橙）改为 `professionalBlue`（蓝，面板标题/flow 前缀/执行卡边框/DAG 总览/tLevel chip 底色等全量跟随）；子代理区新增 `TONE.agent = 'claude'` 语义色保留与 Claude Code 子代理展示一致的橙（运行中状态行与卡片边框不跟随主色变化）。双 manifest 同步升版 0.17.0。
 
 - flow-deck 0.16.3：按钮与文本的视觉区分（分治策略）——无热键的低密度操作按钮（子代理「查看」、「全文」「‹ 上一节」「下一节 ›」与分页数字、「← 上级」、「主对话」）去掉 `plain`，终端画成 `[ label ]` 括号样式；文件树高密度整行按钮（改动清单、目录行、文件行）保持 `plain` 但主名（路径/文件名/目录名）加下划线（改动行的状态点 `●`/`○` 不下划线）。带热键的按钮（`r: 刷新` 等）与页签行（亮暗对比选中态）维持原样。顺手补齐 codex manifest 漏升的 0.16.2。双 manifest 同步升版 0.16.3。

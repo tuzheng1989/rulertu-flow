@@ -182,14 +182,17 @@ declare module 'claude-code' {
       git: GitStatus | null
       /** 宿主当前会话的子代理状态，仅打开面板时查询 */
       agents: AgentSnapshot
+      /** GitHub 仓库 open issue 清单（gh issue list 拉取，60s 独立轮询）；未取数 loaded=false，
+       *  拉取失败 error=true（区块静默不绘制，D13）；失败后下一轮询可自愈回正常态 */
+      ghIssues: { issues: { number: number; title: string; url: string; labels: string[] }[]; loaded: boolean; error: boolean }
       /** 跨会话恢复的上次执行摘要（源自 $.store），空态面板的面包屑；无则 null */
       lastRun: ExecutionReport | null
       /** 全绿收口通关卡（方案+批次+战报统计）；非收口/任务切换/新边界声明时清空，无则 null */
       closureCard: { plan: string; batch: string; closure: ClosureStats } | null
       /** 执行停滞提示：距上次上报的分钟数（超过阈值）；未停滞或无执行则 null */
       stall: number | null
-      /** 文档浏览面板装载的文档；text 为 null 表示读取失败（error 记原因） */
-      doc: { path: string; text: string | null; error?: string } | null
+      /** 文档浏览面板装载的文档；text 为 null 表示读取失败（error 记原因）；kind 缺省 'file' 全文，'diff' 为未提交变更对比 */
+      doc: { path: string; text: string | null; error?: string; kind?: 'file' | 'diff' } | null
       /** 文档浏览面板当前选中节在 parseSections 结果中的下标 */
       docSection: number
       /** 文档浏览模式：all 全文阅读（默认），section 单节浏览（修改请求锚定） */

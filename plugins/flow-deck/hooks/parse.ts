@@ -267,6 +267,40 @@ export function parseStateJson(text: string): PlanState | null {
   return state
 }
 
+/** 一条 GitHub open issue（gh issue list --json number,title,url,labels 的字段子集） */
+export type GhIssue = {
+  number: number
+  title: string
+  url: string
+  labels: string[]
+}
+
+/** 解析 gh issue list --json 输出；坏 JSON 或非数组返回 null（渲染层据此整体静默，D13）。
+ *  逐条校验：number 为 number、title/url 为 string 才收；labels 取每项 .name（string 才收），缺 labels 视为空数组 */
+export function parseGhIssues(stdout: string): GhIssue[] | null {
+  let data: unknown
+  try {
+    data = JSON.parse(stdout)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(data)) return null
+  const issues: GhIssue[] = []
+  for (const item of data) {
+    if (typeof item !== 'object' || item === null) continue
+    const record = item as { number?: unknown; title?: unknown; url?: unknown; labels?: unknown }
+    if (typeof record.number !== 'number' || typeof record.title !== 'string' ||
+        typeof record.url !== 'string') continue
+    const labels: string[] = Array.isArray(record.labels)
+      ? record.labels
+        .map(label => (typeof label === 'object' && label !== null ? (label as { name?: unknown }).name : undefined))
+        .filter((name): name is string => typeof name === 'string')
+      : []
+    issues.push({ number: record.number, title: record.title, url: record.url, labels })
+  }
+  return issues
+}
+
 /** 评分趋势条：每轮一个字符，0-10 分映射到 ▁-█ */
 export function sparkline(scores: readonly number[]): string {
   return scores

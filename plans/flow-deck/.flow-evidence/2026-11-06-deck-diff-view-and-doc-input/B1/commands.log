@@ -1,0 +1,87 @@
+=== B1 证据目录 ===
+日期: 2026-11-06
+任务: flow-deck 0.19.0 变更对比视图 + 地址输入栏 + GitHub Issues 区块
+
+[基线] claude plugin test plugins/flow-deck → exit 0, 130 pass / 0 fail (4 files, 4.55s)
+[切片1] parseGhIssues L1：红(Export not found)→实现 parse.ts parseGhIssues→绿 131 pass/0 fail
+[切片2] diff 视图 G1-G3：红(2 fail)→实现 loadDiff/openInDoc/onPress/renderDocBody diff 分支→绿 134 pass/0 fail
+  修正1: process.run 事件载荷字段为 e.argv（非委派单 mock 要点所写 e.args），探针实证: {"argv":["git","diff","HEAD","--","hooks/a.ts"],"init":{"timeoutMs":5000}}
+  修正2: DIFF_HUNK fixture 行数须与 hunk 头一致（引擎绘制前做 unified-diff 解析校验: Added line count did not match）
+  修正3: Code 元素句柄 props 不透出 key，断言以 format+source 承载
+[切片3] G4/G5：红(G4 空串分支缺失)→实现空 diff 分支→绿 136 pass/0 fail；G5 兜底已随切片2 loadDiff 实现，用例首跑即绿（作回归护栏，TDD 顺序偏差已记录）
+[切片4] G6/G7：红(2 fail)→实现查看变更按钮/空态 Input→绿 138 pass/0 fail
+  修正4(U4): $.ui.input 测试驱动签名为 { plugin, key, text, kind?, requestId?, surface? }——字段为 text 非 value，引擎运行时签名自述消解
+  Input 契约（引擎二进制实证）: key 必填、onSubmit(value, e) 必填、label/placeholder/value/submitLabel 字符串、rows>=1、autoFocus 合法
+[切片5] S4/G9/G10：红(2 fail)→实现 ghIssues 契约+atom+refreshIssues(singleFlight)+60s timer(panes 门)+refreshAll+首拉+renderFlowBody 区块→绿 140 pass/0 fail
+  gh 事件载荷字段同样为 argv（与 process.run 一致），mock 按 args[0]==='gh' 分流
+
+[收尾] 双 manifest 0.18.1 → 0.19.0；CHANGELOG Unreleased 加 0.19.0 条目 + 0.18.0/0.18.1 断档补录（fa773e5/51ac5c9 提交说明为据）
+[收尾] register.test.ts 过时注释修正（「测试引擎无 process 设施」→ state.set 拦截口径说明，只改注释不动测试逻辑，方案评审节点 sanctioned）
+
+[全量回归] claude plugin test plugins/flow-deck
+  命令退出码: 0
+  结果: 140 pass / 0 fail（4 files, 4.78s）
+  基线 130 → 终态 140：+10（parseGhIssues L1 ×1 + diff/输入栏 G1-G7 ×7 + Issues G9/G10 ×2）
+  完整日志: full-test.log
+
+[红线校验] claude plugin validate plugins/flow-deck
+  命令退出码: 0（Validation passed with warnings）
+  warning 均为既有项，与本批无关: author 缺失 / LICENSE 缺失 / icon 缺失 / d.ts declares on $ nothing
+  扫描确认: state writes/reads 含 flow-deck.ghIssues；hooks 声明与调用面完整列出
+  完整日志: validate.log
+
+[类型检查] tsc -p plugins/flow-deck 不可用（本机无全局/本地 typescript 安装，npx --no-install tsc 报需先安装）；
+  tsconfig extends 引擎注入路径 ./.claude-plugin/types/tsconfig.json（本地不存在，引擎运行时注入）。
+  以 claude plugin validate 的静态扫描为准（已通过），如实报告。
+
+[git diff --stat 终态]
+  CHANGELOG.md                                    |   6 +
+  plugins/flow-deck/.claude-plugin/plugin.json    |   2 +-
+  plugins/flow-deck/.codex-plugin/plugin.json     |   2 +-
+  plugins/flow-deck/hooks/parse.test.ts           |  32 ++
+  plugins/flow-deck/hooks/parse.ts                |  34 +++
+  plugins/flow-deck/hooks/register.test.ts        | 430 ++++++++++++++++++-
+  plugins/flow-deck/hooks/register.tsx            | 154 +++++++-
+  plugins/flow-deck/types/index.d.ts              |   7 +-
+  8 files changed, 652 insertions(+), 15 deletions(-)
+
+[主控裁决补改] 遗留问题 1：空态（task===null，通关后）分支补绘 GitHub Issues 区块
+  实现: renderFlowBody 空态分支 {agentsSection} 后插入 {issuesSection}——与主分支共用同一局部变量
+  issuesSection（同一渲染条件 loaded && !error），零复制；注释同步两分支共用口径
+  配套用例: 「空态（无任务/通关后）面板同样绘制 GitHub Issues 区块」——红(1 fail)→实现→绿
+
+[基线 JSON 实测注记] EMPTY_PANE_BASELINE 经实测无需更新：该用例 mock process.run 恒 exitCode 128
+  （模拟 gh 不可用环境）→ ghIssues 为 error 态 → 区块按 D13 静默不绘制 → 空态渲染树逐字不变，
+  用例原样绿。这比更新基线更强：实证「gh 失败时空态与改前逐字一致」，基线保护未弱化、未放宽。
+  拆组③ 结构锚点用例（boxes 7/texts 9）同理不受影响（无 session.start，ghIssues 未加载）。
+
+[裁决后全量回归] claude plugin test plugins/flow-deck
+  命令退出码: 0；结果: 141 pass / 0 fail（4 files, 5.01s）；full-test.log 已更新
+[裁决后校验] claude plugin validate plugins/flow-deck 退出码 0（见 validate.log）
+
+[裁决补改 diff 摘要]
+  register.tsx: 空态分支 +1 行（{issuesSection}）+ issuesSection 注释更新（2 行）
+  register.test.ts: +1 用例（约 44 行，空态 Issues 三断言 + Link href + 空态分支确认断言）
+
+[P0-1 修复（审计退回）] git diff --no-index 遵循 POSIX diff 约定：有差异 exitCode=1，runGit 的 exitCode!==0
+  判失败把「有差异」当失败 → untracked 非空文件点击必退全文，G2 真机不生效。
+  本机实测（Git for Windows 2.49.0.windows.1，临时目录三态）：
+    - 非空文件 vs /dev/null: exit 1 + 完整 hunk（审计断言证实）
+    - 空文件 vs /dev/null:   exit 1 + stdout 仅 diff 头（new file mode/index/---/+++，无 @@ hunk 行）
+      ——与审计预设「空文件 exit 0」不同，按实调整：无 hunk 行的输出规整为空串归「无未提交变更」空态
+      （空文件本无可展示变更，且避免仅头文本进 Code 触发引擎 unified-diff 校验）
+    - 路径不存在:            exit 1 + 空 stdout + stderr 报错（异常态 >1 未在本版出现，兜底保留为防御）
+  实现: 新增模块顶层 runNoIndexDiff（exitCode 0/1 均取 stdout，其余退出码或抛错 null 走兜底；
+    stdout 无 '@@' 规整为空串）；loadDiff untracked 分支改走 runNoIndexDiff，
+    tracked 分支（diff HEAD / diff --，退出码恒 0）保持 runGit 不动
+  测试: 用例 2 mock 改 exitCode 1 + hunk（还原真实语义，断言不变）；新增「untracked 无实质 hunk」
+    用例（先红后绿）覆盖两口径——exit 1 仅 diff 头 → 空态视图；exit 0 空 stdout（经「重读变更」
+    重拉驱动）→ 空态视图。空 diff 态视图顺带补「重读变更」r 按钮（与完整视图一致的重试入口）
+
+[裁决后全量回归] claude plugin test plugins/flow-deck → exit 0，142 pass / 0 fail（4 files, 4.81s），full-test.log 已更新
+[裁决后校验] claude plugin validate plugins/flow-deck → exit 0（Validation passed with warnings，warning 均既有）
+
+[P0-1 修复 diff 摘要]
+  register.tsx: +runNoIndexDiff（约 20 行含实测注记）；loadDiff untracked 分支 1 行改走新函数+注释更新；
+    空 diff 态视图 Box 补「重读变更」按钮 1 行+注释更新
+  register.test.ts: 用例 2 diffRunner 参数 exitCode 0→1；+1 用例（约 60 行，两口径断言）

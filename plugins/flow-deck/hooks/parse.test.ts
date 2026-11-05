@@ -33,6 +33,7 @@ import {
   numstatByPath,
   SKIN_TERMS,
   parseExecution,
+  parseGhIssues,
   parseNumstat,
   parseSections,
   parsePorcelain,
@@ -312,6 +313,37 @@ describe('parse', () => {
     expect(parseStateJson(JSON.stringify({ plan_path: '' }))).toEqual({})
     expect(parseStateJson('[]')).toBe(null)
     expect(parseStateJson('nope')).toBe(null)
+  })
+
+  test('parseGhIssues 解析 gh issue list 输出：合法全字段、坏 JSON、缺 labels、非法条目剔除', () => {
+    // 合法全字段：number/title/url/labels 原样收
+    expect(parseGhIssues(JSON.stringify([
+      { number: 12, title: '修复守卫', url: 'https://example.com/i/12', labels: [{ name: 'bug' }, { name: 'P1' }] },
+      { number: 13, title: '补文档', url: 'https://example.com/i/13', labels: [] },
+    ]))).toEqual([
+      { number: 12, title: '修复守卫', url: 'https://example.com/i/12', labels: ['bug', 'P1'] },
+      { number: 13, title: '补文档', url: 'https://example.com/i/13', labels: [] },
+    ])
+    // 坏 JSON 与非数组返回 null
+    expect(parseGhIssues('{broken')).toBe(null)
+    expect(parseGhIssues(JSON.stringify({ number: 1 }))).toBe(null)
+    // 缺 labels 视为空数组；labels 内非 string 的 name 剔除
+    expect(parseGhIssues(JSON.stringify([
+      { number: 1, title: 't', url: 'u' },
+      { number: 2, title: 't2', url: 'u2', labels: [{ name: 'ok' }, { name: 7 }, {}] },
+    ]))).toEqual([
+      { number: 1, title: 't', url: 'u', labels: [] },
+      { number: 2, title: 't2', url: 'u2', labels: ['ok'] },
+    ])
+    // number 非 number 或 title/url 非 string 的条目整条剔除
+    expect(parseGhIssues(JSON.stringify([
+      { number: '12', title: 't', url: 'u', labels: [] },
+      { number: 3, title: 9, url: 'u', labels: [] },
+      { number: 4, title: 't', url: null, labels: [] },
+      { number: 5, title: '合法', url: 'https://example.com/i/5', labels: [{ name: 'x' }] },
+    ]))).toEqual([
+      { number: 5, title: '合法', url: 'https://example.com/i/5', labels: ['x'] },
+    ])
   })
 
   test('sparkline 把 0-10 分映射为方块字符并夹紧边界', () => {

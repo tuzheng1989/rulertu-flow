@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import { describeExecution } from './register'
 import { creatureFrames } from './parse'
-import type { AgentSnapshot } from '../types'
+import type { AgentSnapshot, GitStatus } from '../types'
 
 /** 帧字符串含 \ ( ) 等 regex 元字符，按帧查渲染节点前先转义；^$ 锚定整行精确匹配
  *  （帧行间存在前缀包含，如 facepalm 行1 是 salute 行1 的前缀，子串匹配会串态） */
@@ -26,6 +26,34 @@ function bandProps() {
     bodyColumns: 80,
     scroll: { offset: 0, bodyRows: 3 },
     view: {},
+  }
+}
+
+/** unified diff hunk fixture：标题/Code 渲染断言与 process.run mock 共用
+ *  （hunk 头行数须与两侧实际行数一致，引擎绘制前做 unified-diff 解析校验） */
+const DIFF_HUNK = [
+  'diff --git a/hooks/a.ts b/hooks/a.ts',
+  'index 1111111..2222222 100644',
+  '--- a/hooks/a.ts',
+  '+++ b/hooks/a.ts',
+  '@@ -1,2 +1,3 @@',
+  ' line1',
+  ' line2',
+  '+added line',
+].join('\n')
+
+/** diff 视图用例共用的 process.run 分流：git diff（非 numstat）按 diffResult 应答，
+ *  其余（status/numstat/gh）按 exitCode 128 静默——非仓库惯例口径，numstat 单列防止
+ *  轮询侧 numstat 查询被 hunk 文本污染（diffCalls 捕获发起过的 diff argv）。
+ *  注：process.run 事件载荷的字段名是 argv（含超时等选项在 init），非 args */
+function diffRunner(diffCalls: string[][], diffResult: { exitCode: number; stdout: string }) {
+  return ($: unknown, e: { argv?: string[] }) => {
+    const args = e.argv ?? []
+    if (args[0] === 'git' && args.includes('diff') && !args.includes('--numstat')) {
+      diffCalls.push(args)
+      return { value: { exitCode: diffResult.exitCode, stdout: diffResult.stdout, stderr: '' } }
+    }
+    return { value: { exitCode: 128, stdout: '', stderr: '' } }
   }
 }
 
@@ -1561,10 +1589,12 @@ describe('pane', () => {
   })
 
   // 两类路径不经自动化测试，改由会话内 fixture 端到端确认：
-  // 1. 有数据卡片的渲染（plan 卡片、git 面板、横条 git 行）——宿主规则不允许测试
-  //    模块写插件状态（$.state 调用权在按 hooks.json 声明的模块静态扫描，*.test.ts
-  //    扫描结果恒空），且 git 数据经 $.process.run 进入而测试引擎无 process 设施；
+  // 1. 有数据卡片的渲染（plan 卡片、横条 git 行）——宿主规则不允许测试模块写插件状态
+  //    （$.state 调用权在按 hooks.json 声明的模块静态扫描，*.test.ts 扫描结果恒空），
+  //    git 快照只能经 on('state.set') 拦截顶替（本文件既有 fixture 口径）间接供给；
   //    数据组装已由 parse.test.ts 的 buildPlanReview / buildGitStatus 用例覆盖。
+  //    （注：process 设施在测试引擎可用——本文件 20 余处 on('process.run') mock 与
+  //    B1 的 diff/Issues 用例均实证；事件载荷字段为 argv。）
   // 2. /flow 与 /git 命令链路——测试引擎里 $.ui.open 是无实现的 dispatch，需猜测
   //    UiOpenResult 应答形状才能喂饱链路；该处理器与官方 pane 示例同构。
 
@@ -1663,6 +1693,492 @@ describe('pane', () => {
       expect(rendered?.props.text).toBe('# 一\n正文一\n## 二\n正文二')
       await view.unmount()
     }
+  })
+
+  // ---- B1 变更对比视图 + 地址输入栏（L2 替身编排） ----
+
+  test('改动清单点击 staged 文件 → 「变更对比」标题与 Code(format=diff)', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [{ code: 'M ', path: 'hooks/a.ts' }], unstaged: [], untracked: [], conflicts: [],
+      added: 1, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    const reads: unknown[] = []
+    on('fs.read', ($, e) => {
+      reads.push(e.path)
+      throw new Error('ENOENT: ' + String(e.path))
+    })
+    on('process.run', diffRunner(diffCalls, { exitCode: 0, stdout: DIFF_HUNK }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'tree' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    expect(await ui.find({ text: /hooks\/a\.ts/ })).not.toBeUndefined()
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-hooks/a.ts', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍变更对比 · hooks\/a\.ts/ })).not.toBeUndefined()
+    const code = await ui.find({ type: 'Code' })
+    expect(code?.props.format).toBe('diff')
+    expect(String(code?.props.source)).toContain('+added line')
+    // staged 路径走 diff 装载，不读全文
+    expect(reads).toEqual([])
+    await ui.unmount()
+  })
+
+  test('untracked 点击 → process.run args 含 --no-index 并装入 diff', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [], unstaged: [], untracked: [{ code: '??', path: 'plans/b.md' }], conflicts: [],
+      added: 0, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    // 真实语义（本机 Git 2.49 实测）：--no-index 有差异时 exitCode=1（POSIX diff 约定），非 0
+    on('process.run', diffRunner(diffCalls, { exitCode: 1, stdout: DIFF_HUNK }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'tree' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-plans/b.md', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    const noIndex = diffCalls.find(args => args.includes('--no-index'))
+    expect(noIndex).not.toBeUndefined()
+    expect(noIndex?.at(-1)).toBe('plans/b.md')
+    const code = await ui.find({ type: 'Code' })
+    expect(code?.props.format).toBe('diff')
+    expect(await ui.find({ text: /▍变更对比 · plans\/b\.md/ })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('untracked 无实质 hunk（空文件仅 diff 头 / exit 0 空 stdout）→ 无未提交变更空态', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [], unstaged: [], untracked: [{ code: '??', path: 'plans/b.md' }], conflicts: [],
+      added: 0, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    // 真实语义（本机 Git 2.49 实测）：空文件 vs /dev/null 也是 exit 1，stdout 仅 diff 头（无 @@ hunk 行）
+    let stdout = 'diff --git a/plans/b.md b/plans/b.md\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ b/plans/b.md\n'
+    on('fs.read', ($, e) => {
+      const norm = typeof e.path === 'string' ? e.path.replaceAll('\\', '/') : ''
+      if (!norm.endsWith('plans/b.md')) throw new Error('ENOENT: ' + String(e.path))
+      return { value: '' }
+    })
+    on('process.run', ($, e) => {
+      const args = (e as { argv?: string[] }).argv ?? []
+      if (args[0] === 'git' && args.includes('diff') && !args.includes('--numstat')) {
+        diffCalls.push(args)
+        return { value: { exitCode: 1, stdout, stderr: '' } }
+      }
+      return { value: { exitCode: 128, stdout: '', stderr: '' } }
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'tree' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-plans/b.md', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    // 空文件本无可展示变更：仅头的输出归入空 diff 态（不退全文，也不把纯头文本喂给 Code）
+    expect(await ui.find({ text: /▍变更对比 · plans\/b\.md/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /无未提交变更（快照可能已过期）/ })).not.toBeUndefined()
+    // 第二口径（审计原设想的 exit 0 空 stdout）同样归空态——经「重读变更」按钮重拉驱动
+    stdout = ''
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-reload-diff', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /无未提交变更（快照可能已过期）/ })).not.toBeUndefined()
+    expect(diffCalls.length).toBeGreaterThanOrEqual(2)
+    await ui.unmount()
+  })
+
+  test('state=null 行（仅本会话记录）点击保持原文件全文，与改前一致', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [], unstaged: [], untracked: [], conflicts: [],
+      added: 0, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    const readPaths: string[] = []
+    on('fs.read', ($, e) => {
+      const norm = typeof e.path === 'string' ? e.path.replaceAll('\\', '/') : ''
+      if (!norm.endsWith('docs/c.md')) throw new Error('ENOENT: ' + String(e.path))
+      readPaths.push(norm)
+      return { value: '# 标题\n正文' }
+    })
+    on('process.run', diffRunner(diffCalls, { exitCode: 0, stdout: DIFF_HUNK }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('tool.call', async ($, e, next) => {
+      void next
+      return { result: 'reached-bottom' }
+    })
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.tool.call({ tool: 'Edit', file_path: 'C:\\repo\\docs\\c.md' })
+    await $.command.run({ command: 'deck', args: 'tree' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    expect(await ui.find({ text: /● docs\/c\.md/ })).not.toBeUndefined()
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-docs/c.md', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍文件查看器 · docs\/c\.md · 1 节 · 2 行/ })).not.toBeUndefined()
+    expect(readPaths).toHaveLength(1)
+    // state=null 不发起任何 diff 查询
+    expect(diffCalls).toEqual([])
+    await ui.unmount()
+  })
+
+  test('diff 空串 → 「无未提交变更」提示与「查看全文」按钮', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [{ code: 'M ', path: 'hooks/a.ts' }], unstaged: [], untracked: [], conflicts: [],
+      added: 0, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    on('process.run', diffRunner(diffCalls, { exitCode: 0, stdout: '' }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'tree' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-hooks/a.ts', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /无未提交变更（快照可能已过期）/ })).not.toBeUndefined()
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons.some(button => button.props.key === 'doc-view-file')).toBe(true)
+    await ui.unmount()
+  })
+
+  test('diff 两级命令均失败 → 退化为 loadDoc 全文（D3 兜底）', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [{ code: 'M ', path: 'hooks/a.ts' }], unstaged: [], untracked: [], conflicts: [],
+      added: 1, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    const readPaths: string[] = []
+    on('fs.read', ($, e) => {
+      const norm = typeof e.path === 'string' ? e.path.replaceAll('\\', '/') : ''
+      if (!norm.endsWith('hooks/a.ts')) throw new Error('ENOENT: ' + String(e.path))
+      readPaths.push(norm)
+      return { value: '# 标题\n正文' }
+    })
+    on('process.run', diffRunner(diffCalls, { exitCode: 128, stdout: '' }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'tree' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'file-open-hooks/a.ts', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍文件查看器 · hooks\/a\.ts · 1 节 · 2 行/ })).not.toBeUndefined()
+    expect(readPaths).toHaveLength(1)
+    // 两级 diff 均发起过（HEAD 口径与工作区口径），均失败后才退化
+    expect(diffCalls.length).toBe(2)
+    expect(diffCalls[0]).toEqual(['git', 'diff', 'HEAD', '--', 'hooks/a.ts'])
+    expect(diffCalls[1]).toEqual(['git', 'diff', '--', 'hooks/a.ts'])
+    await ui.unmount()
+  })
+
+  test('全文视图「查看变更」进 diff，diff 视图「查看全文」切回；无变更文件不显示按钮（G6）', async ($, on) => {
+    const clock = mock.clock(on)
+    const gitSnapshot: GitStatus = {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+      staged: [], unstaged: [{ code: ' M', path: 'hooks/a.ts' }], untracked: [], conflicts: [],
+      added: 1, removed: 0, fetchedAt: 0,
+    }
+    const diffCalls: string[][] = []
+    on('fs.read', ($, e) => {
+      const norm = typeof e.path === 'string' ? e.path.replaceAll('\\', '/') : ''
+      if (norm.endsWith('hooks/a.ts')) return { value: '# 标题\n正文' }
+      throw new Error('ENOENT: ' + String(e.path))
+    })
+    on('process.run', diffRunner(diffCalls, { exitCode: 0, stdout: DIFF_HUNK }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'doc hooks/a.ts' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    expect(await ui.find({ text: /▍文件查看器 · hooks\/a\.ts/ })).not.toBeUndefined()
+    // 变更清单含该文件（unstaged）→ 显示「查看变更」
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons.some(button => button.props.key === 'doc-view-diff')).toBe(true)
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-view-diff', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍变更对比 · hooks\/a\.ts/ })).not.toBeUndefined()
+    const code = await ui.find({ type: 'Code' })
+    expect(code?.props.format).toBe('diff')
+    // 「查看全文」切回
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-view-file', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍文件查看器 · hooks\/a\.ts/ })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Code' })).toBeUndefined()
+    // 不在变更清单的文件不显示「查看变更」（D8 条件分支）
+    await $.command.run({ command: 'deck', args: 'doc docs/other.md' })
+    await clock.settle()
+    const buttonsAfter = await ui.findAll({ type: 'Button' })
+    expect(buttonsAfter.some(button => button.props.key === 'doc-view-diff')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('空态显示打开文件输入栏：submit 有效路径装载，空白输入不动作（G7）', async ($, on) => {
+    const clock = mock.clock(on)
+    const readPaths: string[] = []
+    on('fs.read', ($, e) => {
+      const norm = typeof e.path === 'string' ? e.path.replaceAll('\\', '/') : ''
+      if (!norm.endsWith('docs/x.md')) throw new Error('ENOENT: ' + String(e.path))
+      readPaths.push(norm)
+      return { value: '# 标题\n正文' }
+    })
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('fs.list', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.command.run({ command: 'deck', args: 'doc' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    const input = await ui.find({ type: 'Input' })
+    expect(input).not.toBeUndefined()
+    expect(input?.props.label).toBe('打开文件')
+    // 空白输入不动作（$.ui.input 驱动字段为 text，引擎运行时签名自述）
+    await $.ui.input({ plugin: 'flow-deck', key: 'doc-open', requestId: 'deck', surface: 'terminal', kind: 'submit', text: '   ' })
+    await clock.settle()
+    expect(readPaths).toEqual([])
+    // 有效路径装载并切视图
+    await $.ui.input({ plugin: 'flow-deck', key: 'doc-open', requestId: 'deck', surface: 'terminal', kind: 'submit', text: 'docs/x.md' })
+    await clock.settle()
+    expect(readPaths).toHaveLength(1)
+    expect(await ui.find({ text: /▍文件查看器 · docs\/x\.md · 1 节 · 2 行/ })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
+  // ---- B1 GitHub Issues 区块（L2 替身编排） ----
+
+  test('gh 正常 → 工作面板尾部 GitHub Issues 区块：条目、链接、标签；60s 定时器随面板可见拉取', async ($, on) => {
+    const clock = mock.clock(on)
+    const ghCalls: string[][] = []
+    on('process.run', ($, e) => {
+      const args = (e as { argv?: string[] }).argv ?? []
+      if (args[0] === 'gh') {
+        ghCalls.push(args)
+        return {
+          value: {
+            exitCode: 0,
+            stdout: JSON.stringify([
+              { number: 12, title: '修复守卫', url: 'https://github.com/x/y/issues/12', labels: [{ name: 'bug' }, { name: 'P1' }] },
+              { number: 13, title: '补文档', url: 'https://github.com/x/y/issues/13', labels: [] },
+            ]),
+          },
+        }
+      }
+      return { value: { exitCode: 128, stdout: '', stderr: '' } }
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [{ id: 'deck', title: 'Deck', isShown: true, isFocused: false, isPlaced: true }] }))
+    on('fs.list', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo', batch: 'B2' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    expect(await ui.find({ text: /▍GitHub Issues · 2 open/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /#12 修复守卫/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /#13 补文档/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /· bug P1/ })).not.toBeUndefined()
+    const link = await ui.find({ type: 'Link' })
+    expect(link?.props.href).toBe('https://github.com/x/y/issues/12')
+    // gh 命令口径：open 状态、限量 20、JSON 字段集
+    expect(ghCalls[0]).toEqual(['gh', 'issue', 'list', '--state', 'open', '--limit', '20', '--json', 'number,title,url,labels'])
+    // 60s 独立轮询：面板可见时下一 tick 再拉（首拉已发生，advance 后计数增长）
+    const firstPulls = ghCalls.length
+    await clock.advance(60_000)
+    expect(ghCalls.length).toBeGreaterThan(firstPulls)
+    await ui.unmount()
+  })
+
+  test('gh 失败区块静默不绘制且面板其余不受影响；空列表刷新后显示无 open issue', async ($, on) => {
+    const clock = mock.clock(on)
+    let ghStdout: string | null = null
+    on('process.run', ($, e) => {
+      const args = (e as { argv?: string[] }).argv ?? []
+      if (args[0] === 'gh') {
+        return ghStdout === null
+          ? { value: { exitCode: 1, stdout: '', stderr: 'gh: not a git repository' } }
+          : { value: { exitCode: 0, stdout: ghStdout } }
+      }
+      return { value: { exitCode: 128, stdout: '', stderr: '' } }
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('fs.list', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo', batch: 'B2' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    expect(await ui.find({ text: /GitHub Issues/ })).toBeUndefined()
+    expect(await ui.find({ text: /▍工作面板 · 方案实施 · demo/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍子代理/ })).not.toBeUndefined()
+    // 切空列表 fixture，「刷新」按钮重拉（refreshAll 含 Issues）→ 空列表态
+    ghStdout = '[]'
+    await $.ui.press({ plugin: 'flow-deck', key: 'flow-refresh', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(await ui.find({ text: /▍GitHub Issues · 0 open/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /无 open issue/ })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('空态（无任务/通关后）面板同样绘制 GitHub Issues 区块：标题与条目在场', async ($, on) => {
+    const clock = mock.clock(on)
+    on('process.run', ($, e) => {
+      const args = (e as { argv?: string[] }).argv ?? []
+      if (args[0] === 'gh') {
+        return {
+          value: {
+            exitCode: 0,
+            stdout: JSON.stringify([
+              { number: 12, title: '修复守卫', url: 'https://github.com/x/y/issues/12', labels: [{ name: 'bug' }] },
+            ]),
+          },
+        }
+      }
+      return { value: { exitCode: 128, stdout: '', stderr: '' } }
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('fs.list', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await clock.settle()
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Deck'),
+    })
+    // 确认走的是空态分支（无任务），区块与空态同屏
+    expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /▍GitHub Issues · 1 open/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /#12 修复守卫/ })).not.toBeUndefined()
+    const link = await ui.find({ type: 'Link' })
+    expect(link?.props.href).toBe('https://github.com/x/y/issues/12')
+    await ui.unmount()
   })
 
   test('自动侧边栏：非全屏或 autoOpen=off 时编辑不自动开面板', async ($, on) => {
