@@ -1,7 +1,7 @@
 ---
 name: deep-research
-description: 深度研究助手，通过迭代式"搜索-总结-反思"循环生成带引用的综合性研究报告。当用户说"深入研究XX"、"研究一下XX"、"调研XX"或明确表示需要全面了解某个主题时触发。支持配置循环次数（"循环N次"）与搜索区域（"中文/英文"或"us/cn"）。v0.4.0 新增意图澄清、研究简报驱动、多查询并行与摘要压缩。v0.5.0 引入多源搜索通道（deepxiv / sn-search-* 脚本 + MCP），按查询来源类型智能分派并支持通道降级。v0.6.0 新增自动落盘功能，报告完成后自动保存到文件系统。
-version: 0.6.0
+description: 深度研究助手，通过迭代式"搜索-总结-反思"循环生成带引用的综合性研究报告。当用户说"深入研究XX"、"研究一下XX"、"调研XX"或明确表示需要全面了解某个主题时触发。支持配置循环次数（"循环N次"）与搜索区域（"中文/英文"或"us/cn"）。v0.4.0 新增意图澄清、研究简报驱动、多查询并行与摘要压缩。v0.5.0 引入多源搜索通道（deepxiv / sn-search-* 脚本 + MCP），按查询来源类型智能分派并支持通道降级。v0.6.0 新增自动落盘功能，报告完成后自动保存到文件系统。v0.6.1 深读层引入 alphaXiv 增强（AI blog 前置导读 + .md 全文降级备选）。
+version: 0.6.1
 author: Claude Code
 ---
 
@@ -20,6 +20,8 @@ author: Claude Code
 > - **正文引用锚链化**：finalize 的 `[n]` 引用从裸文本改为指向文末来源的锚链 `[[n]](#ref-n)`——正文点击跳转到对应来源条目，来源条目再点跳原文；来源列表每条加 `<a id="ref-n">` 锚点。**实测**（Fora 报告）：94 处引用全部锚链化、24 个来源一一对应、0 残留裸标记。
 >
 > **v0.5.0 搜索层增强（多源化）**：移植 sn-deep-research 的搜索方法——三层搜索模型（广度发现→专项深挖→原始核验）+ 按查询来源类型（`source_type`）智能分派多通道 + 来源优先级 + 多源交叉验证。query 节点输出新增 `source_type` / `source_tier`；主控按 `source_type` 分派到 web(MCP) / academic(deepxiv) / code / social_cn / social_en 五通道；任一专门通道失败统一降级到 MCP web-search-prime。**不改** running_summary / 引用 [n] / finalize 链路。
+>
+> **v0.6.1 深读层 alphaXiv 增强**：3.2b 新增两个公开端点（无需 key、不动五通道搜索与降级规则）——`alphaxiv.org/abs/{id}`（AI paper blog，web-reader 抓取，作 deepxiv 渐进精读的前置导读，快速筛选省额度）与 `/abs/{id}.md`（论文全文 markdown，curl 直取，作 deepxiv paper 降级备选，深读降级链扩为 deepxiv paper → alphaXiv .md → arXiv 原页）。交叉验证明确：AI blog 与论文同源，只作理解校验、不计入独立来源。
 
 ## 触发条件
 
@@ -187,12 +189,22 @@ PYTHONIOENCODING=utf-8 deepxiv paper {arxiv_id} --section "..."  # 只读最关�
   url: {result_url}
   return_format: "markdown"
 
+# alphaXiv 增强【v0.6.1 新增】——两个公开端点，无需 key，不动搜索层
+# ① AI blog 导读：通俗浓缩论文贡献/关键数据/limitations，作 deepxiv paper 前置筛选（是否值得逐节精读，省额度），亦可作 summarize 素材
+调用 MCP 工具 mcp__web-reader__webReader:
+  url: https://www.alphaxiv.org/abs/{arxiv_id}
+  return_format: "markdown"
+# ② 论文全文 markdown：deepxiv paper 的降级备选，输出比 arXiv HTML 干净
+curl -sL "https://www.alphaxiv.org/abs/{arxiv_id}.md" | head -c 20000   # 按需截取
+
 说明:
   - 输出过大时读取 Preview（前 2KB）判断价值
   - 每轮挑选 2-4 个最相关来源深读
+  - 学术深读降级链【v0.6.1】：deepxiv paper → alphaXiv .md 端点 → arXiv 原页（web-reader）
+  - alphaXiv 社区讨论区为 SPA 动态 tab，web-reader 抓不到，需要时只在报告中附链接供人工浏览
 ```
 
-**原始核验与交叉验证**：本步对应三层搜索的「原始核验」。关键数字/时间/结论/高风险判断，优先回到原始来源确认；**至少用 2 个独立来源交叉确认**，冲突无法解决时记录冲突并在 summary 标注（见 summary 节点交叉验证标记规则）。
+**原始核验与交叉验证**：本步对应三层搜索的「原始核验」。关键数字/时间/结论/高风险判断，优先回到原始来源确认；**至少用 2 个独立来源交叉确认**，冲突无法解决时记录冲突并在 summary 标注（见 summary 节点交叉验证标记规则）。**alphaXiv 的 AI blog 由论文自动生成、与原文同源，只能作理解校验（自己读的结论与 blog 对照），不得计入"2 个独立来源"**。
 
 #### 3.3a 生成本轮小结（summarize）
 
@@ -385,6 +397,7 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 | 工具 | 用途 | 关键参数 |
 |------|------|----------|
 | **mcp__web-reader__webReader** | 非 arxiv 网页全文抓取（严禁内置 WebFetch） | url / return_format |
+| **alphaXiv 端点**【v0.6.1】 | 学术深读增强：`/abs/{id}` AI blog 导读（web-reader）+ `/abs/{id}.md` 论文全文（curl） | 无需 key，用法见 3.2b |
 | **AskUserQuestion** | 澄清提问（选项可枚举时） | questions / options |
 | **state_manager.py** | 状态管理（可选，命令行编排用） | Python 模块导入 |
 

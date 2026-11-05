@@ -6,6 +6,8 @@
 
 - flow-deck 0.16.3：按钮与文本的视觉区分（分治策略）——无热键的低密度操作按钮（子代理「查看」、「全文」「‹ 上一节」「下一节 ›」与分页数字、「← 上级」、「主对话」）去掉 `plain`，终端画成 `[ label ]` 括号样式；文件树高密度整行按钮（改动清单、目录行、文件行）保持 `plain` 但主名（路径/文件名/目录名）加下划线（改动行的状态点 `●`/`○` 不下划线）。带热键的按钮（`r: 刷新` 等）与页签行（亮暗对比选中态）维持原样。顺手补齐 codex manifest 漏升的 0.16.2。双 manifest 同步升版 0.16.3。
 
+- work-skills 2.3.1：deep-research 0.6.1 深读层引入 alphaXiv 增强——3.2b 新增两个公开端点（无需 key、不动五通道搜索与既有降级规则）：`alphaxiv.org/abs/{id}` AI paper blog（web-reader 抓取，作 deepxiv 渐进精读前置导读，快速筛选省额度）与 `/abs/{id}.md` 论文全文 markdown（curl 直取，作 deepxiv paper 降级备选，深读降级链扩为 deepxiv paper → alphaXiv .md → arXiv 原页）；交叉验证明确 AI blog 与论文同源、只作理解校验不计入独立来源；社区讨论区为 SPA 抓取不可靠，仅附链接人工浏览。双 manifest 同步升版 2.3.1。
+
 - flow-deck 0.16.0：文件查看器 markdown 图表增强——表格重排为等宽对齐的 Unicode 表格（CJK 按 2 列计宽），mermaid `graph TD` 基本子集（节点与箭头链，含链式声明）自绘为 Unicode 分层流程图（box-drawing 框线 + ▼ 箭头，分层固定点收敛，环内节点保持原层；classDef/style/subgraph 等不支持的语法整体保持代码块原样），`enhanceMarkdown` 管道在渲染前预处理（fenced code 内不处理）。双 manifest 同步升版 0.16.0。
 
 - flow-deck 0.15.0：页签改名与文件查看器浏览交互改造——三个页签更名（工作流→工作面板、文件→文件树、文档→文件查看器，页内标题/返回文案/README 同步）；文件查看器的「浏览」从 Select 下拉改为横向平铺按钮行（「全文」+ 各节标题，flexWrap 自动换行，当前项亮/其余暗），与页签行同款交互；「发给 Claude」与「重读」按钮之间加宽松间距。双 manifest 同步升版 0.15.0。
