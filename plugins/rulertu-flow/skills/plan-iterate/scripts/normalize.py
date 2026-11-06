@@ -29,6 +29,15 @@ def normalize_review(value: Any) -> dict[str, Any]:
         if not isinstance(issue, dict):
             raise ReviewError("each issue must be an object")
         item = dict(issue)
+        # 兜底（异构后端字段漂移，如同批模型输出 priority/problem/location/impact/recommendation
+        # 五段式）：severity←priority、title←problem、suggestion←recommendation，
+        # 仅目标字段缺失且来源为字符串时迁移；来源值合法性仍由下方校验把关。
+        if not isinstance(item.get("severity"), str) and isinstance(item.get("priority"), str):
+            item["severity"] = item.pop("priority")
+        if not isinstance(item.get("title"), str) and isinstance(item.get("problem"), str):
+            item["title"] = item.pop("problem")
+        if "suggestion" not in item and "fix" not in item and isinstance(item.get("recommendation"), str):
+            item["suggestion"] = item.pop("recommendation")
         if "suggestion" not in item and "fix" in item:
             item["suggestion"] = item.pop("fix")
         # 兜底（异构后端字段漂移，如 GLM 输出 evidence/impact/fix 三段式而留空 detail）：

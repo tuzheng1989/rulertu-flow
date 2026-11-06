@@ -117,6 +117,8 @@ def prompt_for(plan: Path, session: str | None, previous: str | None) -> str:
         "核验文件锚点与代码事实；按 P0/P1/P2 报告问题。"
         "规范性基线只用于检查变更是否显式且穿透完整，不因方案面向未来而否决。"
         "输出严格 JSON：overall_quality、0-10 的 score、issues、suggestions。"
+        "issues 每项必须且只能含 severity、title、detail、suggestion 四个字段，"
+        "severity 取值只能是 P0、P1 或 P2。"
         "达到 8.5 分且无 P0/P1 才算通过。"
     )
 
