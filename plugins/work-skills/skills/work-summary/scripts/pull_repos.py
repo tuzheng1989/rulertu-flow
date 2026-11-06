@@ -32,22 +32,29 @@ PROXY = "http://127.0.0.1:7890"
 
 
 def read_repo_list() -> list:
-    """从《研发项目简介.md》解析自研项目目录清单（自研项目两个分组 + evoCenter 自身）。"""
+    """从《研发项目简介.md》解析自研项目目录清单（自研项目两个分组 + evoCenter 自身）。
+
+    说明列含「纯本地仓」的仓库跳过（2026-11-06 用户指示：xd 移出待更新清单）。
+    """
     with open(INTRO_DOC, encoding="utf-8") as f:
         text = f.read()
     m = re.search(r"## 自研项目(.*?)(?=\n## )", text, re.S)
     if not m:
         raise SystemExit(f"未能在 {INTRO_DOC} 中找到「## 自研项目」分组")
     section = m.group(1)
-    repos = set()
+    repos = []
     for line in section.splitlines():
         line = line.strip()
         # 表格行形如 | `EvoSim/` | EvoSim | ... 或 | `evoCenter/` | ...
         mm = re.match(r"^\|\s*`([^`|]+?)/?`\s*\|", line)
         if mm:
-            repos.add(mm.group(1).strip())
-    repos.add("evoCenter")
-    return sorted(repos)
+            repo = mm.group(1).strip()
+            if "纯本地仓" in line:  # 远端失效/无远端，不参与批量拉取
+                print(f"[  local_only] {repo}: 简介文档标注纯本地仓，跳过", file=sys.stderr)
+                continue
+            repos.append(repo)
+    repos.append("evoCenter")
+    return sorted(set(repos))
 
 
 def run_git(repo_path: str, args: list, timeout: int, use_proxy: bool) -> tuple:
