@@ -65,6 +65,21 @@ describe('polling cost and freshness', () => {
     expect((await scan(DISCOVERY_MS))[0]?.name).toBe('new')
   })
 
+  test('只有评审文件的目录也收录：评审脚本协议失败时 state.json 不落盘，面板不能失明', async () => {
+    const scan = createPlanScanner({
+      async list(path) {
+        if (path === undefined) return [entry('.plan-iterate', 'dir')]
+        if (path === '.plan-iterate') return [entry('orphan', 'dir')]
+        return [entry('review-R2.json', 'file')]
+      },
+      async read() { return '{"score":7,"issues":[]}' },
+    })
+    const plans = await scan(0)
+    expect(plans[0]?.name).toBe('orphan')
+    expect(plans[0]?.round).toBe(2)
+    expect(plans[0]?.rounds[0]?.score).toBe(7)
+  })
+
   test('clean git runs only status, backs off, and does not publish timestamp-only changes', async () => {
     const calls: string[][] = []
     const snapshots: (GitStatus | null)[] = []

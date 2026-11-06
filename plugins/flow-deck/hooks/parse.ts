@@ -213,6 +213,11 @@ export function extractRound(fileName: string): number | null {
   return match === null ? null : Number(match[1])
 }
 
+/** 逐轮评分明细行（方案卡历史评分明文）：R1 6.0 · R2 6.5；升序、最多展示最近 8 轮 */
+export function roundScores(rounds: readonly ReviewRound[]): string {
+  return rounds.slice(-8).map(round => `R${round.round} ${round.score.toFixed(1)}`).join(' · ')
+}
+
 /** 按 P0/P1/P2 统计问题数；未知 severity 忽略 */
 export function countIssues(issues: readonly unknown[]): SeverityCounts {
   const counts = { p0: 0, p1: 0, p2: 0 }

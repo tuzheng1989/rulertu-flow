@@ -19,6 +19,7 @@ import {
   parseGhIssues,
   parseSections,
   phaseProgress,
+  roundScores,
   pipelineLinks,
   progressBar,
   scoreGauge,
@@ -469,6 +470,8 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
   const links = pipelineLinks(nodes)
   const done = nodes.filter(node => node.status === 'done').length
   const passing = list.filter(plan => plan.passed)
+  // 当前迭代方案的最新落盘轮次（round 取 state.json 或最新评审轮；未落盘任何轮次时为 0）
+  const iterated = task?.kind === 'iterate' ? list.find(plan => plan.name === task.plan) ?? null : null
   // 无事不扰：达标方案折叠为一行，未达标排前并逐个展示
   const activePlans = [...list].sort((a, b) => Number(a.passed) - Number(b.passed)).filter(plan => !plan.passed)
   const names = new Map(snapshot.agents.map(agent => [agent.id, agent.name || agent.description || agent.id]))
@@ -614,7 +617,12 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
           <Text bold color={TONE.accent} wrap="truncate-end">{MARK.title}工作面板 · {task.kind === 'iterate' ? '方案迭代' : '方案实施'} · </Text>
           <Text bold color={TONE.accent} underline wrap="truncate-end">{task.plan}</Text>
         </Button>
-        {task.kind === 'iterate' && <Text dimColor wrap="truncate-end">评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}</Text>}
+        {task.kind === 'iterate' && (
+          <Text dimColor wrap="truncate-end">
+            {iterated !== null && iterated.round > 0 && <Text dimColor>最新 R{iterated.round}/5 · </Text>}
+            评审 {list.length} · 待达标 {list.length - passing.length} · 已达标 {passing.length}
+          </Text>
+        )}
         {task.kind === 'implement' && graph !== null && <Text dimColor wrap="truncate-end">批次 {done}/{nodes.length} 收口</Text>}
       </Box>
       {task.kind === 'iterate' && list.length === 0 && <Text dimColor>方案迭代进行中，等待评审结果落盘。</Text>}
@@ -673,6 +681,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
                 {delta !== null && <Text color={delta > 0 ? TONE.ok : delta < 0 ? TONE.bad : undefined}> {delta > 0 ? '↑' : delta < 0 ? '↓' : '='}{Math.abs(delta).toFixed(1)}</Text>}
               </Text>
             )}
+            {plan.rounds.length > 0 && <Text dimColor wrap="truncate-end">{roundScores(plan.rounds)}</Text>}
             <Text wrap="truncate-end">
               {latest === null && <Text dimColor>暂无已落盘的评审结果</Text>}
               {latest !== null && latest.p0 > 0 && <Text color={TONE.bad}>P0×{latest.p0} </Text>}

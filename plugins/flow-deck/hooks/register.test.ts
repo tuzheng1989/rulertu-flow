@@ -463,6 +463,7 @@ describe('pane', () => {
     })
     expect(await ui.find({ text: /✓ 已达标 1 个方案（已折叠）/ })).not.toBeUndefined()
     expect(await ui.find({ text: /● demo/ })).toBeUndefined()
+    expect(await ui.find({ text: /最新 R2\/5 · 评审 1 · 待达标 0 · 已达标 1/ })).not.toBeUndefined()
     await ui.unmount()
   })
 
@@ -476,14 +477,16 @@ describe('pane', () => {
     on('store.get', () => ({ value: undefined }))
     const files = new Map<string, string>([
       ['.plan-iterate/beta/state.json', '{"backend":"glm","round":3}'],
+      ['.plan-iterate/beta/review-R2.json', '{"score":6.5,"issues":[{"severity":"P1"}]}'],
       ['.plan-iterate/beta/review-R3.json', '{"score":6.8,"issues":[{"severity":"P1"}]}'],
     ])
     const dirs = new Map<string, Array<{ name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }>>([
       ['', [{ name: '.plan-iterate', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]],
       ['.plan-iterate', [{ name: 'beta', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]],
       ['.plan-iterate/beta', [
+        { name: 'review-R2.json', kind: 'file', size: 44, mtimeMs: 1, isLink: false },
         { name: 'review-R3.json', kind: 'file', size: 44, mtimeMs: 2, isLink: false },
-        { name: 'state.json', kind: 'file', size: 28, mtimeMs: 1, isLink: false },
+        { name: 'state.json', kind: 'file', size: 28, mtimeMs: 0, isLink: false },
       ]],
     ])
     const relOf = (value: unknown): string => {
@@ -503,6 +506,8 @@ describe('pane', () => {
     })
     expect(await ui.find({ text: /● beta/ })).not.toBeUndefined()
     expect(await ui.find({ type: 'Text', text: '━━━━━━━──▏─' })).not.toBeUndefined()
+    expect(await ui.find({ text: 'R2 6.5 · R3 6.8' })).not.toBeUndefined()
+    expect(await ui.find({ text: /最新 R3\/5 · 评审 1 · 待达标 1 · 已达标 0/ })).not.toBeUndefined()
     await ui.unmount()
   })
 

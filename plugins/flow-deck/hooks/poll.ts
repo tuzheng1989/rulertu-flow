@@ -67,7 +67,9 @@ export function createPlanScanner(fs: {
           const files = (await fs.list(dir))
             .filter(file => file.kind === 'file' && (file.name === 'state.json' || extractRound(file.name) !== null))
             .sort((a, b) => a.name.localeCompare(b.name))
-          if (!files.some(file => file.name === 'state.json')) continue
+          // 有 state.json 或任意评审 JSON 即收录：评审脚本协议失败（如字段漂移被拒）时
+          // state.json 不会落盘，评审文件仍在——面板不能因此对迭代中的方案失明
+          if (files.length === 0) continue
           const stamps = files.map(file => [file.name, file.mtimeMs, file.size])
           const signature = JSON.stringify(stamps)
           const cached = cache.get(dir)

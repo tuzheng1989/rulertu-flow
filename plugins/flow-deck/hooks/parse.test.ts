@@ -39,6 +39,7 @@ import {
   parsePorcelain,
   parseReviewJson,
   parseStateJson,
+  roundScores,
   sparkline,
   selectTaskView,
 } from './parse'
@@ -270,6 +271,18 @@ describe('parse', () => {
     expect(extractRound('review-R12.json')).toBe(12)
     expect(extractRound('state.json')).toBe(null)
     expect(extractRound('review-R1.log')).toBe(null)
+  })
+
+  test('roundScores 拼逐轮评分明细，升序且只留最近 8 轮', () => {
+    expect(roundScores([])).toBe('')
+    expect(roundScores([
+      { round: 1, score: 6, p0: 0, p1: 0, p2: 0 },
+      { round: 2, score: 6.5, p0: 0, p1: 1, p2: 0 },
+    ])).toBe('R1 6.0 · R2 6.5')
+    const twelve = Array.from({ length: 12 }, (_, i) => ({ round: i + 1, score: 5 + i * 0.1, p0: 0, p1: 0, p2: 0 }))
+    expect(roundScores(twelve)).toBe(
+      'R5 5.4 · R6 5.5 · R7 5.6 · R8 5.7 · R9 5.8 · R10 5.9 · R11 6.0 · R12 6.1',
+    )
   })
 
   test('countIssues 按 P0/P1/P2 统计，未知 severity 忽略', () => {
