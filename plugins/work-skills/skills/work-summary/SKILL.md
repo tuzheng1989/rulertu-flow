@@ -42,6 +42,12 @@ python {baseDir}/scripts/collect.py --start 2026-01-01 --end 2026-02-01 --summar
 python {baseDir}/scripts/collect.py --days 7 --repos D:/work -o data.json
 ```
 
+总结前需要拉取最新代码时，运行 `scripts/pull_repos.py` 批量拉取自研仓库。脚本从 `D:/runspace/evoCenter/研发项目简介.md` 的「自研项目」分组读清单（参考仓库不拉），单仓独立超时、失败自动重试、代理/直连双通道、24h 缓存跳过已最新仓库；只拉不推（ff-only 合并，分叉显式报错）。结果 JSON 含 updated/unchanged/local_ahead/diverged/failed 分类，失败仓库须如实注明而非略过。
+
+```bash
+python {baseDir}/scripts/pull_repos.py --json pull_result.json   # --force 强制全量，--timeout 40 单仓超时
+```
+
 `--start` 和 `--end` 接受本地 ISO 日期或日期时间，终点不含；`--days` 是截至现在的 N 个 24 小时。`--summarize` 从完整会话抽取首段、成果候选和里程碑，能减少上下文，但它不是经过验证的总结：首段未必是复述，最长尾段未必是成果，完整会话还可能跨越窗口。对重要结论、日期和状态回查原始会话或其他证据，不能把窗口外成果算入本期。Git 记录按作者时间筛选，默认包含各作者；个人贡献须结合证据判断。Codex 项目归属可查 rollout 的 `session_meta.cwd`；工作台项目 `evoCenter` 按会话拆分，文档工作保留文档名。同一项目的不同目录名称需辨认后合并。
 
 对于月度及更长周期、或资料无法舒适放入上下文时，读取 [分尺度融合](references/multiscale.md)，按子窗口逐层处理；不要直接把全部采集 JSON 一次放入上下文。短周期也可在资料量大时使用该流程。
