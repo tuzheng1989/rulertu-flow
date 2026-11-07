@@ -21,9 +21,10 @@
 
 - `maintenance_grants` 的 `resource` 直存完整 resolved 形（含 `implementation`），
   审查授权不必回查快照反查五元组。
-- `external_call_started` 事件载荷**恒带** `response_format` 留证键——业务步为
-  wire 实发的 `{"type": "json_schema", "json_schema": {...}}`，平凡 schema 步
-  为 `null` 也带键，request_hash 的覆盖面在留证侧可复核。
+- `external_call_started` 事件载荷**恒带** `response_format` 与 `tools` 两个
+  留证键——业务步为 wire 实发的 `{"type": "json_schema", "json_schema": {...}}`，
+  平凡 schema 步为 `null` 也带键；`tools` 同样恒在场（recall 工具 wire 定义
+  上线起，request_hash 的覆盖面在留证侧可复核）。
 
 **版本兼容**：v2 冻结产物被 v3 运行时加载即明确拒绝（报错文案指引以
 `schema_version: 2` 的 flow 源重新冻结）；存量 v2/v1 证据 bundle 核验按

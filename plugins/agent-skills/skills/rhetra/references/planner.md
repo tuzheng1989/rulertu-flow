@@ -43,12 +43,15 @@ definition = plan_flow(
     resources="cases/civil-rescue/snapshot-offline.json",  # ResourceSnapshot | dict（必传）
     planner_model="rescue-planner",   # 显式指定：走快照公开 resolve（"== 点名能力"）
     hints={"偏好": "优先小机型"},       # 可选 dict：进 prompt 文本，须可 JSON 序列化
+    retriever=None,                   # 可选 ResourceRetriever：规划期资源菜单检索（缺省全量）
     work_dir="planner_drafts",        # Draft 落 <work_dir>/planner/
 )
 # definition 是普通 FlowDefinitionV1：可直接 run_flow(definition, ...)
 result = run_flow(definition, input=..., resources=..., work_dir=..., mode=...)
 ```
 
+- `retriever`（`ResourceRetriever`）：仅用于规划期的资源菜单——先检索裁剪再进
+  规划上下文（缺省全量菜单）。
 - Draft 文件：`<work_dir>/planner/<UTC时间戳>Z-<uuid8>.json`，先建 `plan_id`
   骨架、try/finally 保证任何终止路径原子落盘。
 - 规划内部有草案环：产出须过 `load_flow_value` 校验 + 选择器预检，不合法会

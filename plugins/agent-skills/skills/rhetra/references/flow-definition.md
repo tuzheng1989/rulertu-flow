@@ -22,6 +22,23 @@ outputs: {...}               # 输出装配：引用哪些 step 输出的哪些�
 不支持任意标签等危险构造。JSON 是合法输入（`load_flow` 对 JSON/YAML 同源处理；
 `FlowDefinitionV1` 经 `model_dump` 序列化为 JSON 文本即是合法 flow 源）。
 
+## 顶层 context 块（可选）
+
+```yaml
+context:
+  mode: continuous           # continuous（默认）| isolated
+  system: ...                # str | null
+  compaction: {...}          # CompactionPolicy：容量压力自动压缩策略
+  recall: {...}              # RecallPolicy：回查策略（含 max_read_tokens_total，默认 20000；冻结契约 v3 新增字段）
+```
+
+- `mode: continuous`（默认）下，串行路径的后继 LLM step 实际请求继承此前
+  步骤的回复原文与执行观察（消息历史继承）；`isolated` 则各步独立。
+- 上下文接近窗口预算时自动压缩：生成六要素摘要，维护成本单列。
+- **方向 C 边界（2026-11-06 裁决）**：被压缩原文不可经 `context_read` 回查——
+  读取拒绝并指明压缩摘要为权威内容，压缩摘要即最终上下文；回查协议面保留为
+  未来扩展点。
+
 ## 三类 Step
 
 每个 step 公共字段：`id` / `type` / `description` / `required` / `inputs` /

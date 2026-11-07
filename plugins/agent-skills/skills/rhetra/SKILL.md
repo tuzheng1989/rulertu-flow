@@ -9,7 +9,7 @@ description: Rhetra-Harness Python 包使用指南（调用级 Agent Harness：�
 编排 LLM 与 Tool 调用：版本化 Flow 固定流程，每次执行映射回图中的步骤，并提供
 冻结执行契约与逐调用证据。
 
-**版本锚点**：本文档基于 rhetra 0.1.0（2026-09，M3「可导入包最小闭环」）。
+**版本锚点**：本文档基于 rhetra 0.2.0（2026-11）。
 源码与可运行样例在 GitHub 仓库 `tuzheng1989/rhetra-harness`（安装渠道见
 [[references/quickstart.md]]）；API 以其 `rhetra/__init__.py` 的 `__all__`
 （27 符号）为 0.x 兼容承诺。若包行为与本文档冲突，以源码为准并更新本技能。
@@ -71,6 +71,7 @@ description: Rhetra-Harness Python 包使用指南（调用级 Agent Harness：�
 | 概念 | 说明 | 载体 |
 |------|------|------|
 | **版本化 Flow** | flow.yaml 声明执行图：三类 Step + 五类 transition + 输入输出 schema | `flow.yaml`（受限 YAML 子集） |
+| **context 块** | 串行路径 LLM 步的消息历史继承 + 容量压力自动压缩 | `flow.yaml` 顶层 `context:`（可选） |
 | **资源快照** | Step 选择器（operation/tool/model）的版本与实现清单 | `snapshot.json`（entries 列表） |
 | **冻结执行契约** | 执行前 preflight：归一化 → 选择器解析 → 契约冻结（含 hash 身份） | `build_frozen_execution` / `frozen.json` |
 | **证据账本** | 每次调用逐事件落盘、manifest 封口、可机械核验 | Evidence Bundle（`events.jsonl` 等） |
@@ -102,7 +103,7 @@ ValueError / SecretResolutionError / 证据持久化 OSError）从 `run_flow` �
 |------|------|--------|
 | [[references/quickstart.md]] | 安装、CLI 五命令、最小 Python 闭环、退出码、异常面 | 优先：任何场景先读 |
 | [[references/flow-definition.md]] | flow.yaml 全结构、Step/transition/引用语法、快照结构 | 场景 B |
-| [[references/python-api.md]] | 24 个公开符号逐个说明、RunResult/EvidenceHandle | 场景 A |
+| [[references/python-api.md]] | 27 个公开符号逐个说明、RunResult/EvidenceHandle | 场景 A |
 | [[references/planner.md]] | task 语法糖、plan_flow、Draft、save_flow | 场景 C |
 | [[references/evidence.md]] | Bundle 结构、verify、溢出产物、viewer、离线替身与测试纪律 | 场景 D |
 

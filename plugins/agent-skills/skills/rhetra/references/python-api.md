@@ -4,7 +4,7 @@
 
 ## 1. 执行入口
 
-### `run_flow(flow=None, *, task=None, input=None, resources=None, work_dir="evidence", mode="auto") -> RunResult`
+### `run_flow(flow=None, *, task=None, input=None, resources=None, work_dir="evidence", mode="auto", retriever=None) -> RunResult`
 
 顶层便捷入口，固定走全流程、不跳审查：归一化 → `build_frozen_execution` →
 `InvocationRunner.run`。
@@ -17,6 +17,8 @@
 - `work_dir`：证据落盘根，**恒落盘不接受 None**。
 - `mode`：`"auto"`（真实 adapter，缺凭据/依赖 fail closed）| `"offline"`（确定性
   替身）。mode 在任何资源装配前校验。
+- `retriever`：`ResourceRetriever | None`，仅 `task` 形态生效——规划期资源菜单
+  检索（缺省全量）；显式 flow 形态传入 → `UsageError`。
 
 异常面见 [[quickstart.md]]：准入失败异常外显，不进 RunResult。
 
@@ -89,6 +91,15 @@
 | 符号 | 说明 |
 |------|------|
 | `ResourceSnapshot` | 快照模型：`model_validate(dict)` 构造；`.entries` / `.resolve(kind, id, constraint)` 公开解析 |
+| `inline_models(models: list[dict], *, existing: ResourceSnapshot \| list[ResourceEntry] \| None = None) -> ResourceSnapshot` | dict 列表 → 版本化快照 helper：逐条校验，全部问题累积一次抛 `InlineModelsError`（不产部分快照）；同 `(kind, id, version)` 同内容幂等去重、异内容 fail closed；entries 按 `(kind, id, version)` 排序，同输入两次调用 `model_dump` 逐字节相等 |
+| `ResourceRetriever` | 资源检索协议（`retrieve(query, candidates)`）：仅用于 task 规划期的资源菜单裁剪（缺省全量） |
+| `ResourceCandidate` | 检索候选项（`ResourceRetriever.retrieve` 的候选单元） |
+
+`inline_models` 的 `existing` 传入既有快照/条目时，作为幂等去重的比对基底。
+
+`rhetra[retrieval]` optional extra 提供基于 agent-retrieval 包的现成实现
+`AgentRetrievalRetriever`（`rhetra.adapters.agent_retrieval`）：安装 extra 不
+自动开启，须显式注入 `run_flow(task=...)` / `plan_flow` 的 `retriever` 参数。
 
 ## 7. Viewer
 
@@ -101,7 +112,7 @@
 
 | 符号 | 说明 |
 |------|------|
-| `plan_flow(task, *, resources, planner_model=None, hints=None, work_dir="planner_drafts") -> FlowDefinitionV1` | 见 [[planner.md]] |
+| `plan_flow(task, *, resources, planner_model=None, hints=None, retriever=None, work_dir="planner_drafts") -> FlowDefinitionV1` | 见 [[planner.md]]；`retriever` 仅用于规划期资源菜单检索（缺省全量） |
 | `PlannerError(stage, code, message)` | 规划失败（选模/装配/重试耗尽） |
 
 ## 9. 异常
