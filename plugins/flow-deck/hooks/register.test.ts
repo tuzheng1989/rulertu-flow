@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
-import { describeExecution } from './register'
+import { clipboardArgv, describeExecution, envPlatform } from './register'
 import { creatureFrames } from './parse'
 import type { AgentSnapshot, GitStatus } from '../types'
 
@@ -361,6 +361,33 @@ describe('pane', () => {
       plan: 'demo', batch: 'B2', phase: '收口', updatedAt: 0,
       closure: { files: 1, added: 1, removed: 1, minutes: 1, statsAt: Date.now() },
     })).toMatch(/统计截至 \d{2}:\d{2}$/)
+  })
+
+  test('clipboardArgv 平台命令表：win32 锁编码链与 ReadToEnd 保真口径，darwin/linux 直用系统命令，未适配返回 null', () => {
+    // win32：显式设 UTF8 输入编码 + ReadToEnd 单串（clip.exe 会被 OEM 代码页误解码中文、$Input 逐行
+    // 管道会把行尾归一成 CRLF，均不可用）——锁死命令全文防误改回任一劣化口径
+    const win = clipboardArgv('win32')
+    expect(win?.slice(0, 3)).toEqual(['powershell.exe', '-NoProfile', '-Command'])
+    expect(win?.[3]).toContain('[Console]::InputEncoding=[System.Text.Encoding]::UTF8')
+    expect(win?.[3]).toContain('Set-Clipboard -Value ([Console]::In.ReadToEnd())')
+    // darwin / linux：系统自带命令
+    expect(clipboardArgv('darwin')).toEqual(['pbcopy'])
+    expect(clipboardArgv('linux')).toEqual(['xclip', '-selection', 'clipboard'])
+    // 未适配平台：null → 按钮路径 toast 报错不抛
+    expect(clipboardArgv('freebsd')).toBeNull()
+  })
+
+  test('envPlatform 环境变量推断平台：OS=Windows_NT 判 win，HOME 前缀判 mac/linux，余者未适配', () => {
+    // Windows 恒有 OS=Windows_NT（引擎沙箱无 process 全局，环境变量是唯一平台信号）
+    expect(envPlatform({ OS: 'Windows_NT' })).toBe('win32')
+    expect(envPlatform({ OS: 'Windows_NT', HOME: 'C:\\Users\\tu' })).toBe('win32')
+    // mac 的 HOME 以 /Users/ 开头；Linux 为 /home/<user> 或 /root
+    expect(envPlatform({ HOME: '/Users/tu' })).toBe('darwin')
+    expect(envPlatform({ HOME: '/home/tu' })).toBe('linux')
+    expect(envPlatform({ HOME: '/root' })).toBe('linux')
+    // 未知环境（OS 缺失且 HOME 形态不识别）→ 未适配
+    expect(envPlatform({})).toBe('other')
+    expect(envPlatform({ HOME: '/opt/somewhere' })).toBe('other')
   })
 
   test('空态面包屑：跨会话恢复的上次执行显示在无任务面板', async ($, on) => {
@@ -1672,6 +1699,147 @@ describe('pane', () => {
     await ui.unmount()
   })
 
+  test('doc 复制全文：c 把 doc.text 原文经 stdin 送剪贴板命令并 toast 确认', async ($, on) => {
+    const clock = mock.clock(on)
+    const body = '# 计划\n中文正文\n\n末行'
+    const files = new Map<string, string>([['docs/plan.md', body]])
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      return norm.includes('docs/plan.md') ? 'docs/plan.md' : norm
+    }
+    on('fs.read', ($, e) => {
+      const rel = relOf(e.path)
+      if (!files.has(rel)) throw new Error('ENOENT: ' + String(e.path))
+      return { value: files.get(rel) }
+    })
+    // 引擎沙箱无 process 全局，实现走 env.get 推断平台；测试沙箱同样无 process，用 win32 字面量
+    on('env.get', ($, e) => ({ value: e.name === 'OS' ? 'Windows_NT' : 'C:\\Users\\tu' }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.close', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    const toasts: string[] = []
+    on('ui.toast', ($, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    const runs: Array<{ argv: string[]; stdin?: string; timeoutMs?: number }> = []
+    const clip = clipboardArgv('win32') as string[]
+    on('process.run', ($, e) => {
+      const argv = e.argv ?? []
+      const init = (e.init ?? {}) as { stdin?: string; timeoutMs?: number }
+      runs.push({ argv, stdin: init.stdin, timeoutMs: init.timeoutMs })
+      return { value: { exitCode: argv[0] === clip[0] ? 0 : 128, stdout: '', stderr: '' } }
+    })
+    await $.command.run({ command: 'deck', args: 'doc docs/plan.md' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('文档浏览'),
+    })
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons.some(button => button.props.key === 'doc-copy')).toBe(true)
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-copy', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    const copyRun = runs.find(run => run.argv[0] === clip[0])
+    expect(copyRun).not.toBeUndefined()
+    expect(copyRun?.argv).toEqual(clip)
+    // 数据源是 doc.text 原文（非 enhanceMarkdown 渲染增强文本）
+    expect(copyRun?.stdin).toBe(body)
+    expect(copyRun?.timeoutMs).toBe(5000)
+    expect(toasts.some(text => text.includes('已复制全文'))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('doc 复制全文：剪贴板命令非零退出时 toast 失败、不报成功', async ($, on) => {
+    const clock = mock.clock(on)
+    const body = '# 标题\n正文'
+    const files = new Map<string, string>([['docs/plan.md', body]])
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      return norm.includes('docs/plan.md') ? 'docs/plan.md' : norm
+    }
+    on('fs.read', ($, e) => {
+      const rel = relOf(e.path)
+      if (!files.has(rel)) throw new Error('ENOENT: ' + String(e.path))
+      return { value: files.get(rel) }
+    })
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.close', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    const toasts: string[] = []
+    on('ui.toast', ($, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('env.get', ($, e) => ({ value: e.name === 'OS' ? 'Windows_NT' : 'C:\\Users\\tu' }))
+    const runs: string[][] = []
+    const clip = clipboardArgv('win32') as string[]
+    on('process.run', ($, e) => {
+      const argv = e.argv ?? []
+      runs.push(argv)
+      return { value: { exitCode: argv[0] === clip[0] ? 1 : 128, stdout: '', stderr: 'boom' } }
+    })
+    await $.command.run({ command: 'deck', args: 'doc docs/plan.md' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('文档浏览'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-copy', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    // 命令确实发出且 stdin 仍送全文
+    expect(runs.some(argv => argv[0] === clip[0])).toBe(true)
+    expect(toasts.some(text => text.includes('复制失败'))).toBe(true)
+    expect(toasts.some(text => text.includes('已复制全文'))).toBe(false)
+    await ui.unmount()
+  })
+
+  test('doc 复制全文：剪贴板命令抛异常（如 linux 无 xclip）落 catch 分支 toast 失败', async ($, on) => {
+    const clock = mock.clock(on)
+    const body = '# 标题\n正文'
+    const files = new Map<string, string>([['docs/plan.md', body]])
+    const relOf = (value: unknown): string => {
+      const norm = typeof value === 'string' ? value.replaceAll('\\', '/') : ''
+      return norm.includes('docs/plan.md') ? 'docs/plan.md' : norm
+    }
+    on('fs.read', ($, e) => {
+      const rel = relOf(e.path)
+      if (!files.has(rel)) throw new Error('ENOENT: ' + String(e.path))
+      return { value: files.get(rel) }
+    })
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.close', () => ({ value: undefined }))
+    const logs: string[] = []
+    on('ui.log', ($, e) => {
+      logs.push(e.text)
+      return { value: undefined }
+    })
+    const toasts: string[] = []
+    on('ui.toast', ($, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('env.get', ($, e) => ({ value: e.name === 'OS' ? 'Windows_NT' : 'C:\\Users\\tu' }))
+    const clip = clipboardArgv('win32') as string[]
+    on('process.run', ($, e) => {
+      const argv = e.argv ?? []
+      if (argv[0] === clip[0]) throw new Error('spawn xclip ENOENT')
+      return { value: { exitCode: 128, stdout: '', stderr: '' } }
+    })
+    await $.command.run({ command: 'deck', args: 'doc docs/plan.md' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('文档浏览'),
+    })
+    await $.ui.press({ plugin: 'flow-deck', key: 'doc-copy', requestId: 'deck', surface: 'terminal' })
+    await clock.settle()
+    expect(toasts.some(text => text.includes('复制失败'))).toBe(true)
+    expect(toasts.some(text => text.includes('已复制全文'))).toBe(false)
+    expect(logs.some(text => text.includes('flow-deck 复制全文异常'))).toBe(true)
+    await ui.unmount()
+  })
+
   test('doc 节内容以 Markdown 渲染，终端与桌面均通过引擎校验', async ($, on) => {
     const clock = mock.clock(on)
     const files = new Map<string, string>([['docs/plan.md', '# 一\n正文一\n## 二\n正文二']])
@@ -1916,6 +2084,8 @@ describe('pane', () => {
     expect(await ui.find({ text: /无未提交变更（快照可能已过期）/ })).not.toBeUndefined()
     const buttons = await ui.findAll({ type: 'Button' })
     expect(buttons.some(button => button.props.key === 'doc-view-file')).toBe(true)
+    // diff 视图不提供复制全文（决策边界：复制按钮只在全文视图操作行）
+    expect(buttons.some(button => button.props.key === 'doc-copy')).toBe(false)
     await ui.unmount()
   })
 

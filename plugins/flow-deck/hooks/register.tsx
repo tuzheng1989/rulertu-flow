@@ -58,6 +58,8 @@ const TOUCHED_CAP = 50
 const POLL_MS = 2000
 const GIT_POLL_MS = 5000
 const GIT_TIMEOUT_MS = 5000
+/** 剪贴板命令超时：PowerShell 冷启动 1–2s、常规文档 stdin 传输毫秒级，与 GIT_TIMEOUT_MS 同量级 */
+const CLIPBOARD_TIMEOUT_MS = 5000
 /** GitHub Issues 轮询周期：issue 变化慢，不随 2s 主轮询；仅面板可见时拉取（D14） */
 const GH_ISSUE_POLL_MS = 60_000
 /** 呼吸节拍周期（ms）：呼吸与小生物共用单一 clock（B2 条目 1/5）；硬编码不做配置，观察期后再议 */
@@ -390,6 +392,56 @@ async function runGit($: EngineInterface, args: readonly string[]): Promise<stri
 /** 一个 git 文件行的显示文案；rename 显示 old → new */
 function gitFileLabel(file: { path: string; oldPath?: string }): string {
   return file.oldPath === undefined ? file.path : `${file.oldPath} → ${file.path}`
+}
+
+/**
+ * 平台剪贴板写命令表（文本经 stdin 管道送入，UTF-8）：win32 走 PowerShell 显式设输入编码后
+ * ReadToEnd 单串进剪贴板（clip.exe 会被 OEM 代码页误解码 UTF-8 中文；$Input 逐行管道会把行尾
+ * 归一成 CRLF，均不可用）；darwin 用 pbcopy；linux 用 xclip（不做 wl-copy 回退，缺命令时失败
+ * toast 报错）；其余平台返回 null。纯函数：平台参数化，三平台单测不依赖真机。
+ */
+export function clipboardArgv(platform: string): string[] | null {
+  if (platform === 'win32') {
+    return ['powershell.exe', '-NoProfile', '-Command',
+      '[Console]::InputEncoding=[System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())']
+  }
+  if (platform === 'darwin') return ['pbcopy']
+  if (platform === 'linux') return ['xclip', '-selection', 'clipboard']
+  return null
+}
+
+/** 引擎沙箱无 process 全局，平台从环境变量推断：Windows 恒有 OS=Windows_NT；mac 的 HOME
+ *  以 /Users/ 开头（Linux 为 /home/<user> 或 /root）；余者未适配。纯函数便于三平台单测 */
+export function envPlatform(env: { OS?: string; HOME?: string }): string {
+  if (env.OS === 'Windows_NT') return 'win32'
+  if (typeof env.HOME === 'string' && env.HOME.startsWith('/Users/')) return 'darwin'
+  if (typeof env.HOME === 'string' && (env.HOME.startsWith('/home/') || env.HOME === '/root')) return 'linux'
+  return 'other'
+}
+
+/** 把文本写入系统剪贴板（引擎无原生剪贴板 API，唯一路径是平台命令 + stdin）；成功/失败 toast，细节进调试日志 */
+async function copyTextToClipboard($: EngineInterface, text: string): Promise<void> {
+  try {
+    const env: { OS?: string; HOME?: string } = {
+      OS: await $.env.get('OS'),
+      HOME: await $.env.get('HOME'),
+    }
+    const argv = clipboardArgv(envPlatform(env))
+    if (argv === null) {
+      $.ui.toast('复制失败：当前平台未适配剪贴板命令')
+      return
+    }
+    const result = await $.process.run(argv, { stdin: text, timeoutMs: CLIPBOARD_TIMEOUT_MS })
+    if (result.exitCode !== 0) {
+      $.ui.toast(`复制失败：剪贴板命令退出码 ${result.exitCode}`)
+      $.ui.log(`flow-deck 复制全文失败：exit ${result.exitCode} stderr=${result.stderr}`, { to: 'debug' })
+      return
+    }
+    $.ui.toast(`已复制全文（${text.length} 字符）`)
+  } catch (error) {
+    $.ui.toast('复制失败：剪贴板命令不可用或执行出错')
+    $.ui.log(`flow-deck 复制全文异常：${String(error)}`, { to: 'debug' })
+  }
 }
 
 /** 一轮扫描：更新面板数据、对新落盘轮次发 toast、刷新 statusline */
@@ -914,6 +966,7 @@ const renderDocBody = async ($: EngineInterface, e: PaneArgs) => {
       </Box>
       <Box gap={2}>
         <Button key="doc-send" hotkey="e" variant="primary" onPress={() => { void sendEdit() }}>发给 Claude</Button>
+        <Button key="doc-copy" onPress={() => { void copyTextToClipboard($, doc.text) }}>复制全文</Button>
         {changeState !== null && <Button key="doc-view-diff" onPress={viewDiff}>查看变更</Button>}
         <Button key="doc-reload" hotkey="r" plain onPress={reload}>重读</Button>
       </Box>
