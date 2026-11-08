@@ -1,6 +1,6 @@
 # 主入口 rank_candidates 与语料投影 - agent-retrieval
 
-> 对应库版本：agent-retrieval 0.1.0（2026-09-25）。0.x 系列 API 可能调整，使用前核对
+> 对应库版本：agent-retrieval 0.2.0（2026-11-08）。0.x 系列 API 可能调整，使用前核对
 > `pip show agent-retrieval` 的版本与随包 CHANGELOG。
 
 ## 主入口签名
@@ -44,6 +44,22 @@ def corpus_text(t: Tool) -> str:
 1. **检索面与判定面同语料**：同一个 `corpus` 函数既喂 BM25 索引又喂向量路，检索证据与准入证据口径一致；
 2. **正文是否进语料是调用方的权限决策**：索引语料一旦含正文，正文里的噪声词就获得了抬分能力——正文召回与噪声抬分是同一枚硬币的两面。需要正文召回时用 `ResourceBM25Index` 的双面结构（见 [[bm25-internals.md]]）；
 3. **语料一旦定下，轻易别改**：语料文本进入向量快照的 hash（见 [[redis-snapshots.md]]），改语料 = 全量重嵌。
+
+### 声明式投影 CorpusProjection（0.2.0+，core）
+
+除了手写 lambda，语料投影有声明式形态——逐字段 `getattr`、过滤空 part、`separator` 拼接，`to_callable()` 产出可直接消费的投影函数：
+
+```python
+from agent_retrieval import CorpusProjection
+
+projection = CorpusProjection(fields=("id", "name", "description"))   # separator 默认 " "
+hits = rank_candidates(tools, query, corpus_text=projection.to_callable(),
+                       item_id=lambda t: t.id)
+```
+
+双形态条款（ADR-0001）：**声明式为默认**——`fields` 是字段名元组，天然可 JSON（宿主自行 `json.dumps(list(projection.fields))` 写进配置文档，包内不设序列化 API）；**callable 逃生口保留**——`corpus_text` 参数签名不变，函数投影照用。`fields` 为空或含空串构造即抛 `ValueError`；字段缺失由 `getattr` 在调用时抛 `AttributeError`；全字段皆空返回空串不抛。
+
+该组件也是 doc2query-- 分离的钩子：docgen 扩展经 `agent_retrieval.expansion.docgen_corpus_text` 只骑在检索面上（见 [[config-selection.md]]），判定/准入证据仍取自基础投影——检索线索与身份声明不同口径。
 
 ## 最小接入示例（L0 纯 BM25）
 

@@ -46,8 +46,10 @@ docgen 后 SkillRet 的向量路完全冗余（纯 BM25 全面反超 plain fusio
 
 ### doc2query（docgen）——描述短或术语重时优先
 - 每资源离线生成 3–5 条口语化问句，**只拼进检索面**（doc2query-- 原则）；判定证据（`declared=` 投影）保持原字段——生成文本是召回线索，不是资源的身份声明。
+- 0.2.0 起库内有一等客户端（`[docgen]` extra）：`DocGenClient`（`complete` 通用基元 + `generate` doc2query 封装）、`build_docgen` 工厂（缺 base_url/api_key 返 `None` = 未启用，语义对齐 `build_embedder`）、`docgen_corpus_text`（包装基础投影，扩展只骑在检索面上——正是 doc2query-- 分离的钩子）、`parse_generated_queries`。
+- 接线口径：`DocGenConfig.identity()`（model/api 风格/每资源问题数）**未接入**语料 `corpus_hash`——内容寻址只哈希语料文本，生成后的语料文本实际变化时才产生新哈希、自动重嵌；配置变化不一定改变输出。
 - 关掉/跳过的时机：文档本就词汇丰富（ToolRet 型）且只关心深位召回。
-- 模型坑：推理型模型（GLM-4.5/5.3）的 thinking token 计入 max_tokens，预算 500 会把正文**静默挤空**（finish_reason=length）——关 thinking 或预算 ≥2000。
+- 模型坑：推理型模型（GLM-4.5/5.3）的 thinking token 计入 max_tokens，预算 500 会把正文**静默挤空**（finish_reason=length）——关 thinking 或预算 ≥2000（库内客户端已固化：chat 分支显式 `"thinking": {"type": "disabled"}` + max_tokens 2000，responses 分支 `reasoning: {"effort": "minimal"}`）。
 - 生成结果与资源绑定持久化；语料变更的重嵌由内容寻址快照自动处理。
 
 ### 向量路——异构/术语密集域保留，短声明面域可砍
@@ -61,6 +63,15 @@ docgen 后 SkillRet 的向量路完全冗余（纯 BM25 全面反超 plain fusio
 - 已知边界：Jev 置信度 ≠ "gold 在窗口内"（任何部分相关候选都会拉高分数）——别拿它当召回失败的触发器。
 - 每候选 description 截断 ~2000 字符——长尾文档会撑爆 System One 输入预算（HTTP 400）。
 
+#### 题型两档并存（#13/#14/#15 三票预注册实验终局，0.2.0 落配置面）
+
+- **noul（默认）**："能否执行任务所需的一个具体步骤"，二元概率——硬 recall 下限场景维持。
+- **score 量规 + P(3) 折叠**：4 档量规（0 无关 / 1 仅主题 / 2 部分覆盖 / 3 直接覆盖），排序标量 = P(第 3 档"直接覆盖")——**分级排序消费处**（MRR/NDCG）选用。三独立样本 NDCG@10 **+0.028 / +0.030 / +0.042**（CI 下界全 > 0，无衰减），成本 ~1.4× input tokens。
+- **机制结论**：量规的排序信息**几乎全部在第 3 档**——含第 2 档的折叠从稀释（期望分 +0.026 量级）到主动有害（P(≥2)：−0.05，CI 全负，三样本复现）。期望与 P(≥2) 折叠不再重访。
+- **准入红线**：任何判定读数（noul 概率或 P(3)）**不得单独作准入闸**——端点对纯问候语稳定给 P(3)=0.96（三连复现，noul 同样拦不住全部无任务文本）。准入配 `clearly_related` 式声明面证据。
+- **量化噪声背景**：端点概率 0.01 量化、同臂重跑抖动 0.02–0.05（judge_parity 实测）——判定阈值校准与"微差异"判读以此为底座，0.02 量级的点估计差异在噪声带内。
+- 组件编排（Judge 端口 / select_with_judge / 两实现取舍）见 [[judges.md]]。
+
 ### Cross-encoder reranker API——通路已验证，模型需自验
 - 客户端与两段臂是生产形态（稀疏对齐、退避重试、常量分检测）；已测唯一端点（paratera GLM-Rerank）恒返 1.0，判定无效。**信任何 reranker 前先看分数分布**——runner 的 `degraded_cases` 字段会替你检测。
 
@@ -71,6 +82,8 @@ docgen 后 SkillRet 的向量路完全冗余（纯 BM25 全面反超 plain fusio
 3. **定律二**：声明面短/术语重 → 先 docgen（最便宜的大头）；文档本就丰富 → 预期个位数增益，看 recall@50 动不动再定。
 4. **定律三**：胜出语料上直接对比 BM25 臂 vs fusion 臂；fusion ≤ BM25 → 砍向量路与嵌入预算。
 5. 永远同抽样、同嵌入器身份内比较；内核确定性保证每个数字精确可复现。
+
+配对统计 0.2.0 起有库内出口 `agent_retrieval.stats`（纯标准库，core 不需 extra）：runner 报告 JSON（`{"cases": [{"case_id", "<臂名>": {指标: float}}]}` 形状）直接喂 `paired_report(path_a, arm_a, path_b, arm_b, metrics)`，得逐指标配对差 CI95 与 improved/tied/worsened 计数。参数冻结在仓规约：10,000 次重采样、种子 20261022、CI95（`paired_bootstrap` 可单独用）。CLI 侧 `python -m experiments.benchmarks.ablation_stats pair/power` 仍在 experiments，不上库。
 
 ## 值得记总裁的坑
 

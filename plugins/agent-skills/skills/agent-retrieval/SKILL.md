@@ -1,6 +1,6 @@
 ---
 name: agent-retrieval
-description: agent-retrieval 检索库使用指南，支持接入实施（纯 BM25 / 真实嵌入 / Redis 向量快照 / 运行期缓存四层深度）、配置选型（doc2query 语料扩展 / Jev 精排 / 向量路取舍 / 窗口大小，含双基准消融证据）与排查调优三个场景，当用户提到 "agent-retrieval"、"rank_candidates"、"BM25 向量融合"、"RRF 融合检索"、"候选资源检索"、"clearly_related"、"检索配置"、"召回优化"、"doc2query"、"Jev 精排"、"rerank" 时触发。覆盖确定性 BM25 内核、双路 RRF 融合、相关性判定闸、嵌入器装配、write-once 向量快照、Run 级查询缓存与基于双基准消融的配置选型决策表。
+description: agent-retrieval 检索库使用指南，支持接入实施（纯 BM25 / 真实嵌入 / Redis 向量快照 / 运行期缓存四层深度）、LLM 判定编排（Judge 端口 / JevJudge / ChatJudge）、配置选型（doc2query 语料扩展 / Jev 精排题型两档 noul 与 P(3) / 向量路取舍 / 窗口大小，含双基准消融证据）与排查调优三个场景，当用户提到 "agent-retrieval"、"rank_candidates"、"BM25 向量融合"、"RRF 融合检索"、"候选资源检索"、"clearly_related"、"检索配置"、"召回优化"、"doc2query"、"Jev 精排"、"rerank"、"Judge 端口"、"ChatJudge"、"P(3)"、"题型" 时触发。覆盖确定性 BM25 内核、双路 RRF 融合、相关性判定闸、嵌入器装配、write-once 向量快照、Run 级查询缓存、Judge 端口族与基于双基准消融的配置选型决策表。
 ---
 
 # agent-retrieval - 确定性双路融合检索使用指南
@@ -18,23 +18,25 @@ description: agent-retrieval 检索库使用指南，支持接入实施（纯 BM
 - 正在搭建新的检索调用点（Agent 工具选择、技能路由、文档发现等）
 
 **工作流程：**
-1. **配置选型先行** → [[references/config-selection.md]] 的决策表与三条定律——语料扩展/向量路/Jev 精排/窗口的取舍有双基准消融背书，别凭直觉搭栈
+1. **配置选型先行** → [[references/config-selection.md]] 的决策表与三条定律——语料扩展/向量路/Jev 精排题型/窗口的取舍有双基准消融背书，别凭直觉搭栈
 2. **确认行为契约** → 首先参考 [[references/core-concepts.md]] 的 8 条契约——它们决定调用方义务（先过滤后融合、exact 命中要喂进检索、k 截断在展示层）
-3. **定义候选模型与语料投影** → [[references/ranking-api.md]]：corpus_text 惯例（拼 id/name/description 身份字段）、检索面=判定面
+3. **定义候选模型与语料投影** → [[references/ranking-api.md]]：corpus_text 惯例（拼 id/name/description 身份字段）或声明式 `CorpusProjection`（可 JSON、进内容寻址身份），检索面=判定面
 4. **需要"是否相关"判定闸时** → [[references/bm25-internals.md]]：bm25_relevance 刻度 + clearly_related + minimum_relevance 标定
-5. **按接入深度分层推进**（见下方路由表）
-6. 请求用户确认
+5. **需要 LLM 判定精排/编排时** → [[references/judges.md]]：Judge 端口族、exact 短路编排、select_with_judge 弃权语义
+6. **按接入深度分层推进**（见下方路由表）
+7. 请求用户确认
 
 **接入深度路由表：**
 
 | 深度 | 适用条件 | 参考文档 |
 |------|---------|---------|
 | L0 纯 BM25 | 零依赖快速起步、无嵌入预算、检索面即身份字段 | [[references/ranking-api.md]] |
-| L0.5 docgen 语料扩展 | 声明面短/术语重、召回不足——离线生成口语查询拼进检索面 | [[references/config-selection.md]] |
+| L0.5 docgen 语料扩展 | 声明面短/术语重、召回不足——离线生成口语查询拼进检索面（0.2.0 起库内一等客户端 `DocGenClient`） | [[references/config-selection.md]] |
 | L1 真实嵌入 | 有 API 或本地嵌入资源，提升语义召回（docgen 后按域消融裁决是否需要） | [[references/embedders.md]] |
 | L2 Redis 快照 | 发布侧避免重复嵌入整批语料 | [[references/redis-snapshots.md]] |
 | L3 运行缓存 | Run 内去重查询嵌入 + 降级冻结 | [[references/run-cache.md]]（含端到端装配链） |
-| L4 Jev 精排 | 一段检索 recall@5 < ~0.5 时（增益与检索弱度成正比，强检索上加 MRR 边际为负） | [[references/config-selection.md]] |
+| L4 Jev 精排 | 一段检索 recall@5 < ~0.5 时（增益与检索弱度成正比，强检索上加 MRR 边际为负）；题型两档并存——noul 默认 / score 量规 P(3) 折叠供分级排序消费处 | [[references/config-selection.md]] |
+| L4+ 判定编排 | L4 之上需要把 LLM 判定消费成选一/弃权决策（top-1 绑定、shortlist 收缩） | [[references/judges.md]] |
 
 ### 场景 B：排查与契约理解
 
@@ -60,7 +62,7 @@ description: agent-retrieval 检索库使用指南，支持接入实施（纯 BM
 **工作流程：**
 1. **读三条定律** → [[references/config-selection.md]]：Jev 增益 ∝ 检索弱度；docgen 增益 ∝ 词汇贫乏度；向量路按域消融
 2. **对决策表** → 按延迟/召回/预算约束取推荐栈（默认 docgen + BM25 + Jev@窗口20）
-3. **按标准流程为自己的域复跑消融** → 指南末节的五步验证流程（召回天花板 → 定律一 → 定律二 → 定律三）
+3. **按标准流程为自己的域复跑消融** → 指南末节的五步验证流程（召回天花板 → 定律一 → 定律二 → 定律三）；配对统计走库内 `agent_retrieval.stats`（runner 报告 JSON 喂 `paired_report`，10k 重采样/种子 20261022/CI95 参数已冻结）
 4. 参考仓库 `experiments/jev-benchmark-findings.md` 的完整实验数字与证伪记录
 
 ---
@@ -111,6 +113,16 @@ clearly_related(hit, *, minimum_relevance=...)   # 无默认值，各调用点�
 # exact 或（relevance ≥ min 且 overlap ≥ 2 且 declared_overlap ≥ 1）
 ```
 
+### 判定编排（Judge 端口，0.2.0+）
+
+```python
+select_with_judge(hits, judgment, *, minimum_probability, item_id) -> str | None
+# exact 命中短路在调用方（先查 hit.exact 再决定是否调 judge）；门槛必填无默认；
+# 最佳概率 < 门槛返回 None（弃权），判定失败 fail-fast 不降级
+```
+
+红线：任何判定读数（noul 概率或 P(3)）不得单独作准入闸——端点对纯问候语稳定给 P(3)=0.96；准入配 clearly_related 式声明面证据。详见 [[references/judges.md]]。
+
 ### 8 条行为契约
 
 | # | 契约 |
@@ -131,9 +143,19 @@ pip install agent-retrieval              # core 零依赖
 pip install "agent-retrieval[api]"       # + OpenAI 兼容嵌入（requests）
 pip install "agent-retrieval[redis]"     # + Redis 快照与运行缓存
 pip install "agent-retrieval[local]"     # + 本地 ONNX（Windows ARM64 不可用）
+pip install "agent-retrieval[judge]"     # + JevJudge / ChatJudge 判定编排（requests）
+pip install "agent-retrieval[docgen]"    # + DocGenClient 语料扩展客户端（requests）
+pip install "agent-retrieval[all]"       # api + redis + docgen + judge（local 不进 all）
 ```
 
 Python ≥ 3.10，纯 Python 轮子。库纪律：不读环境变量/配置文件/ContextVars，一切经构造参数注入。
+
+PyPI trusted publisher 待修复，0.2.0 起发布通道为 GitHub Release wheel 直装：
+
+```bash
+pip install https://github.com/tuzheng1989/agent-retrieval/releases/download/v0.2.0/agent_retrieval-0.2.0-py3-none-any.whl
+# extras 同样可用：pip install "agent-retrieval[judge] @ <wheel URL>"
+```
 
 ---
 
@@ -157,8 +179,9 @@ Python ≥ 3.10，纯 Python 轮子。库纪律：不读环境变量/配置文�
 | 文档 | 说明 |
 |------|------|
 | [[references/bm25-internals.md]] | BM25 数学内核、检索面/判定面分离、判定闸与阈值标定 |
-| [[references/config-selection.md]] | 配置选型指南：三条定律、决策表、组件要点、消融验证流程（双基准消融背书） |
+| [[references/config-selection.md]] | 配置选型指南：三条定律、决策表、组件要点（docgen 客户端 / Jev 题型两档 / 消融统计）、消融验证流程（双基准消融背书） |
+| [[references/judges.md]] | LLM 判定编排：Judge 端口族、JevJudge/ChatJudge 取舍、select_with_judge 弃权语义、fail-fast 纪律、准入红线 |
 
 ### 官方资源
 
-- PyPI：`agent-retrieval`（README 与 CHANGELOG 随包分发）
+- PyPI：`agent-retrieval`（README 与 CHANGELOG 随包分发；0.2.0 起 PyPI 发布待修复，暂用上方 GitHub Release wheel 直装）

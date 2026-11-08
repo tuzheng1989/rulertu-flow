@@ -1,6 +1,6 @@
 # 核心概念与行为契约 - agent-retrieval
 
-> 对应库版本：agent-retrieval 0.1.0（2026-09-25）。0.x 系列 API 可能调整，使用前核对
+> 对应库版本：agent-retrieval 0.2.0（2026-11-08）。0.x 系列 API 可能调整，使用前核对
 > `pip show agent-retrieval` 的版本与随包 CHANGELOG。
 
 ## 库定位与出身
@@ -16,12 +16,17 @@ agent-retrieval 是**确定性 BM25 + 向量双路 RRF 融合**检索内核，�
 
 | 模块 | 依赖 | 内容 |
 |------|------|------|
-| `agent_retrieval.core` | **仅标准库**（CI 强制） | BM25 内核、RRF 融合、端口协议、资源索引、`rank_candidates` 主入口 |
+| `agent_retrieval.core` | **仅标准库**（CI 强制） | BM25 内核、RRF 融合、端口协议（含 0.2.0 Judge 判定端口）、声明式语料投影 `CorpusProjection`、资源索引、`rank_candidates` 主入口 |
 | `agent_retrieval.embedders` | extras `[api]` / `[local]` | OpenAI 兼容 API 嵌入器、本地 ONNX 嵌入器、配置与工厂 |
+| `agent_retrieval.judges` | extras `[judge]` | JevJudge（System One wire 裸 HTTP）、ChatJudge（chat completions）——两种线协议并列实现，`Judge` 端口抽象掉差异（见 [[judges.md]]） |
+| `agent_retrieval.expansion` | extras `[docgen]` | DocGenClient：doc2query 语料扩展客户端（doc2query-- 分离的钩子） |
+| `agent_retrieval.stats` | **仅标准库**（core，无 extra） | 采纳门槛配对统计：`paired_bootstrap` / `load_arm_cases` / `paired_report` |
 | `agent_retrieval.stores` | extras `[redis]` | write-once 向量快照的 Redis 存取（全异步） |
 | `agent_retrieval.run` | extras `[redis]` | Run 级查询缓存与降级冻结 |
 
 重实现经 PEP 562 惰性导出：`from agent_retrieval import EmbeddingConfig` 只在真正取属性时才 import 对应模块——没装 extras 的环境里，core 照常工作，懒导出缺依赖时干净报错。
+
+**降级语义的刻意不对称**：嵌入/快照/缓存链 fail-open（缺证据退 BM25，契约 7），判定链 fail-fast（judge 挂了不做"回退检索原序"的降级——那会把判停标准静默换掉，ADR-0001）。见 [[judges.md]] 的排查节。
 
 ## 四大理念
 
@@ -71,13 +76,17 @@ pip install agent-retrieval              # core only（stdlib，零依赖）
 pip install "agent-retrieval[api]"       # + OpenAI 兼容嵌入（requests）
 pip install "agent-retrieval[redis]"     # + Redis 向量快照存储与运行缓存
 pip install "agent-retrieval[local]"     # + 本地 ONNX 嵌入
+pip install "agent-retrieval[judge]"     # + JevJudge / ChatJudge 判定编排（requests）
+pip install "agent-retrieval[docgen]"    # + DocGenClient 语料扩展客户端（requests）
+pip install "agent-retrieval[all]"       # api + redis + docgen + judge（local 不进 all）
 ```
 
 - Python ≥ 3.10，wheel 纯 Python、平台无关；
 - ⚠ `[local]` extra（ONNX）**无 Windows ARM64 wheel**——该平台走 `[api]` 路；
-- `LocalEmbedder` 每次实例化都建 ONNX session——**构造一次、全程复用**。
+- `LocalEmbedder` 每次实例化都建 ONNX session——**构造一次、全程复用**；
+- extras 按组件边界命名不按依赖归并——`[api]`/`[docgen]`/`[judge]` 同为 requests 仍分开（ADR-0001）。
 
-## 公开 API 总览（37 个符号）
+## 公开 API 总览（48 个符号）
 
 | 模块 | 符号 | 备注 |
 |------|------|------|
@@ -86,7 +95,12 @@ pip install "agent-retrieval[local]"     # + 本地 ONNX 嵌入
 | core | `fuse`, `BM25Hit`, `VectorHit`, `FusedHit`, `RRF_K` | RRF 融合 |
 | core | `ResourceBM25Index`, `ResourceHit`, `substantive_term`, `clearly_related` | 判定闸（见 [[bm25-internals.md]]） |
 | core | `Embedder`, `VectorStore`, `QueryEmbeddingError`, `MockEmbedder`, `InMemoryVectorStore` | 端口与替身（见 [[embedders.md]]） |
+| core（0.2.0+） | `Judge`, `JudgedCandidate`, `Judgment`, `select_with_judge` | 判定端口族（见 [[judges.md]]） |
+| core（0.2.0+） | `CorpusProjection` | 声明式语料投影（见 [[ranking-api.md]]） |
 | embedders（懒导出，`[api]`/`[local]`） | `EmbeddingConfig`, `ApiEmbedder`, `LocalEmbedder`, `build_embedder`, `vector_available` | 见 [[embedders.md]] |
+| judges（懒导出，`[judge]`） | `JevJudge`, `JevJudgeConfig`, `ChatJudge`, `ChatJudgeConfig`, `JudgeResponseError` | 见 [[judges.md]] |
+| expansion（子模块导入，`[docgen]`） | `DocGenClient`, `DocGenConfig`, `DocGenError`, `build_docgen`, `docgen_corpus_text`, `parse_generated_queries` | `from agent_retrieval.expansion import ...`（见 [[config-selection.md]]） |
+| stats（子模块导入，core） | `paired_bootstrap`, `load_arm_cases`, `paired_report` | `from agent_retrieval.stats import ...`（见 [[config-selection.md]]） |
 | stores（懒导出，`[redis]`） | `RedisVectorStore`, `corpus_hash`, `vector_snapshot_id` | 见 [[redis-snapshots.md]] |
 | run（懒导出，`[redis]`） | `query_embedder`, `RunCachedEmbedder`, `QueryCacheBackend`, `MemoryBackend`, `make_backend`, `clear_run_cache`, `record_vector_degradation`, `take_degradation_count` | 见 [[run-cache.md]] |
 
@@ -94,6 +108,7 @@ pip install "agent-retrieval[local]"     # + 本地 ONNX 嵌入
 
 - 主入口与语料投影：[[ranking-api.md]]
 - 判定闸与阈值标定：[[bm25-internals.md]]
+- LLM 判定编排（Judge 端口族）：[[judges.md]]
 - 嵌入器装配：[[embedders.md]]
 - 向量快照：[[redis-snapshots.md]]
 - 运行缓存与端到端装配链：[[run-cache.md]]
