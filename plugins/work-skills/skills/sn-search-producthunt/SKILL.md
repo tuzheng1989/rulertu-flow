@@ -28,12 +28,12 @@ python scripts/producthunt_search.py <子命令> [参数]
 
 | 子命令 | 上游工具 | 参数 |
 |--------|----------|------|
-| `search "<query>"` | `search_launches` | `--limit N`（默认 10，上游上限 8） |
-| `semantic "<query>"` | `semantic_product_search` | `--limit N`（默认 10，上游上限 8） |
+| `search "<query>"` | `search_launches` | `--limit N`（默认 8，上游 schema 限 1–8） |
+| `semantic "<query>"` | `semantic_product_search` | `--limit N`（默认 8，上游 schema 限 1–8） |
 | `alternatives` | `find_alternatives` | `--name <产品名>`（如 `"Notion"`，注意是产品名不是 slug） |
 | `profile` | `get_product_profile` | `--name <产品名>`（上游参数 product_name） |
-| `category` | `get_products` | `--category-slug <分类slug>`、`--limit N`（默认 10，上游上限 8） |
-| `leaderboard` | `get_leaderboard` | `--date YYYY-MM-DD`（必填，查该日榜单）、`--limit N`（默认 10，上游上限 8） |
+| `category` | `get_products` | `--category-slug <分类slug>`、`--limit N`（默认 8，上游 schema 限 1–8） |
+| `leaderboard` | `get_leaderboard` | `--date <周期>`（必填，四种格式：`YYYY-MM-DD` 日榜 / `YYYY-Www` 周榜 / `YYYY-MM` 月榜 / `YYYY` 年榜）、`--limit N`（默认 8，上游 schema 限 1–8） |
 | `categories` | `get_categories` | 无 |
 
 ```bash
@@ -42,11 +42,12 @@ python scripts/producthunt_search.py search "note taking" --limit 8
 python scripts/producthunt_search.py alternatives --name "Evernote"
 python scripts/producthunt_search.py profile --name "Notion"
 python scripts/producthunt_search.py category --category-slug ai-tools --limit 8
-python scripts/producthunt_search.py leaderboard --date 2026-11-09
+python scripts/producthunt_search.py leaderboard --date 2026-11-09        # 日榜
+python scripts/producthunt_search.py leaderboard --date 2026-11          # 月榜
 python scripts/producthunt_search.py categories
 ```
 
-输出为标准 JSON 包络（成功时含 `items`；失败时省略 `items`，脚本退出码 1）：
+输出为标准 JSON 包络（成功时含 `items`；失败时省略 `items`，脚本退出码 1）。**用法错误**（缺必填参数、未知 flag）由 argparse 在包络之前拦截：退出码 2、stdout 无 JSON——按退出码判失败的调用方两种码都算失败。成功包络示例：
 
 ```json
 {

@@ -30,7 +30,7 @@
 - 覆盖偏英文市场、独立开发者与 VC 产品；中文市场产品覆盖弱，不适用于国内产品调研的主要来源。
 - 榜单（leaderboard）只反映编辑推荐位与互动信号排名，不等于市场份额或竞品全集——竞品发现应 `find_alternatives` + 语义搜索并用，不只看榜。
 
-> **实施期勘误（2026-11-10，B1 批）**：B1 执行时经 `tools/list` 实测上游 inputSchema，与上文「已实测」结论存在三处出入，已按真实 schema 定稿（证据：`plans/work-skills/.flow-evidence/B1/mcp-tools-schema.json`）：① `find_alternatives`/`get_product_profile` 必填参数为 **product_name**（产品名，非 slug）；② `get_leaderboard` 仅必填 `date`，**无 period 参数**，另有可选 `limit`；③ 全部带 limit 的工具上游运行时上限 **8**（schema 未声明但运行时强制，脚本已统一 clamp）。另 `search_launches` 面向产品发布流，通用描述词可能合法返回空列表（非失败）。
+> **实施期勘误（2026-11-10，B1 批）**：B1 执行时经 `tools/list` 实测上游 inputSchema，与上文「已实测」结论存在三处出入，已按真实 schema 定稿（证据：`plans/work-skills/.flow-evidence/B1/mcp-tools-schema.json`）：① `find_alternatives`/`get_product_profile` 必填参数为 **product_name**（产品名，非 slug）；② `get_leaderboard` 仅必填 `date`，**无 period 参数**，另有可选 `limit`；③ 全部带 limit 的工具上游限制为 **1–8**（inputSchema 声明 `minimum:1` / `maximum:8`，运行时同样强制，脚本本地双端 clamp）；`get_leaderboard` 的 `date` 接受四种周期格式（`YYYY-MM-DD` 日 / `YYYY-Www` 周 / `YYYY-MM` 月 / `YYYY` 年），日/周/月/年榜均可查。另 `search_launches` 面向产品发布流，通用描述词可能合法返回空列表（非失败）。
 
 ---
 
@@ -92,7 +92,7 @@ B1 通道脚本 ──▶ B2 deep-research 接线    （单波次：B1 → B2 �
 **如何验证**：
 
 - L1（离线）：纯 JSON 与 SSE 两种响应解析；`items` 归一化形状；子命令参数校验；JSON-RPC error / 非 2xx / 429 各映射为 `success:false`。命令：`PYTHONIOENCODING=utf-8 python scripts/test_producthunt_search.py`。
-- L3（在线冒烟，共 ≤4 次调用）：`semantic "ai note taking app"`、`search "note taking"`、`leaderboard --period week` 各实调一次，断言 `success:true`、`items` 非空、至少一条含 `slug` 与 `title`。
+- L3（在线冒烟，共 ≤4 次调用）：`semantic "ai note taking app"`、`search "note taking"`、`leaderboard --date 2026-11-09` 各实调一次，断言 `success:true`、`items` 非空、至少一条含 `slug` 与 `title`。（原 `--period week` 为勘误前旧契约，见下注）
 
 **验收标准**：
 

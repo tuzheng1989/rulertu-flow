@@ -16,8 +16,9 @@ MCP_URL = "https://mcp.producthunt.com/mcp"
 TIMEOUT_SECONDS = 20
 SNIPPET_MAX_CHARS = 300
 
-# 从 payload 中找产品列表的候选键（含真实形状 products，其余为防御性兜底）
-_LIST_KEYS = ("products", "leaderboard", "hits", "items", "results", "launches", "categories")
+# 从 payload 中找产品列表的实证键：semantic 实测 products；categories/launches/leaderboard
+# 按工具语义一一对应。不做投机兜底——未知形状显式失败，让 deep-research 降级规则可触发。
+_LIST_KEYS = ("products", "categories", "launches", "leaderboard")
 
 
 def _configure_stdout() -> None:
@@ -97,21 +98,21 @@ def _extract_tool_payload(rpc_result: object) -> object:
 
 
 def _extract_item_list(payload: object) -> list:
-    """从结构化负载中定位产品列表。"""
+    """从结构化负载中定位产品列表；定位不到显式报错（静默空成功会让降级规则失效）。"""
     if isinstance(payload, list):
         return [entry for entry in payload if isinstance(entry, dict)]
-    if not isinstance(payload, dict):
-        return []
-    for key in _LIST_KEYS:
-        value = payload.get(key)
-        if isinstance(value, list):
-            return [entry for entry in value if isinstance(entry, dict)]
-    for value in payload.values():  # 常见包裹：{"status": "ok", "data": {"products": [...]}}
-        if isinstance(value, dict):
-            found = _extract_item_list(value)
-            if found:
-                return found
-    return []
+    if isinstance(payload, dict):
+        for key in _LIST_KEYS:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [entry for entry in value if isinstance(entry, dict)]
+        for value in payload.values():  # 实测包裹：{"status": "ok", "data": {"products": [...]}}
+            if isinstance(value, dict):
+                for key in _LIST_KEYS:
+                    inner = value.get(key)
+                    if isinstance(inner, list):
+                        return [entry for entry in inner if isinstance(entry, dict)]
+    raise ValueError("无法从上游负载定位产品列表（未知形状）")
 
 
 def _stringify_names(value: object) -> list[str] | None:
@@ -180,11 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("search", help="关键词搜索产品（上游工具 search_launches）")
     p.add_argument("query", help="搜索关键词")
-    p.add_argument("--limit", type=int, default=10, help="返回数量（默认 10）")
+    p.add_argument("--limit", type=int, default=8, help="返回数量（默认 8，上游上限 8）")
 
     p = sub.add_parser("semantic", help="语义搜索产品（上游工具 semantic_product_search）")
     p.add_argument("query", help="自然语言描述")
-    p.add_argument("--limit", type=int, default=10, help="返回数量（默认 10）")
+    p.add_argument("--limit", type=int, default=8, help="返回数量（默认 8，上游上限 8）")
 
     p = sub.add_parser("alternatives", help="查找某产品的替代品（上游工具 find_alternatives）")
     p.add_argument("--name", required=True, help="产品名（上游参数 product_name，如 Notion）")
@@ -194,33 +195,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("category", help="分类下产品（上游工具 get_products）")
     p.add_argument("--category-slug", required=True, help="分类 slug（上游参数 category_slug，先 categories 查列表）")
-    p.add_argument("--limit", type=int, default=10, help="返回数量（默认 10）")
+    p.add_argument("--limit", type=int, default=8, help="返回数量（默认 8，上游上限 8）")
 
     p = sub.add_parser("leaderboard", help="榜单（上游工具 get_leaderboard）")
-    p.add_argument("--date", required=True, help="YYYY-MM-DD（上游必填，查该日榜单）")
-    p.add_argument("--limit", type=int, default=10, help="返回数量（默认 10，上游上限 8）")
+    p.add_argument("--date", required=True,
+                   help="榜单周期：YYYY-MM-DD（日）/ YYYY-Www（周）/ YYYY-MM（月）/ YYYY（年）")
+    p.add_argument("--limit", type=int, default=8, help="返回数量（默认 8，上游上限 8）")
 
     sub.add_parser("categories", help="分类列表（上游工具 get_categories）")
     return parser
 
 
-LIMIT_UPPER = 8  # 实测：上游运行时校验 limit 1-8（search_launches / get_leaderboard 均 429-free 报错确认；schema 未标注 maximum）
+LIMIT_UPPER = 8  # 上游 inputSchema 声明 limit minimum:1 / maximum:8（mcp-tools-schema.json），运行时同样强制（实测超限被拒）
+
+
+def _clamp_limit(value: int) -> int:
+    return max(1, min(value, LIMIT_UPPER))
 
 
 def resolve_tool_call(args: argparse.Namespace) -> tuple[str, dict]:
     """argparse Namespace → (上游工具名, 工具参数)。键名以上游 inputSchema 为准（mcp-tools-schema.json）。"""
     if args.command == "search":
-        return "search_launches", {"query": args.query, "limit": min(args.limit, LIMIT_UPPER)}
+        return "search_launches", {"query": args.query, "limit": _clamp_limit(args.limit)}
     if args.command == "semantic":
-        return "semantic_product_search", {"query": args.query, "limit": min(args.limit, LIMIT_UPPER)}
+        return "semantic_product_search", {"query": args.query, "limit": _clamp_limit(args.limit)}
     if args.command == "alternatives":
         return "find_alternatives", {"product_name": args.name}
     if args.command == "profile":
         return "get_product_profile", {"product_name": args.name}
     if args.command == "category":
-        return "get_products", {"category_slug": args.category_slug, "limit": min(args.limit, LIMIT_UPPER)}
+        return "get_products", {"category_slug": args.category_slug, "limit": _clamp_limit(args.limit)}
     if args.command == "leaderboard":
-        return "get_leaderboard", {"date": args.date, "limit": min(args.limit, LIMIT_UPPER)}
+        return "get_leaderboard", {"date": args.date, "limit": _clamp_limit(args.limit)}
     return "get_categories", {}
 
 

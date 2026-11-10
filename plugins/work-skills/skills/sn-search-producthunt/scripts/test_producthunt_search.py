@@ -99,8 +99,10 @@ class TestExtractItemList(unittest.TestCase):
     def test_payload_is_bare_list(self):
         self.assertEqual(ph._extract_item_list([FIXTURE_PRODUCT]), [FIXTURE_PRODUCT])
 
-    def test_payload_without_list_returns_empty(self):
-        self.assertEqual(ph._extract_item_list({"status": "ok"}), [])
+    def test_unknown_payload_shape_raises(self):
+        # 静默空成功会让 deep-research 降级规则失效，未知形状必须显式失败
+        with self.assertRaises(ValueError):
+            ph._extract_item_list({"status": "ok"})
 
 
 # ---------------------------------------------------------------------------
@@ -216,13 +218,19 @@ class TestCliSuccessEnvelope(CliTestBase):
         self.assertEqual(ph.resolve_tool_call(args), ("get_leaderboard", {"date": "2026-11-09", "limit": 8}))
 
     def test_leaderboard_limit_clamped_to_8(self):
-        # 实测：上游运行时校验 limit 1-8（schema 未标注 maximum）
+        # 上游 inputSchema 声明 limit minimum:1 / maximum:8，运行时同样强制（实测超限被拒）
         parser = ph.build_parser()
         args = parser.parse_args(["leaderboard", "--date", "2026-11-09", "--limit", "20"])
         self.assertEqual(ph.resolve_tool_call(args)[1]["limit"], 8)
 
+    def test_limit_clamped_to_minimum_1(self):
+        # 上游 inputSchema 声明 minimum:1，0/负数在本地 clamp 到 1，避免晦涩的上游报错
+        parser = ph.build_parser()
+        args = parser.parse_args(["search", "ai", "--limit", "0"])
+        self.assertEqual(ph.resolve_tool_call(args)[1]["limit"], 1)
+
     def test_search_limit_clamped_to_8(self):
-        # 实测：search_launches 运行时同样校验 limit ≤ 8，默认 10 会被上游拒绝
+        # 省略 --limit 时本地默认 8（schema maximum：search_launches default 8）
         parser = ph.build_parser()
         args = parser.parse_args(["search", "note taking app"])
         self.assertEqual(ph.resolve_tool_call(args)[1]["limit"], 8)
@@ -336,6 +344,13 @@ class TestCliErrorPaths(CliTestBase):
         self.assertTrue(envelope["success"])
         self.assertEqual(envelope["items"], [])
         self.assertEqual(code, 0)
+
+    def test_unknown_shape_maps_to_failure(self):
+        # 未知包裹形状显式失败（success:false + 退出码 1），由 deep-research 降级规则兜底，不静默
+        body = json.dumps({"jsonrpc": "2.0", "id": 1,
+                           "result": {"structuredContent": {"status": "ok", "records": [FIXTURE_PRODUCT]}}})
+        envelope, code = self.run_cli(["search", "x"], body=body, status=200)
+        self.assert_failure(envelope, code, "未知形状")
 
 
 if __name__ == "__main__":
