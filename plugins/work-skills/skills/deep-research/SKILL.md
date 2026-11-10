@@ -1,7 +1,7 @@
 ---
 name: deep-research
-description: 深度研究助手，通过迭代式"搜索-总结-反思"循环生成带引用的综合性研究报告。当用户说"深入研究XX"、"研究一下XX"、"调研XX"或明确表示需要全面了解某个主题时触发。支持配置循环次数（"循环N次"）与搜索区域（"中文/英文"或"us/cn"）。v0.4.0 新增意图澄清、研究简报驱动、多查询并行与摘要压缩。v0.5.0 引入多源搜索通道（deepxiv / sn-search-* 脚本 + MCP），按查询来源类型智能分派并支持通道降级。v0.6.0 新增自动落盘功能，报告完成后自动保存到文件系统。v0.6.1 深读层引入 alphaXiv 增强（AI blog 前置导读 + .md 全文降级备选）。
-version: 0.6.1
+description: 深度研究助手，通过迭代式"搜索-总结-反思"循环生成带引用的综合性研究报告。当用户说"深入研究XX"、"研究一下XX"、"调研XX"或明确表示需要全面了解某个主题时触发。支持配置循环次数（"循环N次"）与搜索区域（"中文/英文"或"us/cn"）。v0.4.0 新增意图澄清、研究简报驱动、多查询并行与摘要压缩。v0.5.0 引入多源搜索通道（deepxiv / sn-search-* 脚本 + MCP），按查询来源类型智能分派并支持通道降级。v0.6.0 新增自动落盘功能，报告完成后自动保存到文件系统。v0.6.1 深读层引入 alphaXiv 增强（AI blog 前置导读 + .md 全文降级备选）。v0.7.0 新增 product 通道（Product Hunt 产品/竞品/融资数据，Bash 脚本直调官方 MCP 端点，匿名可用，失败降级 web）。
+version: 0.7.0
 author: Claude Code
 ---
 
@@ -143,12 +143,14 @@ author: Claude Code
 | `code` | sn-search-code 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-code/scripts/{github\|stackoverflow\|hackernews\|huggingface}_search.py "{query}" --limit {N}` |
 | `social_cn` | sn-search-social-cn 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-social-cn/scripts/{zhihu\|bilibili\|douyin}_search.py "{query}" --limit {N}` |
 | `social_en` | sn-search-social-en 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-social-en/scripts/{twitter\|youtube}_search.py "{query}" --limit {N}`（reddit 已禁用，跳过） |
+| `product` | sn-search-producthunt 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-producthunt/scripts/producthunt_search.py {子命令} {参数}` |
 
 **子工具选择**（同一通道内多脚本时按 query 语义选最对口的）：
 - `code`：仓库/模型/数据集→`github_search.py`/`huggingface_search.py`；技术问答→`stackoverflow_search.py`；技术讨论→`hackernews_search.py`
 - `social_cn`：深度讨论→`zhihu_search.py`；视频→`bilibili_search.py`/`douyin_search.py`
 - `social_en`：讨论→`twitter_search.py`；视频→`youtube_search.py`
 - `academic`：默认 `deepxiv search`；已有 arxiv_id 想读全文→走 3.2b 的 `deepxiv paper`
+- `product`：参数按 query 语义选子命令——产品/关键词发现→`search`/`semantic`；替代品→`alternatives --name "<产品名>"`；产品档案（评分/融资）→`profile --name "<产品名>"`；分类产品→`category`；榜单→`leaderboard --date YYYY-MM-DD`；分类清单→`categories`（子命令契约详见 `../sn-search-producthunt/SKILL.md`，不在此复制）
 
 **统一调用约定：**
 - 所有 Bash 命令加 `PYTHONIOENCODING=utf-8` 前缀（Windows 编码，deepxiv 与 sn 脚本均需）
@@ -156,6 +158,7 @@ author: Claude Code
 - 输出统一映射为 `search_results`，**每条补 `source_type` 字段**（供 summary 标注来源层次与交叉验证）：
   - deepxiv：`result[].{title, arxiv_id→url: https://arxiv.org/abs/{arxiv_id}, tldr||abstract→snippet, source_type:"academic"}`
   - sn-search-*：`items[].{title, url, snippet, source_type:"<对应类型>"}`
+  - sn-search-producthunt：输出已含 `source_type:"product"`，`items[]` 直接入 `search_results`
   - web：`{title, url, snippet, source_type:"web"}`
 
 **降级规则（关键，所有专门通道统一）：**
@@ -391,6 +394,7 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 | `code` | **sn-search-code 脚本** | GitHub / Stack Overflow / Hacker News / HuggingFace | `--limit`（GitHub 另有 `--type`） |
 | `social_cn` | **sn-search-social-cn 脚本** | 知乎 / B站 / 抖音 | `--limit` |
 | `social_en` | **sn-search-social-en 脚本** | Twitter / YouTube（reddit 已禁用） | `--limit` |
+| `product` | **sn-search-producthunt 脚本** | Product Hunt 产品 / 竞品 / 融资 / 榜单 | 子命令按语义选 + `--limit`（上限 8） |
 
 其他工具：
 
@@ -401,7 +405,7 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 | **AskUserQuestion** | 澄清提问（选项可枚举时） | questions / options |
 | **state_manager.py** | 状态管理（可选，命令行编排用） | Python 模块导入 |
 
-> **降级**：任一专门通道（academic/code/social）失败/限流/缺依赖时，回退 `mcp__web-search-prime`（见 3.2 降级规则）。
+> **降级**：任一专门通道（academic/code/social/product）失败/限流/缺依赖时，回退 `mcp__web-search-prime`（见 3.2 降级规则）。
 
 ### 状态管理
 
@@ -413,7 +417,7 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 
 ### 搜索与抓取（多源）【v0.5.0 改】
 
-搜索按 query 的 `source_type` 分派到 5 个通道（web=MCP / academic=deepxiv / code / social_cn / social_en=脚本），网页抓取分学术（deepxiv paper）与非学术（MCP web-reader）。遵循全局网络访问规则。
+搜索按 query 的 `source_type` 分派到 6 个通道（web=MCP / academic=deepxiv / code / social_cn / social_en=脚本 / product=sn-search-producthunt 脚本），网页抓取分学术（deepxiv paper）与非学术（MCP web-reader）。遵循全局网络访问规则。
 
 - **web 通道（MCP web-search-prime）** - 通用网页搜索，返回标题/链接/摘要
   - `location`：`us`（英文资料）或 `cn`（中文资料），可多区域并行
@@ -421,6 +425,7 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
   - `search_recency_filter`：参考 brief 的时效要求
 - **academic 通道（deepxiv）** - 学术论文搜索（`deepxiv search --format json`）+ 渐进式精读（`deepxiv paper`），走自有后端，10k/天额度
 - **code / social 通道（sn-search-* 脚本）** - 开发者资源与社区讨论，Bash 调用，输出标准 JSON
+- **product 通道（sn-search-producthunt 脚本）** - Product Hunt 产品 / 竞品 / 融资数据，maker 自报，英文市场偏重，Bash 调用，输出标准 JSON
 - **mcp__web-reader__webReader** - 非学术网页全文抓取，输出 markdown
 
 **注意**：
