@@ -1183,14 +1183,14 @@ export const register: Register = (on, options) => {
     await $.tool.register({
       name: 'flow_report',
       description:
-        'implement-plan 执行进度上报。每完成一个阶段（开工/派单/执行/验证/收口）调用一次；' +
+        'implement-plan 执行进度上报。每批的执行与验证阶段各调用一次（验证上报全绿自动收口，无需再报收口）；' +
         '进度会实时显示在输入框上方横条，并跨会话保留以便续接。',
       inputSchema: {
         type: 'object',
         properties: {
           plan: { type: 'string', description: '方案名（方案文档文件名去扩展名）' },
           batch: { type: 'string', description: '批次标识，如 B2' },
-          phase: { type: 'string', description: '当前阶段：开工 | 派单 | 执行 | 验证 | 收口' },
+          phase: { type: 'string', description: '当前阶段：执行 | 验证；验证上报全绿（testsPassed === testsTotal 且 ≥1）自动收口，无需再报收口' },
           tLevel: { type: 'string', description: '风险定级：T0 | T1 | T2 | T3' },
           testsPassed: { type: 'number', description: '已通过的定向测试数' },
           testsTotal: { type: 'number', description: '定向测试总数' },
@@ -1427,7 +1427,8 @@ export const register: Register = (on, options) => {
     }
     // 收口组装（B1 条目 3 语句顺序契约）：① minutes 判定读首报 map → ② scope 前置校验 →
     // ③ gitStatus 取数组装行数与 statsAt → ④ 并入 stamped，四步先于下方 execution/progress 更新
-    const closurePhase = report.phase === '收口' &&
+    // B3：验证上报全绿与显式收口同判定（上报契约两值，收口变全绿谓词；tests 缺省或 0 不算全绿）
+    const closurePhase = (report.phase === '收口' || report.phase === '验证') &&
       report.testsTotal !== undefined && report.testsTotal >= 1 &&
       report.testsPassed === report.testsTotal
     const startAt = firstReportAt.get(`${report.plan}#${report.batch}`)
@@ -1462,6 +1463,9 @@ export const register: Register = (on, options) => {
     }
     const stamped: ExecutionReport = {
       ...report,
+      // B3 唯一升格点：判定成立时统一置「收口」，此后 progress 写入、closureCard、lastRun、
+      // currentTask 撤下、batchScope 清理全走既有收口分支（升格逻辑不散布到渲染层或持久层）
+      ...(closurePhase ? { phase: '收口' } : {}),
       updatedAt: Date.now(),
       ...(closure === undefined ? {} : { closure }),
     }

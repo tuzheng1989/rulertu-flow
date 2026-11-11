@@ -184,7 +184,7 @@ export function collectChanges(
         : a.path.localeCompare(b.path))
 }
 
-/** 五阶段序进度：index 从 1 计（完成比例 index/total）；未知阶段无序号（total 0，渲染退化为纯文字） */
+/** 两阶段序进度：index 从 1 计（完成比例 index/total）；存量旧阶段与未知阶段无序号（total 0，渲染退化为纯文字） */
 export type PhaseProgress = {
   current: string
   index: number
@@ -193,7 +193,7 @@ export type PhaseProgress = {
 
 /** 执行上报的极简进度条数据：`progressBar(index, total)` 即条，右侧 `current · index/total` */
 export function phaseProgress(phase: string): PhaseProgress {
-  const phases = ['开工', '派单', '执行', '验证', '收口']
+  const phases = ['执行', '验证']
   const index = phases.indexOf(phase)
   return { current: phase, index: index === -1 ? 0 : index + 1, total: index === -1 ? 0 : phases.length }
 }

@@ -68,7 +68,7 @@ export type ExecutionReport = {
   plan: string
   /** 批次标识，如 B2 */
   batch: string
-  /** 当前阶段：开工 | 派单 | 执行 | 验证 | 收口 */
+  /** 当前阶段：上报契约两值（执行 | 验证）；收口为内部终态——验证全绿升格或显式上报，存量值可能为旧五枚举 */
   phase: string
   /** 风险定级：T0-T3 */
   tLevel?: string

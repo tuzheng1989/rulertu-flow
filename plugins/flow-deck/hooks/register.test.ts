@@ -1024,6 +1024,107 @@ describe('pane', () => {
     })
   })
 
+  test('验证全绿升格收口：撤任务清边界、通关卡组装、progress 记收口、lastRun 写入，与显式收口逐项等价', async ($, on) => {
+    const writes: Record<string, unknown[]> = {}
+    for (const key of ['currentTask', 'batchScope', 'closureCard', 'execution', 'lastRun', 'progress']) {
+      writes[key] = []
+      on('state.set', { plugin: 'flow-deck', key }, (_$, e, next) => {
+        writes[key].push(e.value)
+        return next(e)
+      })
+    }
+    const storeWrites: { key?: unknown; value?: unknown }[] = []
+    on('store.set', (_$, e, next) => {
+      storeWrites.push({ key: e.key, value: e.value })
+      return next(e)
+    })
+    const gitSnapshot = {
+      branch: 'main', upstream: null, ahead: 0, behind: 0,
+      staged: [], unstaged: [], untracked: [], conflicts: [],
+      added: 800, removed: 90, fetchedAt: 777000,
+      byPath: { 'src/a.ts': [800, 90] },
+      numstatSides: { worktree: 'ok', cached: 'ok' },
+    }
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    on('state.set', { plugin: 'flow-deck', key: 'git' }, ($, e, next) => next({ ...e, value: gitSnapshot }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    // B1 走两阶段契约：验证上报全绿（10/10）→ 升格收口，五项副作用齐发
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B1', files: ['src/a.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '执行' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '验证', testsPassed: 10, testsTotal: 10 })
+    expect(writes.currentTask.at(-1)).toBeNull()
+    expect(writes.batchScope.at(-1)).toBeNull()
+    expect(writes.closureCard.at(-1)).toEqual({
+      plan: 'demo', batch: 'B1',
+      closure: { files: 1, added: 800, removed: 90, minutes: 0, statsAt: 777000 },
+    })
+    expect(writes.execution.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B1', phase: '收口' }))
+    expect(writes.progress.at(-1)).toEqual({ 'demo#B1': '收口' })
+    expect(writes.lastRun.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B1', phase: '收口' }))
+    expect(storeWrites.filter(w => w.key === 'lastExecution').at(-1)?.value)
+      .toEqual(expect.objectContaining({ plan: 'demo', batch: 'B1', phase: '收口' }))
+    // B2 走显式收口（兼容通道）：同边界同快照 → 通关卡与各终态逐字段同构（batch 标识除外）
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '执行' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 10, testsTotal: 10 })
+    expect(writes.currentTask.at(-1)).toBeNull()
+    expect(writes.batchScope.at(-1)).toBeNull()
+    expect(writes.closureCard.at(-1)).toEqual({
+      plan: 'demo', batch: 'B2',
+      closure: { files: 1, added: 800, removed: 90, minutes: 0, statsAt: 777000 },
+    })
+    expect(writes.execution.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '收口' }))
+    expect(writes.progress.at(-1)).toEqual({ 'demo#B1': '收口', 'demo#B2': '收口' })
+    expect(writes.lastRun.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '收口' }))
+  })
+
+  test('验证部分通过不升格：8/10 维持验证态，不撤任务不清边界，测试进度条 warn 色', { options: { artDirection: 'default' } }, async ($, on) => {
+    const writes: Record<string, unknown[]> = {}
+    for (const key of ['currentTask', 'batchScope', 'closureCard', 'execution', 'lastRun', 'progress']) {
+      writes[key] = []
+      on('state.set', { plugin: 'flow-deck', key }, (_$, e, next) => {
+        writes[key].push(e.value)
+        return next(e)
+      })
+    }
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '验证', testsPassed: 8, testsTotal: 10 })
+    // 不升格：任务在场、边界保持、通关卡为空、progress 记验证、lastRun 全程只收 session 恢复的 null
+    expect(writes.currentTask.at(-1)).toEqual({ kind: 'implement', plan: 'demo', batch: 'B2' })
+    expect(writes.batchScope.at(-1)).toEqual({ plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    expect(writes.closureCard.at(-1)).toBeNull()
+    expect(writes.execution.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '验证' }))
+    expect(writes.progress.at(-1)).toEqual({ 'demo#B2': '验证' })
+    expect(writes.lastRun.every(value => value === null)).toBe(true)
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Flow'),
+    })
+    expect(await ui.find({ text: /验证 · 2\/2/ })).not.toBeUndefined()
+    // 测试进度行（8/10 非全绿）warn 色，与全绿的 ok 色可区分
+    const testRow = (await ui.findAll({ type: 'Text' })).find(node => /8\/10/.test(String(node.text)))
+    expect(testRow?.props.color).toBe('warning')
+    await ui.unmount()
+  })
+
   test('统计三态：git 快照为 null → —；byPath 无 scope 文件 → 真实 0 且 statsAt 有值', async ($, on) => {
     const closureWrites: unknown[] = []
     on('session.start', () => ({ cwd: 'C:\\repo' }))
@@ -1314,7 +1415,7 @@ describe('pane', () => {
     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
     await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 1, testsTotal: 1 })
-    // 重复上报收口 → 出口保留（卡 + lastRun atom；store 出口留待端到端）
+    // 重复上报收口 → 出口保留（卡 + lastRun atom；store 持久化出口由「持久化写入侧」用例覆盖）
     await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 1, testsTotal: 1 })
     const cardValue = closureWrites.at(-1)
     expect(cardValue).not.toBeNull()
@@ -1747,8 +1848,8 @@ describe('pane', () => {
         })
         expect(await ui.find({ text: /当前执行 · 执行方案/ })).not.toBeUndefined()
         // 极简阶段条：比例条 + 当前阶段名与序号，不再罗列全部阶段
-        expect(await ui.find({ text: /验证 · 4\/5/ })).not.toBeUndefined()
-        expect(await ui.find({ type: 'Text', text: '━━━━━━━━──' })).not.toBeUndefined()
+        expect(await ui.find({ text: /验证 · 2\/2/ })).not.toBeUndefined()
+        expect(await ui.find({ type: 'Text', text: '━━━━━━━━━━' })).not.toBeUndefined()
         expect(await ui.find({ text: /✓ 开工/ })).toBeUndefined()
         expect(await ui.find({ text: /验证 .*8\/10/ })).not.toBeUndefined()
         expect(await ui.find({ text: /当前无方案迭代或实施任务/ })).toBeUndefined()
@@ -2870,7 +2971,7 @@ describe('pane', () => {
     // beat=0 帧：呼吸元素 dim 档；确认断言对象非小生物行（盲文帧不参与呼吸）
     // beat=0 帧：呼吸元素 dim 档；确认断言对象非小生物行（盲文帧不参与呼吸）
     const phaseRow0 = await ui.find({ type: 'Text', text: /B2 · 执行/ })
-    const bar0 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
+    const bar0 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━─────')
     expect(phaseRow0?.props.color).toBeUndefined()
     expect(phaseRow0?.props.dimColor).toBe(true)
     expect(bar0?.props.color).toBeUndefined()
@@ -2880,7 +2981,7 @@ describe('pane', () => {
     await clock.advance(800)
     // beat=1 帧：accent 高亮档
     const phaseRow1 = await ui.find({ type: 'Text', text: /B2 · 执行/ })
-    const bar1 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
+    const bar1 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━─────')
     expect(phaseRow1?.props.color).toBe('professionalBlue')
     expect(phaseRow1?.props.dimColor).toBe(false)
     expect(bar1?.props.color).toBe('professionalBlue')
@@ -2911,13 +3012,13 @@ describe('pane', () => {
       props: paneProps('Flow'),
     })
     const creature0 = await ui.find({ type: 'Text', text: frameRe(creatureFrames.legshake[0][0]) })
-    const bar0 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
+    const bar0 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━─────')
     expect(creature0).not.toBeUndefined()
     expect(bar0?.props.dimColor).toBe(true)
     await clock.advance(800)
     // 呼吸元素两帧固定 dim（停跳即死）；小生物抖腿态两帧继续切换
     const creature1 = await ui.find({ type: 'Text', text: frameRe(creatureFrames.legshake[1][0]) })
-    const bar1 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
+    const bar1 = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━─────')
     expect(creature1).not.toBeUndefined()
     expect(bar1?.props.dimColor).toBe(true)
     await ui.unmount()
@@ -2950,7 +3051,7 @@ describe('pane', () => {
     await clock.advance(800)
     expect(flips).toEqual([1])
     // 呼吸仍在：beat=1 帧呼吸元素 accent 高亮
-    const bar = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━━────')
+    const bar = (await ui.findAll({ type: 'Text' })).find(node => node.text === '━━━━━─────')
     expect(bar?.props.color).toBe('professionalBlue')
     await ui.unmount()
   })

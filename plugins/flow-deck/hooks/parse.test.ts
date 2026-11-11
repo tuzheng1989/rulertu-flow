@@ -261,10 +261,11 @@ describe('parse', () => {
     expect(collectChanges(null, [])).toEqual([])
   })
 
-  test('phaseProgress 映射五阶段序号，未知阶段无序号', () => {
-    expect(phaseProgress('开工')).toEqual({ current: '开工', index: 1, total: 5 })
-    expect(phaseProgress('执行')).toEqual({ current: '执行', index: 3, total: 5 })
-    expect(phaseProgress('收口')).toEqual({ current: '收口', index: 5, total: 5 })
+  test('phaseProgress 两阶段序号；存量与未知阶段无序号（total 0 退化纯文字）', () => {
+    // B3 上报契约缩为两阶段；存量持久化值（开工/派单）与未知阶段同走 indexOf -1 退化
+    expect(phaseProgress('执行')).toEqual({ current: '执行', index: 1, total: 2 })
+    expect(phaseProgress('验证')).toEqual({ current: '验证', index: 2, total: 2 })
+    expect(phaseProgress('开工')).toEqual({ current: '开工', index: 0, total: 0 })
     expect(phaseProgress('自定义阶段')).toEqual({ current: '自定义阶段', index: 0, total: 0 })
   })
   test('extractRound 认识 review-RN.json', () => {
