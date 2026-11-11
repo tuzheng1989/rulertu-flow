@@ -168,10 +168,14 @@
 - `:12` 开工检查点"核对前置批次证据"句后接：核对到的收口事实与面板状态可能不符（跨会话漏报），会话有 `mcp__flow-deck__flow_report` 时，对本方案已收口（证据目录或 git log 佐证）且非本会话已上报的前序批次，逐条带 `backfill: true` 补报（幂等，可重复）。
 - `:18` "工具不存在时静默跳过，不补报、不重试"改为："工具不存在时静默跳过。常规上报漏报不补报不重试；开工核对发现的历史批次收口缺失，按开工检查点口径经 `backfill` 补报。"
 
+**收尾**：双 manifest `.claude-plugin/plugin.json` 与 `.codex-plugin/plugin.json` 0.21.0 → **0.22.0**；根 CHANGELOG.md Unreleased 加 0.22.0 条目（backfill 补报通道 + implement-plan 开工核对纪律）。
+
 **测试（hooks/register.test.ts 新增）**
 
 - backfill 补报 B1 收口（此前 flow_task/flow_batch 已声明 B2）：断言 progress 收 B1 键（state.set 拦截或渲染）、currentTask 仍为 B2、batchScope 不被清、closureCard 无写入、返回文案含"已补报"。
 - backfill 后接常规上报：行为与无 backfill 路径一致（回归）。
+- 写入侧断言（B1 审计 P2-2 消化）：`on('store.set')` 钩子实际可应答（B1 探针证伪"测试引擎无该设施"的旧调研结论）——常规 flow_report 后断言 store.set 收到 `progressMap` 键与含新键的完整 map；flow_deps 后断言 `depsGraph` 键；backfill 后断言 store.set 收到补报后的 map。
+- 顺手修正（B1 审计 P2-1）：hooks/register.test.ts :922 一带「测试引擎无该设施（仅 store.get 钩子可应答）」过时注释更新为可应答口径（只改注释不动测试逻辑，沿 0.19.0 方案先例）。
 
 ### 五要素 · 如何验证
 
@@ -183,9 +187,9 @@
 
 | # | 断言 | 证据 |
 |---|------|------|
-| G10 | backfill 补报只写 progress + 持久化：currentTask/batchScope/closureCard/firstReportAt 均不变 | L2 state.set 序列 |
+| G10 | backfill 补报只写 progress + 持久化：currentTask/batchScope/closureCard/firstReportAt 均不变 | L2 state.set 序列 + store.set 写入侧断言 |
 | G11 | 非 backfill 常规上报行为与改前一致（backfill 缺省 falsy） | 既有用例回归 |
-| G12 | implement-plan 开工核对含补报口径、"不补报"旧口径已更新、单一出处 | grep 输出 |
+| G12 | implement-plan 开工核对含补报口径、"不补报"旧口径已更新、单一出处；双 manifest 0.22.0 + CHANGELOG 条目落盘 | grep 输出 + 文件 diff |
 | G13 | 真机：B1 收口漏报 → B2 会话开工核对补报 → 面板 B1 done 且 B2 任务与边界不受扰 | 真机记录 |
 
 ### 五要素 · 代码评审节点

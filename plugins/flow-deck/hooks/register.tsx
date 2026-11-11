@@ -1195,6 +1195,7 @@ export const register: Register = (on, options) => {
           testsPassed: { type: 'number', description: '已通过的定向测试数' },
           testsTotal: { type: 'number', description: '定向测试总数' },
           evidenceDir: { type: 'string', description: '证据目录路径' },
+          backfill: { type: 'boolean', description: '补报历史批次状态：只更新轨道图批次进度，不触碰当前任务、批次边界与通关卡；仅用于开工核对时补齐前序批次' },
         },
         required: ['plan', 'batch', 'phase'],
       },
@@ -1411,6 +1412,18 @@ export const register: Register = (on, options) => {
     const report = parseExecution(e)
     if (report === null) {
       return { result: 'plan、batch、phase 为必填字符串', isError: true }
+    }
+    // backfill 旁路（D11）：补报历史批次只写 progress + 持久化，在 parse 校验后、一切副作用前
+    // 分流——closureCard/execution/lastRun/guardWarned/currentTask/batchScope/statusline/
+    // lastExecution 均不触碰（firstReportAt 记点只在 flow_batch，天然不在本链路）。常规通道的
+    // 收口上报会撤任务清边界，补报走同链路会破坏当前批次；旁路隔离是补报可幂等重放的前提
+    if (e.backfill === true) {
+      await update($, progress, prev => ({
+        ...prev,
+        [`${report.plan}#${report.batch}`]: report.phase,
+      }))
+      await persistProgress($)
+      return { result: `历史批次状态已补报：${report.plan}#${report.batch} → ${report.phase}` }
     }
     // 收口组装（B1 条目 3 语句顺序契约）：① minutes 判定读首报 map → ② scope 前置校验 →
     // ③ gitStatus 取数组装行数与 statsAt → ④ 并入 stamped，四步先于下方 execution/progress 更新

@@ -1,0 +1,250 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index b471f06..5c12bc0 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,8 @@
+ 
+ ## Unreleased
+ 
++- flow-deck 0.22.0：`flow_report` 历史批次补报通道（方案 `plans/flow-deck/2026-11-11-deck-deps-progress-persistence.md` B2 批）——**工具侧**：inputSchema 加可选 `backfill`（描述限定「仅用于开工核对时补齐前序批次」防误用为常规通道），处理器在 parse 校验后、一切副作用前分流：`backfill: true` 时只做 progress 更新（键 `<plan>#<batch>` → phase）+ `persistProgress` 持久化（复用 B1 通道）并返回「历史批次状态已补报」文案；closureCard/execution/lastRun/guardWarned/currentTask/batchScope/statusline/lastExecution 全部不触碰，firstReportAt 记点只在 flow_batch 天然不在链路（D11 旁路隔离：常规通道的收口上报会撤任务清边界，补报走同链路会破坏当前批次，旁路是补报可幂等重放的前提）。**技能侧**：implement-plan 开工核对从「只核对不回写」扩展为「核对后补报」——核对到的收口事实与面板状态可能不符（跨会话漏报），会话有 `flow_report` 时对证据目录或 git log 佐证已收口且非本会话已上报的前序批次逐条带 `backfill: true` 补报（幂等，无法佐证不臆测补报）；「不补报、不重试」旧口径改写为「常规上报漏报不补报不重试；开工核对发现的历史批次收口缺失按开工检查点口径经 backfill 补报」。**测试**：新增 backfill 旁路用例（七个「当前执行」键 state.set 序列零触碰 + store.set 落值断言）、backfill 后接常规上报回归用例、持久化写入侧用例（flow_deps 落 depsGraph、常规 flow_report 落 progressMap 与 lastExecution——B1 审计 P2-2 消化，on('store.set') 钩子 B1 探针实证可应答）；修正两处「测试引擎无 store.set 设施」过时注释（P2-1）。双 manifest 同步升版 0.22.0。
++
+ - flow-deck 0.21.0：轨道图跨会话状态持久化 + 渲染层拓扑下推（方案 `plans/flow-deck/2026-11-11-deck-deps-progress-persistence.md` B1 批）——**持久化**：`progress` 与 `deps` 两个内存 atom 经 `$.store` 独立键（`progressMap` / `depsGraph`）跨会话保留，`flow_report` 每次进度更新后、`flow_deps` 声明后各自 best-effort 写入（try/catch 降级 + 调试日志，范式同 `lastExecution`），持久化失败不阻塞工具返回；**恢复**：`session.start` 把两行清空替换为「先取后写」恢复（`readPersistedProgress` / `readPersistedDeps` 顶层函数 + `parseProgressMap` 新校验纯函数），store 不可用或坏形状降级为空 map / null——行为同清空现状，`currentTask` 等清空语义不动，恢复的图待同方案实施声明后才显示（「依赖图只在实施对应方案时显示」契约保持）；**拓扑下推**：`depStatuses` 渲染纯函数改两遍——第一遍逐节点查表（现状），第二遍任一节点收口 ⇒ 其 dependsOn 闭包（含传递）强制 done 且阶段置「收口」（栈迭代 + 已处理集合，环终止、悬空批次名跳过），`DepNode` 加 `phase` 字段供两处节点文本行取用（消除 ✓ 符号与「待执行」文本自相矛盾）；只修非末批漏报，视图修正不改写持久化数据。新增 `parseProgressMap` 纯函数（L1 四例：合法全收 / 整体非对象 null / 混值剔键 / 空对象合法）、`depStatuses` 下推四例（B2 收口推 B1、B3 链式传递、悬空引用不崩、末批漏报负断言）与三个 mount 用例（恢复-渲染往返、坏形状降级、拓扑下推渲染；store.get 替身按事件载荷的 key 字段分流）。双 manifest 同步升版 0.21.0。
+ 
+ - work-skills 2.5.0：新增 `sag` 技能（本地语义搜索）——迁自 SAG Wiki desktop CLI 装到 `~/.claude/skills/sag` 的全局副本，单一源归位本仓 plugins/work-skills/skills/sag/；剥离平台安装元数据（技能运行不需要，且会诱使 SAG 桌面版把仓库目录当安装点）；frontmatter 中文化 description 补触发词并加 metadata.source 记录上游来源（canonical 源 Zleap-AI/SAG-Wiki cli/skills/sag，正文保留英文原文以便与上游 diff 同步）；三个 references（setup/parameters/ignores）原样迁移，无本机特定路径。当晚 SAG 桌面版自动重装了一份更新版全局副本（SKILL.md 新增 Check time/revisions/scope 证据核对节，references 零变化，且新版不再带 .sag-install.json 标记），已二次同步正文并再删全局副本；SAG 桌面版无禁用自动安装的 CLI 配置项，后续若再自动重装按同法同步或直接删。codex manifest longDescription 22→23 个技能并补 sag，capabilities 加 Search。双 manifest 同步升版 2.5.0。
+diff --git a/plugins/flow-deck/.claude-plugin/plugin.json b/plugins/flow-deck/.claude-plugin/plugin.json
+index b19268c..7280166 100644
+--- a/plugins/flow-deck/.claude-plugin/plugin.json
++++ b/plugins/flow-deck/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "flow-deck",
+-  "version": "0.21.0",
++  "version": "0.22.0",
+   "description": "rulertu-flow 工作流、仓库与子代理状态仪表盘：评审进度、批次守卫、依赖图、git 更改与子代理运行状态",
+   "types": "./types/index.d.ts",
+   "userConfig": {
+diff --git a/plugins/flow-deck/.codex-plugin/plugin.json b/plugins/flow-deck/.codex-plugin/plugin.json
+index 705121a..ed5ed1c 100644
+--- a/plugins/flow-deck/.codex-plugin/plugin.json
++++ b/plugins/flow-deck/.codex-plugin/plugin.json
+@@ -1,5 +1,5 @@
+ {
+   "name": "flow-deck",
+   "description": "rulertu-flow 工作流、仓库与子代理状态仪表盘（mod 机制仅 Claude Code 生效，Codex 侧为占位元数据）",
+-  "version": "0.21.0"
++  "version": "0.22.0"
+ }
+diff --git a/plugins/flow-deck/hooks/register.test.ts b/plugins/flow-deck/hooks/register.test.ts
+index d794004..80433de 100644
+--- a/plugins/flow-deck/hooks/register.test.ts
++++ b/plugins/flow-deck/hooks/register.test.ts
+@@ -495,6 +495,138 @@ describe('pane', () => {
+     await ui.unmount()
+   })
+ 
++  test('backfill 旁路：补报历史批次只写 progress 与持久化，当前执行状态零触碰', async ($, on) => {
++    // 副作用序列观测：七个「当前执行」键的 state.set 全量记录 + store.set 持久化记录（载荷带 key）
++    const writes: Record<string, unknown[]> = {}
++    for (const key of ['currentTask', 'batchScope', 'closureCard', 'execution', 'lastRun', 'guardWarned', 'progress']) {
++      writes[key] = []
++      on('state.set', { plugin: 'flow-deck', key }, (_$, e, next) => {
++        writes[key].push(e.value)
++        return next(e)
++      })
++    }
++    const storeWrites: { key?: unknown; value?: unknown }[] = []
++    on('store.set', (_$, e, next) => {
++      storeWrites.push({ key: e.key, value: e.value })
++      return next(e)
++    })
++    on('session.start', () => ({ cwd: 'C:\\repo' }))
++    on('command.register', ($, e) => ({ value: { name: e.name } }))
++    on('tool.register', ($, e) => ({ value: { name: e.name } }))
++    on('fs.list', () => ({ value: [] }))
++    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
++    on('store.get', () => ({ value: undefined }))
++    on('ui.status', () => ({ value: undefined }))
++    on('ui.log', () => ({ value: undefined }))
++    on('ui.panes', () => ({ value: [] }))
++    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
++    // 当前批次 B2 已声明任务与边界（backfill 的典型前置：新会话开工核对补 B1 漏报）
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
++    const before = Object.fromEntries(Object.entries(writes).map(([key, list]) => [key, list.length]))
++    const storeBefore = storeWrites.length
++    const result = await $.tool.call({
++      tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '收口', backfill: true,
++    })
++    expect(result.result).toBe('历史批次状态已补报：demo#B1 → 收口')
++    // progress 恰新增一次且只含补报键；持久化通道收到补报后 map（复用 B1 persistProgress）
++    expect(writes.progress.slice(before.progress)).toEqual([{ 'demo#B1': '收口' }])
++    expect(storeWrites.slice(storeBefore)).toEqual([
++      { key: 'progressMap', value: { 'demo#B1': '收口' } },
++    ])
++    // 「当前执行」副作用零触碰（写入计数不变），lastExecution 持久化同样不在旁路链上
++    expect(writes.closureCard.length).toBe(before.closureCard)
++    expect(writes.execution.length).toBe(before.execution)
++    expect(writes.lastRun.length).toBe(before.lastRun)
++    expect(writes.guardWarned.length).toBe(before.guardWarned)
++    expect(writes.currentTask.length).toBe(before.currentTask)
++    expect(writes.batchScope.length).toBe(before.batchScope)
++    expect(storeWrites.length).toBe(storeBefore + 1)
++    // 当前批 B2 的任务与边界保持 backfill 前的最后写入值（未被补报撤下或清空）
++    expect(writes.currentTask.at(-1)).toEqual({ kind: 'implement', plan: 'demo', batch: 'B2' })
++    expect(writes.batchScope.at(-1)).toEqual({ plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
++  })
++
++  test('backfill 后接常规上报：行为与无 backfill 路径一致', async ($, on) => {
++    const writes: Record<string, unknown[]> = {}
++    for (const key of ['currentTask', 'batchScope', 'closureCard', 'execution', 'lastRun', 'guardWarned', 'progress']) {
++      writes[key] = []
++      on('state.set', { plugin: 'flow-deck', key }, (_$, e, next) => {
++        writes[key].push(e.value)
++        return next(e)
++      })
++    }
++    const storeWrites: { key?: unknown; value?: unknown }[] = []
++    on('store.set', (_$, e, next) => {
++      storeWrites.push({ key: e.key, value: e.value })
++      return next(e)
++    })
++    on('session.start', () => ({ cwd: 'C:\\repo' }))
++    on('command.register', ($, e) => ({ value: { name: e.name } }))
++    on('tool.register', ($, e) => ({ value: { name: e.name } }))
++    on('fs.list', () => ({ value: [] }))
++    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
++    on('store.get', () => ({ value: undefined }))
++    on('ui.status', () => ({ value: undefined }))
++    on('ui.log', () => ({ value: undefined }))
++    on('ui.panes', () => ({ value: [] }))
++    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
++    await $.tool.call({
++      tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '收口', backfill: true,
++    })
++    // 常规上报当前批 B2 执行阶段：返回文案、execution/currentTask/progress 写入均照常
++    const result = await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '执行' })
++    expect(result.result).toBe('进度已上报')
++    expect(writes.progress.at(-1)).toEqual({ 'demo#B1': '收口', 'demo#B2': '执行' })
++    expect(writes.execution.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '执行' }))
++    expect(writes.currentTask.at(-1)).toEqual({ kind: 'implement', plan: 'demo', batch: 'B2' })
++    // 执行阶段不清同批边界；持久化 map 含全量键
++    expect(writes.batchScope.at(-1)).toEqual({ plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
++    expect(storeWrites.filter(w => w.key === 'progressMap').at(-1)).toEqual({
++      key: 'progressMap', value: { 'demo#B1': '收口', 'demo#B2': '执行' },
++    })
++    // lastExecution 仅常规上报写一次（backfill 旁路不触碰）
++    const lastExecWrites = storeWrites.filter(w => w.key === 'lastExecution')
++    expect(lastExecWrites.length).toBe(1)
++    expect(lastExecWrites[0].value).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '执行' }))
++  })
++
++  test('持久化写入侧：flow_deps 落 depsGraph、常规 flow_report 落 progressMap 与 lastExecution', async ($, on) => {
++    // B1 审计 P2-2 消化：on('store.set') 钩子可应答（B1 探针实证），写入侧机器断言
++    const storeWrites: { key?: unknown; value?: unknown }[] = []
++    on('store.set', (_$, e, next) => {
++      storeWrites.push({ key: e.key, value: e.value })
++      return next(e)
++    })
++    on('session.start', () => ({ cwd: 'C:\\repo' }))
++    on('command.register', ($, e) => ({ value: { name: e.name } }))
++    on('tool.register', ($, e) => ({ value: { name: e.name } }))
++    on('fs.list', () => ({ value: [] }))
++    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
++    on('store.get', () => ({ value: undefined }))
++    on('ui.status', () => ({ value: undefined }))
++    on('ui.log', () => ({ value: undefined }))
++    on('ui.panes', () => ({ value: [] }))
++    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
++    await $.tool.call({
++      tool: 'mcp__flow-deck__flow_deps', plan: 'demo',
++      batches: [{ batch: 'B1' }, { batch: 'B2', dependsOn: ['B1'] }],
++    })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '执行' })
++    // depsGraph 落归一化后图结构（dependsOn 缺省补空数组）；progressMap 落含新键的完整 map；
++    // lastExecution 落 stamped 上报（updatedAt 由 objectContaining 吸收）
++    expect(storeWrites).toEqual([
++      {
++        key: 'depsGraph',
++        value: { plan: 'demo', batches: [{ batch: 'B1', dependsOn: [] }, { batch: 'B2', dependsOn: ['B1'] }] },
++      },
++      { key: 'progressMap', value: { 'demo#B2': '执行' } },
++      { key: 'lastExecution', value: expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '执行' }) },
++    ])
++  })
++
+   test('任务数据与子代理状态同屏，面板内刷新按钮可触发全部重取', async ($, on) => {
+     const clock = mock.clock(on)
+     let calls = 0
+@@ -1005,8 +1137,8 @@ describe('pane', () => {
+       closureWrites.push(e.value)
+       return next(e)
+     })
+-    // store 出口经 $.store.set 持久化，测试引擎无该设施（仅 store.get 钩子可应答），
+-    // store 值断言留待会话内端到端验证（同 register.test.ts 尾注既有先例）。
++    // store 出口经 $.store.set 持久化；on('store.set') 钩子实际可应答（B1 探针证伪「无该设施」
++    // 旧口径，载荷带 key/value），写入侧机器断言见 backfill 批的持久化写入侧用例。
+     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+     // 场景 a：无边界声明（scope null）直接收口
+     await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 1, testsTotal: 1 })
+@@ -1050,7 +1182,7 @@ describe('pane', () => {
+       lastRunWrites.push(e.value)
+       return next(e)
+     })
+-    // store 出口经 $.store.set 持久化，测试引擎无该设施，store 值断言留待会话内端到端（见文件尾注先例）
++    // store 出口经 $.store.set 持久化；写入侧断言用 on('store.set') 钩子（可应答，见 backfill 批用例）
+     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+     await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 1, testsTotal: 1 })
+diff --git a/plugins/flow-deck/hooks/register.tsx b/plugins/flow-deck/hooks/register.tsx
+index 09a3a5b..924db12 100644
+--- a/plugins/flow-deck/hooks/register.tsx
++++ b/plugins/flow-deck/hooks/register.tsx
+@@ -1195,6 +1195,7 @@ export const register: Register = (on, options) => {
+           testsPassed: { type: 'number', description: '已通过的定向测试数' },
+           testsTotal: { type: 'number', description: '定向测试总数' },
+           evidenceDir: { type: 'string', description: '证据目录路径' },
++          backfill: { type: 'boolean', description: '补报历史批次状态：只更新轨道图批次进度，不触碰当前任务、批次边界与通关卡；仅用于开工核对时补齐前序批次' },
+         },
+         required: ['plan', 'batch', 'phase'],
+       },
+@@ -1412,6 +1413,18 @@ export const register: Register = (on, options) => {
+     if (report === null) {
+       return { result: 'plan、batch、phase 为必填字符串', isError: true }
+     }
++    // backfill 旁路（D11）：补报历史批次只写 progress + 持久化，在 parse 校验后、一切副作用前
++    // 分流——closureCard/execution/lastRun/guardWarned/currentTask/batchScope/statusline/
++    // lastExecution 均不触碰（firstReportAt 记点只在 flow_batch，天然不在本链路）。常规通道的
++    // 收口上报会撤任务清边界，补报走同链路会破坏当前批次；旁路隔离是补报可幂等重放的前提
++    if (e.backfill === true) {
++      await update($, progress, prev => ({
++        ...prev,
++        [`${report.plan}#${report.batch}`]: report.phase,
++      }))
++      await persistProgress($)
++      return { result: `历史批次状态已补报：${report.plan}#${report.batch} → ${report.phase}` }
++    }
+     // 收口组装（B1 条目 3 语句顺序契约）：① minutes 判定读首报 map → ② scope 前置校验 →
+     // ③ gitStatus 取数组装行数与 statsAt → ④ 并入 stamped，四步先于下方 execution/progress 更新
+     const closurePhase = report.phase === '收口' &&
+diff --git a/plugins/rulertu-flow/skills/implement-plan/SKILL.md b/plugins/rulertu-flow/skills/implement-plan/SKILL.md
+index 7ba12fe..8807741 100644
+--- a/plugins/rulertu-flow/skills/implement-plan/SKILL.md
++++ b/plugins/rulertu-flow/skills/implement-plan/SKILL.md
+@@ -9,13 +9,13 @@ description: 执行含 T0-T3 定级的分批实施计划。当用户要求执行
+ 
+ ## 开工检查点
+ 
+-每批开工前读取详案并向用户复述批次、T 级、依据、流程和验收条数；核对前置批次证据。读取 [TDD](references/tdd.md)，把本批接缝、红绿循环和测试替身边界写入委派单。接缝不明时按需读取 [代码库设计](references/codebase-design.md)、[深化模块](references/deepening.md)、[设计两次](references/design-it-twice.md)、[测试](references/tests.md) 或 [替身](references/mocking.md)，补齐后再派单。
++每批开工前读取详案并向用户复述批次、T 级、依据、流程和验收条数；核对前置批次证据。核对到的收口事实与面板状态可能不符（跨会话漏报），会话有 `mcp__flow-deck__flow_report` 时，对本方案已收口（证据目录或 git log 佐证）且非本会话已上报的前序批次，逐条带 `backfill: true` 补报（幂等，可重复）。读取 [TDD](references/tdd.md)，把本批接缝、红绿循环和测试替身边界写入委派单。接缝不明时按需读取 [代码库设计](references/codebase-design.md)、[深化模块](references/deepening.md)、[设计两次](references/design-it-twice.md)、[测试](references/tests.md) 或 [替身](references/mocking.md)，补齐后再派单。
+ 
+ ## 进度上报
+ 
+ 会话有 `mcp__flow-deck__flow_task` 时，每批开工检查前用 `kind: "implement"`、`plan`、`batch` 声明当前任务。正常收口由 `flow_report` 自动撤下面板；实施失败停止、暂停或取消时调用 `kind: "idle"`。无该工具时静默跳过，恢复实施时重新声明。
+ 
+-会话中存在 `mcp__flow-deck__flow_report` 工具时，每批的开工、派单、执行、验证、收口各阶段完成即调用上报：`plan`（方案名）、`batch`（批次标识）、`phase`（阶段）必填，`tLevel`、`testsPassed`/`testsTotal`、`evidenceDir` 按实填写。工具不存在时静默跳过，不补报、不重试。上报只是进度展示，不替代任何验证义务。
++会话中存在 `mcp__flow-deck__flow_report` 工具时，每批的开工、派单、执行、验证、收口各阶段完成即调用上报：`plan`（方案名）、`batch`（批次标识）、`phase`（阶段）必填，`tLevel`、`testsPassed`/`testsTotal`、`evidenceDir` 按实填写。工具不存在时静默跳过。常规上报漏报不补报不重试；开工核对发现的历史批次收口缺失，按开工检查点口径经 `backfill` 补报。上报只是进度展示，不替代任何验证义务。
+ 
+ 会话中存在 `mcp__flow-deck__flow_batch` 工具时，每批派单完成后调用一次，把委派单的改动锚点展开为本批允许改动的文件清单（`plan`、`batch`、`files`）声明边界；此后对边界外文件的编辑会被守卫提醒或拦截，确需改动时先更新边界再动工。工具不存在时静默跳过，边界声明不改变任何验证义务。
+ 

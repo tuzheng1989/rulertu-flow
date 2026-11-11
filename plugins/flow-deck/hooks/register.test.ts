@@ -495,6 +495,138 @@ describe('pane', () => {
     await ui.unmount()
   })
 
+  test('backfill 旁路：补报历史批次只写 progress 与持久化，当前执行状态零触碰', async ($, on) => {
+    // 副作用序列观测：七个「当前执行」键的 state.set 全量记录 + store.set 持久化记录（载荷带 key）
+    const writes: Record<string, unknown[]> = {}
+    for (const key of ['currentTask', 'batchScope', 'closureCard', 'execution', 'lastRun', 'guardWarned', 'progress']) {
+      writes[key] = []
+      on('state.set', { plugin: 'flow-deck', key }, (_$, e, next) => {
+        writes[key].push(e.value)
+        return next(e)
+      })
+    }
+    const storeWrites: { key?: unknown; value?: unknown }[] = []
+    on('store.set', (_$, e, next) => {
+      storeWrites.push({ key: e.key, value: e.value })
+      return next(e)
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    // 当前批次 B2 已声明任务与边界（backfill 的典型前置：新会话开工核对补 B1 漏报）
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    const before = Object.fromEntries(Object.entries(writes).map(([key, list]) => [key, list.length]))
+    const storeBefore = storeWrites.length
+    const result = await $.tool.call({
+      tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '收口', backfill: true,
+    })
+    expect(result.result).toBe('历史批次状态已补报：demo#B1 → 收口')
+    // progress 恰新增一次且只含补报键；持久化通道收到补报后 map（复用 B1 persistProgress）
+    expect(writes.progress.slice(before.progress)).toEqual([{ 'demo#B1': '收口' }])
+    expect(storeWrites.slice(storeBefore)).toEqual([
+      { key: 'progressMap', value: { 'demo#B1': '收口' } },
+    ])
+    // 「当前执行」副作用零触碰（写入计数不变），lastExecution 持久化同样不在旁路链上
+    expect(writes.closureCard.length).toBe(before.closureCard)
+    expect(writes.execution.length).toBe(before.execution)
+    expect(writes.lastRun.length).toBe(before.lastRun)
+    expect(writes.guardWarned.length).toBe(before.guardWarned)
+    expect(writes.currentTask.length).toBe(before.currentTask)
+    expect(writes.batchScope.length).toBe(before.batchScope)
+    expect(storeWrites.length).toBe(storeBefore + 1)
+    // 当前批 B2 的任务与边界保持 backfill 前的最后写入值（未被补报撤下或清空）
+    expect(writes.currentTask.at(-1)).toEqual({ kind: 'implement', plan: 'demo', batch: 'B2' })
+    expect(writes.batchScope.at(-1)).toEqual({ plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+  })
+
+  test('backfill 后接常规上报：行为与无 backfill 路径一致', async ($, on) => {
+    const writes: Record<string, unknown[]> = {}
+    for (const key of ['currentTask', 'batchScope', 'closureCard', 'execution', 'lastRun', 'guardWarned', 'progress']) {
+      writes[key] = []
+      on('state.set', { plugin: 'flow-deck', key }, (_$, e, next) => {
+        writes[key].push(e.value)
+        return next(e)
+      })
+    }
+    const storeWrites: { key?: unknown; value?: unknown }[] = []
+    on('store.set', (_$, e, next) => {
+      storeWrites.push({ key: e.key, value: e.value })
+      return next(e)
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B1', phase: '收口', backfill: true,
+    })
+    // 常规上报当前批 B2 执行阶段：返回文案、execution/currentTask/progress 写入均照常
+    const result = await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '执行' })
+    expect(result.result).toBe('进度已上报')
+    expect(writes.progress.at(-1)).toEqual({ 'demo#B1': '收口', 'demo#B2': '执行' })
+    expect(writes.execution.at(-1)).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '执行' }))
+    expect(writes.currentTask.at(-1)).toEqual({ kind: 'implement', plan: 'demo', batch: 'B2' })
+    // 执行阶段不清同批边界；持久化 map 含全量键
+    expect(writes.batchScope.at(-1)).toEqual({ plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
+    expect(storeWrites.filter(w => w.key === 'progressMap').at(-1)).toEqual({
+      key: 'progressMap', value: { 'demo#B1': '收口', 'demo#B2': '执行' },
+    })
+    // lastExecution 仅常规上报写一次（backfill 旁路不触碰）
+    const lastExecWrites = storeWrites.filter(w => w.key === 'lastExecution')
+    expect(lastExecWrites.length).toBe(1)
+    expect(lastExecWrites[0].value).toEqual(expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '执行' }))
+  })
+
+  test('持久化写入侧：flow_deps 落 depsGraph、常规 flow_report 落 progressMap 与 lastExecution', async ($, on) => {
+    // B1 审计 P2-2 消化：on('store.set') 钩子可应答（B1 探针实证），写入侧机器断言
+    const storeWrites: { key?: unknown; value?: unknown }[] = []
+    on('store.set', (_$, e, next) => {
+      storeWrites.push({ key: e.key, value: e.value })
+      return next(e)
+    })
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('store.get', () => ({ value: undefined }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.panes', () => ({ value: [] }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({
+      tool: 'mcp__flow-deck__flow_deps', plan: 'demo',
+      batches: [{ batch: 'B1' }, { batch: 'B2', dependsOn: ['B1'] }],
+    })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '执行' })
+    // depsGraph 落归一化后图结构（dependsOn 缺省补空数组）；progressMap 落含新键的完整 map；
+    // lastExecution 落 stamped 上报（updatedAt 由 objectContaining 吸收）
+    expect(storeWrites).toEqual([
+      {
+        key: 'depsGraph',
+        value: { plan: 'demo', batches: [{ batch: 'B1', dependsOn: [] }, { batch: 'B2', dependsOn: ['B1'] }] },
+      },
+      { key: 'progressMap', value: { 'demo#B2': '执行' } },
+      { key: 'lastExecution', value: expect.objectContaining({ plan: 'demo', batch: 'B2', phase: '执行' }) },
+    ])
+  })
+
   test('任务数据与子代理状态同屏，面板内刷新按钮可触发全部重取', async ($, on) => {
     const clock = mock.clock(on)
     let calls = 0
@@ -1005,8 +1137,8 @@ describe('pane', () => {
       closureWrites.push(e.value)
       return next(e)
     })
-    // store 出口经 $.store.set 持久化，测试引擎无该设施（仅 store.get 钩子可应答），
-    // store 值断言留待会话内端到端验证（同 register.test.ts 尾注既有先例）。
+    // store 出口经 $.store.set 持久化；on('store.set') 钩子实际可应答（B1 探针证伪「无该设施」
+    // 旧口径，载荷带 key/value），写入侧机器断言见 backfill 批的持久化写入侧用例。
     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
     // 场景 a：无边界声明（scope null）直接收口
     await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 1, testsTotal: 1 })
@@ -1050,7 +1182,7 @@ describe('pane', () => {
       lastRunWrites.push(e.value)
       return next(e)
     })
-    // store 出口经 $.store.set 持久化，测试引擎无该设施，store 值断言留待会话内端到端（见文件尾注先例）
+    // store 出口经 $.store.set 持久化；写入侧断言用 on('store.set') 钩子（可应答，见 backfill 批用例）
     await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
     await $.tool.call({ tool: 'mcp__flow-deck__flow_batch', plan: 'demo', batch: 'B2', files: ['src/a.ts'] })
     await $.tool.call({ tool: 'mcp__flow-deck__flow_report', plan: 'demo', batch: 'B2', phase: '收口', testsPassed: 1, testsTotal: 1 })
