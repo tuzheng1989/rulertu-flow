@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- work-skills 2.5.0：新增 `sag` 技能（本地语义搜索）——迁自 SAG Wiki desktop CLI 装到 `~/.claude/skills/sag` 的全局副本，单一源归位本仓 plugins/work-skills/skills/sag/；剥离平台安装元数据（技能运行不需要，且会诱使 SAG 桌面版把仓库目录当安装点）；frontmatter 中文化 description 补触发词并加 metadata.source 记录上游来源（canonical 源 Zleap-AI/SAG-Wiki cli/skills/sag，正文保留英文原文以便与上游 diff 同步）；三个 references（setup/parameters/ignores）原样迁移，无本机特定路径。当晚 SAG 桌面版自动重装了一份更新版全局副本（SKILL.md 新增 Check time/revisions/scope 证据核对节，references 零变化，且新版不再带 .sag-install.json 标记），已二次同步正文并再删全局副本；SAG 桌面版无禁用自动安装的 CLI 配置项，后续若再自动重装按同法同步或直接删。codex manifest longDescription 22→23 个技能并补 sag，capabilities 加 Search。双 manifest 同步升版 2.5.0。
+
 - work-skills 2.4.0：deep-research 0.7.0 搜索通道扩展，新增 product 通道接入 Product Hunt——通道入口为新技能 `sn-search-producthunt`（Bash 脚本直调官方 MCP 端点，匿名 JSON-RPC 无需 OAuth/key，只封装上游 7 个只读工具而非注册 17 工具全量常驻（含写操作）的 MCP server，离线测试 33/33）；deep-research 侧五文档位加法接线：搜索通道映射表加 product 行 + 子工具选择（子命令按 query 语义选：search/semantic/alternatives/profile/category/leaderboard/categories，契约单一出处 sn-search-producthunt/SKILL.md 不复制）、normalize 映射补「输出已含 source_type:"product"，items[] 直接入 search_results」、实现说明表与多源 prose 升 6 通道并同步降级枚举；query 节点 source_type 枚举与选择指南加 product，选择原则补数据边界（maker 自报默认 source_tier: secondary、关键事实需与 web/academic 交叉验证，榜单≠竞品全集、竞品发现优先 alternatives/semantic）；搜索层活文档 SEARCH_MIGRATION.md 追加 v0.7.0 节（数据边界与匿名访问可能收紧，收紧时脚本 success:false 由既有降级规则兜底）。双 manifest 同步升版 2.4.0。
 
 - agent-skills 1.5.0：新增 `jev-agent-design`，沿 awesome-jev-hub 及社区精选清单追溯原项目，整理动作循环、浏览器、模型与技能路由、事件唤醒、上下文压缩、检索验证、权限门控和 MCP 判断工具；结合用户文章与无人机/驾驶仿真原项目，补充分层时间契约、状态可观测性和遥感低空试点假设；新增跨案例设计哲学、风险退路对比与决策卡，附故障处理和评测指南，区分项目自述、局部源码核验及待验证建议。同步双 manifest、marketplace 描述和 README。
