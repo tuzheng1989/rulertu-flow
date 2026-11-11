@@ -1,0 +1,428 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index ff82351..b471f06 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,8 @@
+ 
+ ## Unreleased
+ 
++- flow-deck 0.21.0：轨道图跨会话状态持久化 + 渲染层拓扑下推（方案 `plans/flow-deck/2026-11-11-deck-deps-progress-persistence.md` B1 批）——**持久化**：`progress` 与 `deps` 两个内存 atom 经 `$.store` 独立键（`progressMap` / `depsGraph`）跨会话保留，`flow_report` 每次进度更新后、`flow_deps` 声明后各自 best-effort 写入（try/catch 降级 + 调试日志，范式同 `lastExecution`），持久化失败不阻塞工具返回；**恢复**：`session.start` 把两行清空替换为「先取后写」恢复（`readPersistedProgress` / `readPersistedDeps` 顶层函数 + `parseProgressMap` 新校验纯函数），store 不可用或坏形状降级为空 map / null——行为同清空现状，`currentTask` 等清空语义不动，恢复的图待同方案实施声明后才显示（「依赖图只在实施对应方案时显示」契约保持）；**拓扑下推**：`depStatuses` 渲染纯函数改两遍——第一遍逐节点查表（现状），第二遍任一节点收口 ⇒ 其 dependsOn 闭包（含传递）强制 done 且阶段置「收口」（栈迭代 + 已处理集合，环终止、悬空批次名跳过），`DepNode` 加 `phase` 字段供两处节点文本行取用（消除 ✓ 符号与「待执行」文本自相矛盾）；只修非末批漏报，视图修正不改写持久化数据。新增 `parseProgressMap` 纯函数（L1 四例：合法全收 / 整体非对象 null / 混值剔键 / 空对象合法）、`depStatuses` 下推四例（B2 收口推 B1、B3 链式传递、悬空引用不崩、末批漏报负断言）与三个 mount 用例（恢复-渲染往返、坏形状降级、拓扑下推渲染；store.get 替身按事件载荷的 key 字段分流）。双 manifest 同步升版 0.21.0。
++
+ - work-skills 2.5.0：新增 `sag` 技能（本地语义搜索）——迁自 SAG Wiki desktop CLI 装到 `~/.claude/skills/sag` 的全局副本，单一源归位本仓 plugins/work-skills/skills/sag/；剥离平台安装元数据（技能运行不需要，且会诱使 SAG 桌面版把仓库目录当安装点）；frontmatter 中文化 description 补触发词并加 metadata.source 记录上游来源（canonical 源 Zleap-AI/SAG-Wiki cli/skills/sag，正文保留英文原文以便与上游 diff 同步）；三个 references（setup/parameters/ignores）原样迁移，无本机特定路径。当晚 SAG 桌面版自动重装了一份更新版全局副本（SKILL.md 新增 Check time/revisions/scope 证据核对节，references 零变化，且新版不再带 .sag-install.json 标记），已二次同步正文并再删全局副本；SAG 桌面版无禁用自动安装的 CLI 配置项，后续若再自动重装按同法同步或直接删。codex manifest longDescription 22→23 个技能并补 sag，capabilities 加 Search。双 manifest 同步升版 2.5.0。
+ 
+ - work-skills 2.4.0：deep-research 0.7.0 搜索通道扩展，新增 product 通道接入 Product Hunt——通道入口为新技能 `sn-search-producthunt`（Bash 脚本直调官方 MCP 端点，匿名 JSON-RPC 无需 OAuth/key，只封装上游 7 个只读工具而非注册 17 工具全量常驻（含写操作）的 MCP server，离线测试 33/33）；deep-research 侧五文档位加法接线：搜索通道映射表加 product 行 + 子工具选择（子命令按 query 语义选：search/semantic/alternatives/profile/category/leaderboard/categories，契约单一出处 sn-search-producthunt/SKILL.md 不复制）、normalize 映射补「输出已含 source_type:"product"，items[] 直接入 search_results」、实现说明表与多源 prose 升 6 通道并同步降级枚举；query 节点 source_type 枚举与选择指南加 product，选择原则补数据边界（maker 自报默认 source_tier: secondary、关键事实需与 web/academic 交叉验证，榜单≠竞品全集、竞品发现优先 alternatives/semantic）；搜索层活文档 SEARCH_MIGRATION.md 追加 v0.7.0 节（数据边界与匿名访问可能收紧，收紧时脚本 success:false 由既有降级规则兜底）。双 manifest 同步升版 2.4.0。
+diff --git a/plugins/flow-deck/.claude-plugin/plugin.json b/plugins/flow-deck/.claude-plugin/plugin.json
+index af4b1a2..b19268c 100644
+--- a/plugins/flow-deck/.claude-plugin/plugin.json
++++ b/plugins/flow-deck/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "flow-deck",
+-  "version": "0.20.0",
++  "version": "0.21.0",
+   "description": "rulertu-flow 工作流、仓库与子代理状态仪表盘：评审进度、批次守卫、依赖图、git 更改与子代理运行状态",
+   "types": "./types/index.d.ts",
+   "userConfig": {
+diff --git a/plugins/flow-deck/.codex-plugin/plugin.json b/plugins/flow-deck/.codex-plugin/plugin.json
+index deef1be..705121a 100644
+--- a/plugins/flow-deck/.codex-plugin/plugin.json
++++ b/plugins/flow-deck/.codex-plugin/plugin.json
+@@ -1,5 +1,5 @@
+ {
+   "name": "flow-deck",
+   "description": "rulertu-flow 工作流、仓库与子代理状态仪表盘（mod 机制仅 Claude Code 生效，Codex 侧为占位元数据）",
+-  "version": "0.20.0"
++  "version": "0.21.0"
+ }
+diff --git a/plugins/flow-deck/README.md b/plugins/flow-deck/README.md
+index 97a463c..310d5dd 100644
+--- a/plugins/flow-deck/README.md
++++ b/plugins/flow-deck/README.md
+@@ -18,7 +18,7 @@ Claude Code 的工作流、Git 与子代理状态面板。Codex manifest 仅提
+ 
+ `flow_task` 声明当前任务（`kind: iterate | implement | idle`，活动任务必填 `plan`，实施可附 `batch`）；plan-iterate 与 implement-plan 技能在开始和结束时同步任务。`flow_report` 的未收口阶段、`flow_batch` 声明也会激活对应实施批次；批次收口或 `idle` 后撤下执行显示与边界守卫。暂停、取消或失败停止时上报 `idle`，恢复时重新声明任务。warn 越界提醒按文件去重，同批同文件只提醒一次（批次重新声明后重置），文案含触发工具名。
+ 
+-历史评审文件、`flow_deps` 路线图和跨会话执行记录不激活任务；新会话从无任务状态开始，上次执行仅通过 toast 提醒。依赖图只在实施对应方案时显示。更新时同时更新 flow-deck 与 rulertu-flow，以加载配套的任务上报规则。
++历史评审文件、`flow_deps` 路线图和跨会话执行记录不激活任务；新会话从无任务状态开始，上次执行仅通过 toast 提醒。依赖图只在实施对应方案时显示。轨道图结构与各批次阶段经 `$.store` 跨会话恢复（键 `progressMap` / `depsGraph`，每次 `flow_report` / `flow_deps` 后 best-effort 写入，坏形状降级为空），新会话声明同方案实施任务后自动接续显示；渲染层拓扑下推——任一批次收口即其全部上游（含传递）显示为已收口，单点漏报不破坏整图可信度。更新时同时更新 flow-deck 与 rulertu-flow，以加载配套的任务上报规则。
+ 
+ 上报数据直接更新界面，无新增依赖；唯一动画是 800ms 呼吸节拍器（仅面板可见时翻转，见上）。终端与桌面共用 Text / Box，窄于 44 列时去掉卡片边框。
+ 
+diff --git a/plugins/flow-deck/hooks/parse.test.ts b/plugins/flow-deck/hooks/parse.test.ts
+index d64b670..2b93eb7 100644
+--- a/plugins/flow-deck/hooks/parse.test.ts
++++ b/plugins/flow-deck/hooks/parse.test.ts
+@@ -37,6 +37,7 @@ import {
+   parseNumstat,
+   parseSections,
+   parsePorcelain,
++  parseProgressMap,
+   parseReviewJson,
+   parseStateJson,
+   roundScores,
+@@ -529,6 +530,18 @@ describe('parse', () => {
+     expect(parseDepGraph(null)).toBe(null)
+   })
+ 
++  test('parseProgressMap 校验跨会话进度恢复：合法全收、整体非对象 null、混值剔键、空对象合法', () => {
++    expect(parseProgressMap({ 'demo#B1': '收口', 'demo#B2': '执行' })).toEqual({ 'demo#B1': '收口', 'demo#B2': '执行' })
++    // 整体非对象（含数组与 null）：一律 null，恢复侧降级为空 map
++    expect(parseProgressMap('garbage')).toBe(null)
++    expect(parseProgressMap(['demo#B1'])).toBe(null)
++    expect(parseProgressMap(null)).toBe(null)
++    // 混合值：非 string 值的键剔除，其余键保留（个别坏键不弃整份，D9）
++    expect(parseProgressMap({ 'demo#B1': '收口', 'demo#B2': 3, 'demo#B3': null })).toEqual({ 'demo#B1': '收口' })
++    // 空对象合法
++    expect(parseProgressMap({})).toEqual({})
++  })
++
+   test('depStatuses 按 progress 标注三态', () => {
+     const graph = parseDepGraph({
+       plan: 'demo',
+@@ -537,15 +550,44 @@ describe('parse', () => {
+     if (graph === null) throw new Error('fixture 不可为 null')
+     // 无记录全部待执行
+     expect(depStatuses(graph, {})).toEqual([
+-      { batch: 'B1', dependsOn: [], status: 'pending' },
+-      { batch: 'B2', dependsOn: ['B1'], status: 'pending' },
++      { batch: 'B1', dependsOn: [], status: 'pending', phase: '待执行' },
++      { batch: 'B2', dependsOn: ['B1'], status: 'pending', phase: '待执行' },
+     ])
+     // 收口=完成；其他阶段=进行中；其他方案的记录不影响
+     const progress = { 'demo#B1': '收口', 'demo#B2': '执行', 'other#B1': '收口' }
+     expect(depStatuses(graph, progress)).toEqual([
+-      { batch: 'B1', dependsOn: [], status: 'done' },
+-      { batch: 'B2', dependsOn: ['B1'], status: 'active' },
++      { batch: 'B1', dependsOn: [], status: 'done', phase: '收口' },
++      { batch: 'B2', dependsOn: ['B1'], status: 'active', phase: '执行' },
++    ])
++  })
++
++  test('depStatuses 拓扑下推：done 沿 dependsOn 闭包传播，视图修正不改 progress 原文', () => {
++    const graph = parseDepGraph({
++      plan: 'demo',
++      batches: [
++        { batch: 'B1', dependsOn: [] },
++        { batch: 'B2', dependsOn: ['B1'] },
++        { batch: 'B3', dependsOn: ['B2'] },
++      ],
++    })
++    if (graph === null) throw new Error('fixture 不可为 null')
++    // B2 收口而 B1 无记录 → B1 推导 done 且阶段置「收口」（dependsOn 语义：下游收口前上游必已收口）
++    const pushed = depStatuses(graph, { 'demo#B2': '收口' })
++    expect(pushed.map(node => [node.batch, node.status, node.phase])).toEqual([
++      ['B1', 'done', '收口'],
++      ['B2', 'done', '收口'],
++      ['B3', 'pending', '待执行'],
++    ])
++    // B3 收口沿 B2→B1 链式传递（含传递闭包）
++    expect(depStatuses(graph, { 'demo#B3': '收口' }).map(node => node.status)).toEqual(['done', 'done', 'done'])
++    // dependsOn 引用图中不存在的批次名：跳过不崩
++    const dangling = parseDepGraph({ plan: 'demo', batches: [{ batch: 'B2', dependsOn: ['B9'] }] })
++    if (dangling === null) throw new Error('fixture 不可为 null')
++    expect(depStatuses(dangling, { 'demo#B2': '收口' })).toEqual([
++      { batch: 'B2', dependsOn: ['B9'], status: 'done', phase: '收口' },
+     ])
++    // 末批漏报（无下游）→ 维持查表结果（覆盖面负断言）
++    expect(depStatuses(graph, { 'demo#B1': '收口' }).map(node => node.status)).toEqual(['done', 'pending', 'pending'])
+   })
+ 
+   test('buildPlanReview 组装概览并以最新轮判定达标', () => {
+diff --git a/plugins/flow-deck/hooks/parse.ts b/plugins/flow-deck/hooks/parse.ts
+index d5fd471..22ce57a 100644
+--- a/plugins/flow-deck/hooks/parse.ts
++++ b/plugins/flow-deck/hooks/parse.ts
+@@ -410,19 +410,54 @@ export function parseDepGraph(value: unknown): DepGraph | null {
+   return { plan: record.plan, batches }
+ }
+ 
++/** 校验跨会话恢复的批次进度 map：整体非对象/数组返回 null；
++ *  逐键只收 string 值，其余键剔除（个别坏键不弃整份，口径同 parseDepGraph） */
++export function parseProgressMap(value: unknown): Record<string, string> | null {
++  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
++  const out: Record<string, string> = {}
++  for (const [key, phase] of Object.entries(value)) {
++    if (typeof phase === 'string') out[key] = phase
++  }
++  return out
++}
++
+ export type DepNodeStatus = 'done' | 'active' | 'pending'
+ 
+ export type DepNode = BatchDep & {
+   status: DepNodeStatus
++  /** 推导后阶段：查表值、拓扑下推的「收口」或无记录的「待执行」；状态符号与文本行同源 */
++  phase: string
+ }
+ 
+-/** 结合各批阶段记录标注状态：收口=完成，有记录=进行中，未上报=待执行 */
++/** 结合各批阶段记录标注状态：收口=完成，有记录=进行中，未上报=待执行；
++ *  第二遍拓扑下推——任一节点收口 ⇒ 其 dependsOn 闭包（含传递）强制 done 且阶段置「收口」
++ *  （依赖语义下「下游收口前上游必已收口」恒成立，单点漏报不破坏整图可信度；
++ *  仅视图修正不改写 progress 数据，末批漏报无下游不在覆盖面内） */
+ export function depStatuses(graph: DepGraph, progress: Record<string, string>): DepNode[] {
+-  return graph.batches.map(node => {
++  const nodes = graph.batches.map(node => {
+     const phase = progress[`${graph.plan}#${node.batch}`]
+-    if (phase === undefined) return { ...node, status: 'pending' as const }
+-    return { ...node, status: phase === '收口' ? ('done' as const) : ('active' as const) }
++    if (phase === undefined) return { ...node, status: 'pending' as const, phase: '待执行' }
++    return { ...node, status: phase === '收口' ? ('done' as const) : ('active' as const), phase }
+   })
++  // 下推用栈迭代 + 已处理集合：dependsOn 引用图中不存在的批次名跳过，图有环时集合保证终止
++  const byBatch = new Map(nodes.map(node => [node.batch, node]))
++  const settled = new Set<string>()
++  const stack = nodes.filter(node => node.status === 'done').map(node => node.batch)
++  while (stack.length > 0) {
++    const batch = stack.pop() as string
++    if (settled.has(batch)) continue
++    settled.add(batch)
++    for (const dep of byBatch.get(batch)?.dependsOn ?? []) {
++      const upstream = byBatch.get(dep)
++      if (upstream === undefined) continue
++      if (upstream.status !== 'done') {
++        upstream.status = 'done'
++        upstream.phase = '收口'
++      }
++      if (!settled.has(dep)) stack.push(dep)
++    }
++  }
++  return nodes
+ }
+ 
+ /** 任务控制台皮肤术语表（B1 条目 9）：7 条映射一词一义，只换文案不改图形结构与信息量；
+diff --git a/plugins/flow-deck/hooks/register.test.ts b/plugins/flow-deck/hooks/register.test.ts
+index 3279577..d794004 100644
+--- a/plugins/flow-deck/hooks/register.test.ts
++++ b/plugins/flow-deck/hooks/register.test.ts
+@@ -409,6 +409,92 @@ describe('pane', () => {
+     await ui.unmount()
+   })
+ 
++  test('session.start 恢复 store 的 progress 与 deps：同方案实施任务面板接续渲染 DAG', { options: { artDirection: 'default' } }, async ($, on) => {
++    on('session.start', () => ({ cwd: 'C:\\repo' }))
++    on('command.register', ($, e) => ({ value: { name: e.name } }))
++    on('tool.register', ($, e) => ({ value: { name: e.name } }))
++    on('fs.list', () => ({ value: [] }))
++    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
++    on('ui.status', () => ({ value: undefined }))
++    on('ui.log', () => ({ value: undefined }))
++    // 跨会话恢复替身：store.get 载荷带 key（实测 {"key":"lastExecution"} 形态），按 key 分流
++    on('store.get', (_$, e) => ({
++      value: e.key === 'progressMap' ? { 'demo#B1': '收口' }
++        : e.key === 'depsGraph' ? { plan: 'demo', batches: [{ batch: 'B1' }, { batch: 'B2', dependsOn: ['B1'] }] }
++        : undefined,
++    }))
++    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
++    const ui = await $.ui.mount({
++      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
++      props: paneProps('Flow 评审仪表盘'),
++    })
++    expect(await ui.find({ text: /▍执行 DAG（demo）/ })).not.toBeUndefined()
++    expect(await ui.find({ type: 'Text', text: '✓ B1' })).not.toBeUndefined()
++    expect(await ui.find({ type: 'Text', text: '○ B2' })).not.toBeUndefined()
++    expect(await ui.find({ text: /1\/2 收口/ })).not.toBeUndefined()
++    // 恢复状态照常着色：done 绿、pending dim
++    const doneLine = await ui.find({ type: 'Text', text: '✓ B1' })
++    expect(doneLine?.props.color).toBe('success')
++    const waitLine = await ui.find({ type: 'Text', text: '○ B2' })
++    expect(waitLine?.props.dimColor).toBe(true)
++    await ui.unmount()
++  })
++
++  test('store 坏形状恢复降级为空：无 DAG 区块、无异常，行为同清空现状', { options: { artDirection: 'default' } }, async ($, on) => {
++    on('session.start', () => ({ cwd: 'C:\\repo' }))
++    on('command.register', ($, e) => ({ value: { name: e.name } }))
++    on('tool.register', ($, e) => ({ value: { name: e.name } }))
++    on('fs.list', () => ({ value: [] }))
++    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
++    on('ui.status', () => ({ value: undefined }))
++    on('ui.log', () => ({ value: undefined }))
++    // progress 整体非对象、deps 缺合法 plan：双双降级（空 map / null）
++    on('store.get', (_$, e) => ({
++      value: e.key === 'progressMap' ? 'garbage'
++        : e.key === 'depsGraph' ? { plan: 123 }
++        : undefined,
++    }))
++    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
++    const ui = await $.ui.mount({
++      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
++      props: paneProps('Flow 评审仪表盘'),
++    })
++    expect(await ui.find({ text: /执行 DAG/ })).toBeUndefined()
++    // 面板照常渲染任务标题，无异常中断
++    expect(await ui.find({ text: /工作面板 · 方案实施/ })).not.toBeUndefined()
++    await ui.unmount()
++  })
++
++  test('恢复数据拓扑下推渲染：B2 收口 B1 无记录 → B1 推导 done 且文本「收口」', { options: { artDirection: 'default' } }, async ($, on) => {
++    on('session.start', () => ({ cwd: 'C:\\repo' }))
++    on('command.register', ($, e) => ({ value: { name: e.name } }))
++    on('tool.register', ($, e) => ({ value: { name: e.name } }))
++    on('fs.list', () => ({ value: [] }))
++    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
++    on('ui.status', () => ({ value: undefined }))
++    on('ui.log', () => ({ value: undefined }))
++    on('store.get', (_$, e) => ({
++      value: e.key === 'progressMap' ? { 'demo#B2': '收口' }
++        : e.key === 'depsGraph' ? { plan: 'demo', batches: [{ batch: 'B1' }, { batch: 'B2', dependsOn: ['B1'] }] }
++        : undefined,
++    }))
++    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
++    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
++    const ui = await $.ui.mount({
++      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
++      props: paneProps('Flow 评审仪表盘'),
++    })
++    // B1 无记录但被下推：状态符号与文本行同源（done 且「收口」），n/m 计数含推导节点
++    const doneLine = await ui.find({ type: 'Text', text: '✓ B1' })
++    expect(doneLine?.props.color).toBe('success')
++    expect(await ui.find({ text: /收口 · 起点/ })).not.toBeUndefined()
++    expect(await ui.find({ text: /待执行/ })).toBeUndefined()
++    expect(await ui.find({ text: /2\/2 收口/ })).not.toBeUndefined()
++    await ui.unmount()
++  })
++
+   test('任务数据与子代理状态同屏，面板内刷新按钮可触发全部重取', async ($, on) => {
+     const clock = mock.clock(on)
+     let calls = 0
+diff --git a/plugins/flow-deck/hooks/register.tsx b/plugins/flow-deck/hooks/register.tsx
+index 7915238..09a3a5b 100644
+--- a/plugins/flow-deck/hooks/register.tsx
++++ b/plugins/flow-deck/hooks/register.tsx
+@@ -17,6 +17,7 @@ import {
+   parseDepGraph,
+   parseExecution,
+   parseGhIssues,
++  parseProgressMap,
+   parseSections,
+   phaseProgress,
+   roundScores,
+@@ -41,6 +42,7 @@ import type { ChangeState, SkinKey } from './parse'
+ import type {
+   BatchScope,
+   ClosureStats,
++  DepGraph,
+   ExecutionReport,
+   FlowTask,
+   FsEntryLike,
+@@ -65,6 +67,8 @@ const GH_ISSUE_POLL_MS = 60_000
+ /** 呼吸节拍周期（ms）：呼吸与小生物共用单一 clock（B2 条目 1/5）；硬编码不做配置，观察期后再议 */
+ const BEAT_MS = 800
+ const EXECUTION_STORE_KEY = 'lastExecution'
++const PROGRESS_STORE_KEY = 'progressMap'
++const DEPS_STORE_KEY = 'depsGraph'
+ /** 执行上报停滞阈值：超过该时长未续报视为疑似停滞 */
+ const STALL_MS = 30 * 60_000
+ 
+@@ -215,6 +219,44 @@ async function readLastExecution($: EngineInterface): Promise<ExecutionReport |
+   }
+ }
+ 
++/** 读跨会话恢复的批次进度 map；store 不可用或坏形状时降级为空 map（行为同清空，best-effort） */
++async function readPersistedProgress($: EngineInterface): Promise<Record<string, string>> {
++  try {
++    return parseProgressMap(await $.store.get(PROGRESS_STORE_KEY)) ?? {}
++  } catch {
++    return {}
++  }
++}
++
++/** 读跨会话恢复的波次依赖图；store 不可用或坏形状时返回 null（行为同清空，best-effort） */
++async function readPersistedDeps($: EngineInterface): Promise<DepGraph | null> {
++  try {
++    return parseDepGraph(await $.store.get(DEPS_STORE_KEY))
++  } catch {
++    return null
++  }
++}
++
++/** 把最新批次进度 map 持久化到 store：读 atom 而非重复拼装（拼装单一出处为 update 回调）；
++ *  失败仅记调试日志，不阻塞工具返回（best-effort，范式同 lastExecution） */
++async function persistProgress($: EngineInterface): Promise<void> {
++  const latest = await read($, progress)
++  try {
++    await $.store.set(PROGRESS_STORE_KEY, latest)
++  } catch (error) {
++    $.ui.log(`flow-deck 批次进度持久化失败：${String(error)}`, { to: 'debug' })
++  }
++}
++
++/** 把波次依赖图持久化到 store：值由调用方直接传入；失败仅记调试日志（best-effort） */
++async function persistDeps($: EngineInterface, graph: DepGraph): Promise<void> {
++  try {
++    await $.store.set(DEPS_STORE_KEY, graph)
++  } catch (error) {
++    $.ui.log(`flow-deck 波次依赖持久化失败：${String(error)}`, { to: 'debug' })
++  }
++}
++
+ async function readTaskView($: EngineInterface) {
+   return selectTaskView(await read($, currentTask), {
+     plans: await read($, plans),
+@@ -642,7 +684,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
+                       wrap="truncate-end">
+                       {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
+                     </Text>
+-                    <Text dimColor wrap="truncate-end">{index === cardNodes.length - 1 ? '└' : '│'} {progressMap[`${cardGraph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
++                    <Text dimColor wrap="truncate-end">{index === cardNodes.length - 1 ? '└' : '│'} {node.phase}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
+                   </Box>
+                 ))}
+               </Box>
+@@ -777,7 +819,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
+               <Text dimColor={node.status === 'pending'} color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined} wrap="truncate-end">
+                 {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
+               </Text>
+-              <Text dimColor wrap="truncate-end">{index === nodes.length - 1 ? '└' : '│'} {progressMap[`${graph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
++              <Text dimColor wrap="truncate-end">{index === nodes.length - 1 ? '└' : '│'} {node.phase}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
+             </Box>
+           ))}
+         </Box>
+@@ -1091,8 +1133,12 @@ export const register: Register = (on, options) => {
+     await update($, notified, () => [])
+     await update($, guardWarned, () => [])
+     await update($, baselined, () => false)
+-    await update($, progress, () => ({}))
+-    await update($, deps, () => null)
++    // 轨道图跨会话恢复：先取后写（update 回调保持同步纯函数）；坏形状在 read 侧降级为
++    // 空 map / null，行为同清空；currentTask 等仍清空，恢复的图待同方案实施声明后才显示
++    const storedProgress = await readPersistedProgress($)
++    await update($, progress, () => storedProgress)
++    const storedDeps = await readPersistedDeps($)
++    await update($, deps, () => storedDeps)
+     await update($, agents, () => ({ agents: [], loaded: false, error: false }))
+     // GitHub Issues 跨会话隔离：新 cwd 可能不是同一仓库，清空待首拉（模式同 agents）
+     await update($, ghIssues, () => ({ issues: [], loaded: false, error: false }))
+@@ -1422,6 +1468,7 @@ export const register: Register = (on, options) => {
+       ...prev,
+       [`${stamped.plan}#${stamped.batch}`]: stamped.phase,
+     }))
++    await persistProgress($)
+     // 空态摘要读 lastRun atom 而非 store，收口同步写入（4b）；重复收口经重放与 store 同源一致
+     if (stamped.phase === '收口') {
+       await update($, lastRun, () => stamped)
+@@ -1474,6 +1521,7 @@ export const register: Register = (on, options) => {
+       return { result: 'plan 为必填字符串，batches 为非空数组（每项含 batch）', isError: true }
+     }
+     await update($, deps, () => graph)
++    await persistDeps($, graph)
+     return { result: `波次依赖已声明：${graph.plan} 共 ${graph.batches.length} 批` }
+   })
+ 
+diff --git a/plugins/flow-deck/types/index.d.ts b/plugins/flow-deck/types/index.d.ts
+index fbbe3f9..f2bb44a 100644
+--- a/plugins/flow-deck/types/index.d.ts
++++ b/plugins/flow-deck/types/index.d.ts
+@@ -174,9 +174,9 @@ declare module 'claude-code' {
+       batchScope: BatchScope | null
+       /** 已越界提醒过的归一化路径键，同批同文件不重复告警；批次重声明或新会话时清空 */
+       guardWarned: string[]
+-      /** 各批次最新阶段，键 <plan>#<batch>，flow_report 逐批累积 */
++      /** 各批次最新阶段，键 <plan>#<batch>，flow_report 逐批累积；经 `$.store` 键 `progressMap` 跨会话恢复 */
+       progress: Record<string, string>
+-      /** 当前方案的波次依赖图；未声明则 null */
++      /** 当前方案的波次依赖图；未声明则 null；经 `$.store` 键 `depsGraph` 跨会话恢复 */
+       deps: DepGraph | null
+       /** 最近一次 git 仓库状态快照；非 git 仓库或尚未取数则 null */
+       git: GitStatus | null

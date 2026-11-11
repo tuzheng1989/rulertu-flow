@@ -17,6 +17,7 @@ import {
   parseDepGraph,
   parseExecution,
   parseGhIssues,
+  parseProgressMap,
   parseSections,
   phaseProgress,
   roundScores,
@@ -41,6 +42,7 @@ import type { ChangeState, SkinKey } from './parse'
 import type {
   BatchScope,
   ClosureStats,
+  DepGraph,
   ExecutionReport,
   FlowTask,
   FsEntryLike,
@@ -65,6 +67,8 @@ const GH_ISSUE_POLL_MS = 60_000
 /** 呼吸节拍周期（ms）：呼吸与小生物共用单一 clock（B2 条目 1/5）；硬编码不做配置，观察期后再议 */
 const BEAT_MS = 800
 const EXECUTION_STORE_KEY = 'lastExecution'
+const PROGRESS_STORE_KEY = 'progressMap'
+const DEPS_STORE_KEY = 'depsGraph'
 /** 执行上报停滞阈值：超过该时长未续报视为疑似停滞 */
 const STALL_MS = 30 * 60_000
 
@@ -212,6 +216,44 @@ async function readLastExecution($: EngineInterface): Promise<ExecutionReport | 
     return parseExecution(await $.store.get(EXECUTION_STORE_KEY))
   } catch {
     return null
+  }
+}
+
+/** 读跨会话恢复的批次进度 map；store 不可用或坏形状时降级为空 map（行为同清空，best-effort） */
+async function readPersistedProgress($: EngineInterface): Promise<Record<string, string>> {
+  try {
+    return parseProgressMap(await $.store.get(PROGRESS_STORE_KEY)) ?? {}
+  } catch {
+    return {}
+  }
+}
+
+/** 读跨会话恢复的波次依赖图；store 不可用或坏形状时返回 null（行为同清空，best-effort） */
+async function readPersistedDeps($: EngineInterface): Promise<DepGraph | null> {
+  try {
+    return parseDepGraph(await $.store.get(DEPS_STORE_KEY))
+  } catch {
+    return null
+  }
+}
+
+/** 把最新批次进度 map 持久化到 store：读 atom 而非重复拼装（拼装单一出处为 update 回调）；
+ *  失败仅记调试日志，不阻塞工具返回（best-effort，范式同 lastExecution） */
+async function persistProgress($: EngineInterface): Promise<void> {
+  const latest = await read($, progress)
+  try {
+    await $.store.set(PROGRESS_STORE_KEY, latest)
+  } catch (error) {
+    $.ui.log(`flow-deck 批次进度持久化失败：${String(error)}`, { to: 'debug' })
+  }
+}
+
+/** 把波次依赖图持久化到 store：值由调用方直接传入；失败仅记调试日志（best-effort） */
+async function persistDeps($: EngineInterface, graph: DepGraph): Promise<void> {
+  try {
+    await $.store.set(DEPS_STORE_KEY, graph)
+  } catch (error) {
+    $.ui.log(`flow-deck 波次依赖持久化失败：${String(error)}`, { to: 'debug' })
   }
 }
 
@@ -642,7 +684,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
                       wrap="truncate-end">
                       {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
                     </Text>
-                    <Text dimColor wrap="truncate-end">{index === cardNodes.length - 1 ? '└' : '│'} {progressMap[`${cardGraph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
+                    <Text dimColor wrap="truncate-end">{index === cardNodes.length - 1 ? '└' : '│'} {node.phase}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
                   </Box>
                 ))}
               </Box>
@@ -777,7 +819,7 @@ const renderFlowBody = async ($: EngineInterface, e: PaneArgs) => {
               <Text dimColor={node.status === 'pending'} color={node.status === 'done' ? TONE.ok : node.status === 'active' ? TONE.warn : undefined} wrap="truncate-end">
                 {node.status === 'done' ? `${MARK.done} ` : node.status === 'active' ? `${MARK.run} ` : `${MARK.idle} `}{node.batch}
               </Text>
-              <Text dimColor wrap="truncate-end">{index === nodes.length - 1 ? '└' : '│'} {progressMap[`${graph.plan}#${node.batch}`] ?? '待执行'}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
+              <Text dimColor wrap="truncate-end">{index === nodes.length - 1 ? '└' : '│'} {node.phase}{node.dependsOn.length > 0 ? ` · ← ${node.dependsOn.join('、')}` : ' · 起点'}</Text>
             </Box>
           ))}
         </Box>
@@ -1091,8 +1133,12 @@ export const register: Register = (on, options) => {
     await update($, notified, () => [])
     await update($, guardWarned, () => [])
     await update($, baselined, () => false)
-    await update($, progress, () => ({}))
-    await update($, deps, () => null)
+    // 轨道图跨会话恢复：先取后写（update 回调保持同步纯函数）；坏形状在 read 侧降级为
+    // 空 map / null，行为同清空；currentTask 等仍清空，恢复的图待同方案实施声明后才显示
+    const storedProgress = await readPersistedProgress($)
+    await update($, progress, () => storedProgress)
+    const storedDeps = await readPersistedDeps($)
+    await update($, deps, () => storedDeps)
     await update($, agents, () => ({ agents: [], loaded: false, error: false }))
     // GitHub Issues 跨会话隔离：新 cwd 可能不是同一仓库，清空待首拉（模式同 agents）
     await update($, ghIssues, () => ({ issues: [], loaded: false, error: false }))
@@ -1422,6 +1468,7 @@ export const register: Register = (on, options) => {
       ...prev,
       [`${stamped.plan}#${stamped.batch}`]: stamped.phase,
     }))
+    await persistProgress($)
     // 空态摘要读 lastRun atom 而非 store，收口同步写入（4b）；重复收口经重放与 store 同源一致
     if (stamped.phase === '收口') {
       await update($, lastRun, () => stamped)
@@ -1474,6 +1521,7 @@ export const register: Register = (on, options) => {
       return { result: 'plan 为必填字符串，batches 为非空数组（每项含 batch）', isError: true }
     }
     await update($, deps, () => graph)
+    await persistDeps($, graph)
     return { result: `波次依赖已声明：${graph.plan} 共 ${graph.batches.length} 批` }
   })
 

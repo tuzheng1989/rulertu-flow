@@ -409,6 +409,92 @@ describe('pane', () => {
     await ui.unmount()
   })
 
+  test('session.start 恢复 store 的 progress 与 deps：同方案实施任务面板接续渲染 DAG', { options: { artDirection: 'default' } }, async ($, on) => {
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    // 跨会话恢复替身：store.get 载荷带 key（实测 {"key":"lastExecution"} 形态），按 key 分流
+    on('store.get', (_$, e) => ({
+      value: e.key === 'progressMap' ? { 'demo#B1': '收口' }
+        : e.key === 'depsGraph' ? { plan: 'demo', batches: [{ batch: 'B1' }, { batch: 'B2', dependsOn: ['B1'] }] }
+        : undefined,
+    }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Flow 评审仪表盘'),
+    })
+    expect(await ui.find({ text: /▍执行 DAG（demo）/ })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '✓ B1' })).not.toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '○ B2' })).not.toBeUndefined()
+    expect(await ui.find({ text: /1\/2 收口/ })).not.toBeUndefined()
+    // 恢复状态照常着色：done 绿、pending dim
+    const doneLine = await ui.find({ type: 'Text', text: '✓ B1' })
+    expect(doneLine?.props.color).toBe('success')
+    const waitLine = await ui.find({ type: 'Text', text: '○ B2' })
+    expect(waitLine?.props.dimColor).toBe(true)
+    await ui.unmount()
+  })
+
+  test('store 坏形状恢复降级为空：无 DAG 区块、无异常，行为同清空现状', { options: { artDirection: 'default' } }, async ($, on) => {
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    // progress 整体非对象、deps 缺合法 plan：双双降级（空 map / null）
+    on('store.get', (_$, e) => ({
+      value: e.key === 'progressMap' ? 'garbage'
+        : e.key === 'depsGraph' ? { plan: 123 }
+        : undefined,
+    }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Flow 评审仪表盘'),
+    })
+    expect(await ui.find({ text: /执行 DAG/ })).toBeUndefined()
+    // 面板照常渲染任务标题，无异常中断
+    expect(await ui.find({ text: /工作面板 · 方案实施/ })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('恢复数据拓扑下推渲染：B2 收口 B1 无记录 → B1 推导 done 且文本「收口」', { options: { artDirection: 'default' } }, async ($, on) => {
+    on('session.start', () => ({ cwd: 'C:\\repo' }))
+    on('command.register', ($, e) => ({ value: { name: e.name } }))
+    on('tool.register', ($, e) => ({ value: { name: e.name } }))
+    on('fs.list', () => ({ value: [] }))
+    on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: '' } }))
+    on('ui.status', () => ({ value: undefined }))
+    on('ui.log', () => ({ value: undefined }))
+    on('store.get', (_$, e) => ({
+      value: e.key === 'progressMap' ? { 'demo#B2': '收口' }
+        : e.key === 'depsGraph' ? { plan: 'demo', batches: [{ batch: 'B1' }, { batch: 'B2', dependsOn: ['B1'] }] }
+        : undefined,
+    }))
+    await $.session.start({ cwd: 'C:\\repo', surface: 'terminal', isInteractive: false })
+    await $.tool.call({ tool: 'mcp__flow-deck__flow_task', kind: 'implement', plan: 'demo' })
+    const ui = await $.ui.mount({
+      plugin: 'flow-deck', surface: 'terminal', component: 'Pane', requestId: 'deck',
+      props: paneProps('Flow 评审仪表盘'),
+    })
+    // B1 无记录但被下推：状态符号与文本行同源（done 且「收口」），n/m 计数含推导节点
+    const doneLine = await ui.find({ type: 'Text', text: '✓ B1' })
+    expect(doneLine?.props.color).toBe('success')
+    expect(await ui.find({ text: /收口 · 起点/ })).not.toBeUndefined()
+    expect(await ui.find({ text: /待执行/ })).toBeUndefined()
+    expect(await ui.find({ text: /2\/2 收口/ })).not.toBeUndefined()
+    await ui.unmount()
+  })
+
   test('任务数据与子代理状态同屏，面板内刷新按钮可触发全部重取', async ($, on) => {
     const clock = mock.clock(on)
     let calls = 0

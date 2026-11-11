@@ -18,7 +18,7 @@ Claude Code 的工作流、Git 与子代理状态面板。Codex manifest 仅提�
 
 `flow_task` 声明当前任务（`kind: iterate | implement | idle`，活动任务必填 `plan`，实施可附 `batch`）；plan-iterate 与 implement-plan 技能在开始和结束时同步任务。`flow_report` 的未收口阶段、`flow_batch` 声明也会激活对应实施批次；批次收口或 `idle` 后撤下执行显示与边界守卫。暂停、取消或失败停止时上报 `idle`，恢复时重新声明任务。warn 越界提醒按文件去重，同批同文件只提醒一次（批次重新声明后重置），文案含触发工具名。
 
-历史评审文件、`flow_deps` 路线图和跨会话执行记录不激活任务；新会话从无任务状态开始，上次执行仅通过 toast 提醒。依赖图只在实施对应方案时显示。更新时同时更新 flow-deck 与 rulertu-flow，以加载配套的任务上报规则。
+历史评审文件、`flow_deps` 路线图和跨会话执行记录不激活任务；新会话从无任务状态开始，上次执行仅通过 toast 提醒。依赖图只在实施对应方案时显示。轨道图结构与各批次阶段经 `$.store` 跨会话恢复（键 `progressMap` / `depsGraph`，每次 `flow_report` / `flow_deps` 后 best-effort 写入，坏形状降级为空），新会话声明同方案实施任务后自动接续显示；渲染层拓扑下推——任一批次收口即其全部上游（含传递）显示为已收口，单点漏报不破坏整图可信度。更新时同时更新 flow-deck 与 rulertu-flow，以加载配套的任务上报规则。
 
 上报数据直接更新界面，无新增依赖；唯一动画是 800ms 呼吸节拍器（仅面板可见时翻转，见上）。终端与桌面共用 Text / Box，窄于 44 列时去掉卡片边框。
 
