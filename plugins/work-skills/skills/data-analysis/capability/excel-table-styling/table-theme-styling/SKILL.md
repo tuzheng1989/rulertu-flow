@@ -9,9 +9,9 @@ description: "动态统计Excel总行数，当数据量过大（≥10000行）�
 
 Step1 动态读取数据（Parquet加速或常规读取）。
 ```python
-# 若已加载 sn-da-large-file-analysis 技能，将 Excel 文件转换为 Parquet 格式加速读取
+# 若为大文件场景，先按 ../../../references/large-file-engine.md 转换 Parquet 加速读取
 if 'da_large_file_analysis' in globals():
-    # 假设 sn-da-large-file-analysis 转换后生成了 parquet 文件
+    # 假设按 ../../../references/large-file-engine.md 转换后生成了 parquet 文件
     parquet_path = 'auto_converted_data.parquet'
     df = pd.read_parquet(parquet_path)
     print("已使用 Parquet 格式加速读取大文件。")

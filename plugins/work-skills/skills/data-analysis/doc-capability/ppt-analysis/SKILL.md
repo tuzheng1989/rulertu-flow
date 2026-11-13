@@ -1,6 +1,6 @@
 ---
 name: ppt-analysis
-description: "PPT (.pptx/.ppt) 全量解析。覆盖：所有 slide 文本/表格/图表提取、嵌入图片 caption、纯图片 slide 渲染识别、数据标签提取。"
+description: "PPT (.pptx/.ppt) 全量解析。覆盖：所有 slide 文本/表格/图表提取、嵌入图片视觉理解、纯图片 slide 渲染识别、数据标签提取。"
 ---
 
 # PPT Analysis — .pptx / .ppt
@@ -10,7 +10,7 @@ description: "PPT (.pptx/.ppt) 全量解析。覆盖：所有 slide 文本/表�
 ```python
 from pptx import Presentation
 from pptx.util import Inches
-import os, subprocess, json
+import os, subprocess
 
 # python-pptx is available
 # For .ppt (old binary format): convert via libreoffice
@@ -34,7 +34,7 @@ def load_pptx(path):
 def extract_all_slides_text(pptx_path):
     """
     Extract text from every slide: text frames, tables, chart titles.
-    For slides with no extractable text, flag them for image captioning.
+    For slides with no extractable text, flag them for visual reading.
     """
     prs, _ = load_pptx(pptx_path)
     slides_data = []
@@ -126,7 +126,7 @@ def extract_pptx_tables(pptx_path):
 ## Core Method 3: Chart Data Extraction
 
 `python-pptx` can read Chart data when it's stored as embedded Excel data.
-If that fails, fall back to captioning the slide image.
+If that fails, fall back to visual reading of the rendered slide.
 
 ```python
 def extract_chart_data(pptx_path):
@@ -165,31 +165,32 @@ def extract_chart_data(pptx_path):
                             'values': values
                         })
             except Exception as e:
-                print(f"  Slide {slide_num}: chart extraction failed ({e}) — will use caption")
+                print(f"  Slide {slide_num}: chart extraction failed ({e}) — will use visual reading")
 
     return charts
 ```
 
 ---
 
-## Core Method 4: Render Image-Only Slides → Caption
+## Core Method 4: Render Image-Only Slides → Visual Reading
 
-When a slide has no extractable text (pure image/screenshot slides):
+When a slide has no extractable text (pure image/screenshot slides), render
+it to PNG; 图片理解：由会话视觉直读完成，流程见 ../../modes/image.md。
 
 ```python
 import fitz  # PyMuPDF can also render PPTX via LibreOffice conversion
+import os, subprocess
 
-CAPTION = "/path/to/skills/sn-da-image-caption/scripts/caption.py"
-
-def caption_image_slides(pptx_path, slides_data, prompt=None):
+def render_image_slides(pptx_path, slides_data):
     """
-    For slides flagged as 'needs_caption', render to PNG and caption.
+    For slides flagged as 'needs_caption', render to PNG for session
+    visual reading (Read 工具逐张读渲染出的 PNG).
     Uses LibreOffice to convert PPTX to PDF first, then renders pages.
     """
     image_slides = [s for s in slides_data if s['needs_caption']]
     if not image_slides:
-        print("No image-only slides to caption.")
-        return slides_data
+        print("No image-only slides to render.")
+        return slides_data, {}
 
     # Convert PPTX → PDF (preserves slide visuals)
     out_dir = "/tmp"
@@ -202,10 +203,11 @@ def caption_image_slides(pptx_path, slides_data, prompt=None):
 
     if not os.path.exists(pdf_path):
         print(f"LibreOffice conversion failed: {r.stderr[:200]}")
-        return slides_data
+        return slides_data, {}
 
     # Render each image-only slide
     doc = fitz.open(pdf_path)
+    rendered = {}
     for s in image_slides:
         page_idx = s['slide'] - 1  # 0-indexed
         if page_idx >= len(doc):
@@ -215,22 +217,12 @@ def caption_image_slides(pptx_path, slides_data, prompt=None):
         pix = page.get_pixmap(matrix=mat)
         img_path = f"/tmp/slide_{s['slide']}.png"
         pix.save(img_path)
-
-        # Caption the slide image
-        cmd = ["python3", CAPTION, img_path, "--json"]
-        p = prompt or "提取幻灯片中所有文字、数值和表格内容，保持结构，Markdown格式输出。"
-        cmd += ["--prompt", p]
-        cr = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-        if cr.returncode == 0:
-            desc = json.loads(cr.stdout).get("description", "")
-            s['text'] = desc
-            s['needs_caption'] = False
-            print(f"  Slide {s['slide']}: captioned ({len(desc)} chars)")
-        else:
-            print(f"  Slide {s['slide']}: caption failed — {cr.stderr[:80]}")
+        rendered[s['slide']] = img_path
 
     doc.close()
-    return slides_data
+    # 对 rendered 中每张 PNG：Read 直读提取文字/数值/表格后填入对应 s['text']
+    # （提取要点见 ../../modes/image.md）
+    return slides_data, rendered
 ```
 
 ---
@@ -241,7 +233,7 @@ def caption_image_slides(pptx_path, slides_data, prompt=None):
 
 ```python
 def find_in_pptx(pptx_path, keyword, slides_data=None):
-    """Find keyword across all slides (after text extraction + captioning)."""
+    """Find keyword across all slides (after text extraction + visual reading)."""
     if slides_data is None:
         slides_data = extract_all_slides_text(pptx_path)
 
@@ -299,8 +291,8 @@ pptx_path = "/mnt/data/report.pptx"
 # 1. Extract text from all slides
 slides_data = extract_all_slides_text(pptx_path)
 
-# 2. Caption image-only slides
-slides_data = caption_image_slides(pptx_path, slides_data)
+# 2. Render image-only slides, then visually read each rendered PNG
+slides_data, rendered = render_image_slides(pptx_path, slides_data)
 
 # 3. Combine all text for analysis
 all_text = '\n\n'.join(
@@ -321,8 +313,8 @@ tables = extract_pptx_tables(pptx_path)
 
 | Pitfall | Fix |
 |---------|-----|
-| Skip slides with no text → miss chart data | Flag `needs_caption`, render & caption (Method 4) |
-| `shape.chart.plots[0].series` fails → no data | Catch exception, fall back to captioning the slide |
+| Skip slides with no text → miss chart data | Flag `needs_caption`, render & visually read (Method 4) |
+| `shape.chart.plots[0].series` fails → no data | Catch exception, fall back to visual reading of the slide |
 | Table columns misread (企业名 vs 岗位名) | Print headers + first 3 rows before computing; verify column meaning |
 | Only read first N slides | Always `for slide in prs.slides` — no index limit |
 | `.ppt` format → `python-pptx` can't open | Convert to `.pptx` via libreoffice first |

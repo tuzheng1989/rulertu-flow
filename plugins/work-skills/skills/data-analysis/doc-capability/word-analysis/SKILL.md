@@ -1,6 +1,6 @@
 ---
 name: word-analysis
-description: "Word (.docx/.doc) 文档全量解析。覆盖：正文/段落文本提取、表格数据提取、高亮/颜色格式读取、多文件汇总对比、嵌入图片转 caption。"
+description: "Word (.docx/.doc) 文档全量解析。覆盖：正文/段落文本提取、表格数据提取、高亮/颜色格式读取、多文件汇总对比、嵌入图片视觉理解。"
 ---
 
 # Word Analysis — .docx / .doc
@@ -175,17 +175,18 @@ results = process_all_docs(doc_files, extract_full_text)
 
 ---
 
-## Core Method 5: Embedded Images → Caption
+## Core Method 5: Embedded Images → Visual Reading
 
-When a Word doc contains embedded images (charts, screenshots):
+When a Word doc contains embedded images (charts, screenshots), extract them
+to files; 图片理解：由会话视觉直读完成，流程见 ../../modes/image.md。
 
 ```python
-import zipfile, io, subprocess, json
+import zipfile, io, os
 
-CAPTION = "/path/to/skills/sn-da-image-caption/scripts/caption.py"
+# 图片理解：由会话视觉直读完成，流程见 ../../modes/image.md
 
-def extract_and_caption_images(doc_path, prompt=None):
-    """Extract all images from .docx and caption each one."""
+def extract_embedded_images(doc_path):
+    """Extract all images from .docx for session visual reading."""
     # .docx is a ZIP archive; images are in word/media/
     results = []
     with zipfile.ZipFile(doc_path, 'r') as z:
@@ -198,17 +199,9 @@ def extract_and_caption_images(doc_path, prompt=None):
             tmp_path = f"/tmp/{os.path.basename(media)}"
             with z.open(media) as src, open(tmp_path, 'wb') as dst:
                 dst.write(src.read())
-            # Caption
-            cmd = ["python3", CAPTION, tmp_path, "--json"]
-            if prompt:
-                cmd += ["--prompt", prompt]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if r.returncode == 0:
-                desc = json.loads(r.stdout).get("description", "")
-                results.append({'image': media, 'caption': desc})
-                print(f"  {media}: {desc[:100]}...")
-            else:
-                print(f"  {media}: caption failed — {r.stderr[:80]}")
+            results.append({'image': media, 'path': tmp_path})
+            print(f"  {media}: extracted → {tmp_path}")
+    # 对 results 中每张图片：Read 直读提取内容（要点见 ../../modes/image.md）
     return results
 ```
 
@@ -265,5 +258,5 @@ def find_keyword(doc_path, keyword):
 | Single file when input is multi-file | Check `os.path.isdir()`, iterate all |
 | Highlighted cells not detected | Use XML-level `w:shd` / `w:highlight` (Method 3) |
 | `.doc` format fails to open | Convert to `.docx` via libreoffice (Method 0) |
-| Embedded charts look empty | Extract images from ZIP, caption each (Method 5) |
+| Embedded charts look empty | Extract images from ZIP, visually read each (Method 5) |
 | Font size is None | Check both run-level and style-level (Method for font check) |

@@ -1,6 +1,6 @@
 ---
 name: pdf-analysis
-description: "PDF 文档解析。自动区分文字型 PDF 与扫描型 PDF，覆盖：文本/表格提取、多页全量扫描、嵌入图表 caption、单位感知数值计算。"
+description: "PDF 文档解析。自动区分文字型 PDF 与扫描型 PDF，覆盖：文本/表格提取、多页全量扫描、嵌入图表视觉理解、单位感知数值计算。"
 ---
 
 # PDF Analysis
@@ -53,7 +53,7 @@ def extract_text_pdf(pdf_path):
         if text:
             all_text.append(f"=== Page {i+1} ===\n{text}")
         else:
-            print(f"  Page {i+1}: no text (may be image — will caption later)")
+            print(f"  Page {i+1}: no text (may be image — will visually read later)")
 
     doc.close()
     return '\n\n'.join(all_text)
@@ -99,50 +99,39 @@ def extract_tables_pdf(pdf_path):
 
 ---
 
-## Core Method 3: Scanned PDF — OCR via Caption
+## Core Method 3: Scanned PDF — OCR via Visual Reading
 
-For scanned PDFs (image-based pages), render each page as PNG and caption:
+For scanned PDFs (image-based pages), render each page as PNG, then read each
+image with the Read tool (session visual reading).
 
 ```python
 import fitz
-import subprocess, json, os
+import os
 
-CAPTION = "/path/to/skills/sn-da-image-caption/scripts/caption.py"
+# 图片理解：由会话视觉直读完成，流程见 ../../modes/image.md
 
-def extract_scanned_pdf(pdf_path, prompt=None, dpi=150):
-    """Render each page as image, then caption for text extraction."""
+def render_scanned_pdf_pages(pdf_path, dpi=150):
+    """Render each page as PNG for session visual reading."""
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
-    print(f"Scanned PDF: {total_pages} pages, captioning each...")
+    print(f"Scanned PDF: {total_pages} pages, rendering each...")
 
-    all_text = []
+    img_paths = []
     for i, page in enumerate(doc):
         # Render page to PNG
         mat = fitz.Matrix(dpi/72, dpi/72)
         pix = page.get_pixmap(matrix=mat)
         img_path = f"/tmp/pdf_page_{i+1}.png"
         pix.save(img_path)
-
-        # Caption the page image
-        cmd = ["python3", CAPTION, img_path, "--json"]
-        if prompt:
-            cmd += ["--prompt", prompt]
-        else:
-            cmd += ["--prompt", "提取页面中所有文字和表格内容，保持原始结构，Markdown格式输出。"]
-
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-        if r.returncode == 0:
-            desc = json.loads(r.stdout).get("description", "")
-            all_text.append(f"=== Page {i+1} ===\n{desc}")
-            print(f"  Page {i+1}: {len(desc)} chars extracted")
-        else:
-            print(f"  Page {i+1}: caption failed — {r.stderr[:100]}")
+        img_paths.append(img_path)
 
     doc.close()
-    return '\n\n'.join(all_text)
+    return img_paths
 
 # Usage for scanned invoice PDFs, bank statements, org charts, etc.
-text = extract_scanned_pdf(pdf_path)
+# Render, then read each PNG with the Read tool and extract text/tables
+# (extraction guide: ../../modes/image.md 视觉提取指引)
+imgs = render_scanned_pdf_pages(pdf_path)
 ```
 
 ---
@@ -150,10 +139,15 @@ text = extract_scanned_pdf(pdf_path)
 ## Core Method 4: Hybrid PDF (mixed text + image pages)
 
 ```python
-def extract_hybrid_pdf(pdf_path, text_prompt=None, image_prompt=None):
-    """Handle PDFs where some pages have text, others are scanned."""
+def extract_hybrid_pdf(pdf_path):
+    """Handle PDFs where some pages have text, others are scanned.
+
+    Text pages are extracted directly; image pages are rendered to PNG
+    and read with session visual reading (see ../../modes/image.md).
+    """
     doc_fitz = fitz.open(pdf_path)
     all_text = []
+    image_pages = []
 
     for i, page in enumerate(doc_fitz):
         raw_text = page.get_text("text").strip()
@@ -162,25 +156,16 @@ def extract_hybrid_pdf(pdf_path, text_prompt=None, image_prompt=None):
             # Text page — use directly
             all_text.append(f"=== Page {i+1} (text) ===\n{raw_text}")
         else:
-            # Image page — render and caption
+            # Image page — render PNG; 图片理解：由会话视觉直读完成，流程见 ../../modes/image.md
             mat = fitz.Matrix(150/72, 150/72)
             pix = page.get_pixmap(matrix=mat)
             img_path = f"/tmp/hybrid_page_{i+1}.png"
             pix.save(img_path)
-
-            cmd = ["python3", CAPTION, img_path, "--json"]
-            prompt = image_prompt or "提取页面中所有文字和表格内容，Markdown格式输出。"
-            cmd += ["--prompt", prompt]
-
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-            if r.returncode == 0:
-                desc = json.loads(r.stdout).get("description", "")
-                all_text.append(f"=== Page {i+1} (image→caption) ===\n{desc}")
-            else:
-                all_text.append(f"=== Page {i+1} (caption failed) ===")
+            image_pages.append((i + 1, img_path))
 
     doc_fitz.close()
-    return '\n\n'.join(all_text)
+    # Read each PNG in image_pages with the Read tool, then append to all_text
+    return '\n\n'.join(all_text), image_pages
 ```
 
 ---
@@ -217,9 +202,7 @@ def extract_pdf_images(pdf_path, min_width=100, min_height=100):
     doc.close()
     return image_paths
 
-# After extracting, caption each image:
-# for img_info in image_paths:
-#     caption_image(img_info['path'], prompt="提取图表数据，Markdown 表格输出。")
+# 提取出的图片逐张用 Read 工具视觉直读（流程见 ../../modes/image.md）
 ```
 
 ---
@@ -296,6 +279,6 @@ def find_in_pdf(pdf_path, keyword, context_chars=200):
 | Only read page 1, miss remaining invoices/data | Always `for page in doc` — never index `[0]` only |
 | Table columns misaligned after extraction | Print headers + first 3 rows to verify before computing |
 | Report number as % when question asks absolute value | Read question carefully; `extract_number_with_unit()` preserves context |
-| Chart data embedded as image → pdfplumber returns nothing | Extract images (Method 5), then caption each |
+| Chart data embedded as image → pdfplumber returns nothing | Extract images (Method 5), then visually read each (see ../../modes/image.md) |
 | Long doc loses cross-page context | Use `find_in_pdf()` for keyword search across full text |
 | `.pdf` contains multiple scanned docs (zip of PDFs) | Check if input is dir or archive; unzip first |

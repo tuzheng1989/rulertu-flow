@@ -1,9 +1,6 @@
----
-name: sn-da-excel-workflow
-description: "Excel 数据分析多步编排器。覆盖：(1) 读取多 Sheet Excel 文件并统计行数，(2) 大文件检测（≥10k 行自动 Parquet 优化），(3) 数据清洗（缺失值、文本标准化、无效字符），(4) 条件筛选与分类提取，(5) 跨 Sheet 统计聚合，(6) 导出 Excel/CSV 并提供下载链接。覆盖从数据读取到报告生成全流程，按步骤编排 capability 子 skill。**遇到以下任一情况就主动使用本 skill，不要自行写几行 pandas 就回答**：①用户出现触发词：Excel 分析 / 表格分析 / 数据分析 / 数据清洗 / 数据统计 / 数据筛选 / 数据可视化 / 数据导出 / 汇总统计 / 透视表 / 分组统计 / 交叉分析 / 趋势分析 / 对比分析 / 异常值检测 / 去重 / 缺失值处理 / Excel 报告 / 生成报表 / analyze Excel / data analysis / data cleaning / pivot table；②用户上传或指定了 .xlsx / .xls / .csv 文件并要求分析、清洗、统计或可视化；③任务涉及多 Sheet 读取、条件筛选、分类汇总、图表生成中的任意一项；④用户要求导出带格式的 Excel 报告或下载链接。仅不用于：不涉及表格数据的纯文本处理、图片分析（使用 sn-da-image-caption）、单个公式计算的简单问答。"
----
-
 # Excel Data Analysis Workflow
+
+> 本文件为 data-analysis 的 excel mode（原 Excel 数据分析工作流 skill，2026-11-13 组建）。入口与路由见 SKILL.md。
 
 End-to-end workflow for structured Excel analysis. Each step maps to a
 capability sub-skill that can be loaded for detailed patterns.
@@ -11,6 +8,8 @@ capability sub-skill that can be loaded for detailed patterns.
 ## Workflow
 
 ### Step 1 — Count rows across all sheets (lightweight, no full load)
+
+> **CSV 输入**：`.csv` 不走 openpyxl——直接 `pd.read_csv(path, encoding="utf-8")`（中文乱码时试 `encoding="gbk"`），行数用 `sum(1 for _ in open(path))`，大文件用 `pd.read_csv(path, chunksize=50000)` 分块。以下六步的清洗/筛选/导出逻辑对 DataFrame 同样适用。
 
 Count rows per sheet **without loading data into memory**. Use openpyxl
 `read_only` mode — this works for any file size.
@@ -42,19 +41,19 @@ memory, which will OOM on large files.
 |-----------|----------|------------|
 | < 10k | Direct read | `df = pd.read_excel(file_path, sheet_name=target_sheet)` |
 | 10k – 100k | Parquet cache | `pd.read_excel()` once → `df.to_parquet()` → all later reads from Parquet |
-| **>= 100k** | **STOP. Load `sn-da-large-file-analysis` skill** | Read its SKILL.md, then follow its streaming read + Parquet pattern. **Do NOT use `pd.read_excel()` at all** — it will OOM or timeout on 100k+ rows. |
+| **>= 100k** | **STOP. Read `../references/large-file-engine.md` and follow it** | 读 references/large-file-engine.md 并按其模式执行（streaming read + Parquet pattern）。**Do NOT use `pd.read_excel()` at all** — it will OOM or timeout on 100k+ rows. |
 
 **For >= 100k rows:**
 ```
-read_file(path="<skills_base>/sn-da-large-file-analysis/SKILL.md")
+read_file(path="<skills_base>/data-analysis/references/large-file-engine.md")
 ```
-Then use `stream_excel_to_parquet()` from that skill — it reads via
+Then use `stream_excel_to_parquet()` from that document — it reads via
 openpyxl `iter_rows` in 50k-row chunks with constant memory.
 
 **For 10k – 100k rows (only):**
 ```python
 import pandas as pd
-parquet_path = "/tmp/_auto_parquet.parquet"
+parquet_path = "_auto_parquet.parquet"  # 写到当前工作目录，避免依赖沙箱固定路径
 df = pd.read_excel(file_path, sheet_name=target_sheet)
 df.to_parquet(parquet_path, engine="pyarrow")
 del df; gc.collect()
@@ -96,7 +95,7 @@ df[col] = df[col].apply(clean_text)
 ```
 
 ⚠️ **Large file rule**: When `total_rows >= 100k`, do NOT use `df.apply(lambda...)`.
-Use vectorized operations or `np.where()` instead. See `sn-da-large-file-analysis` skill
+Use vectorized operations or `np.where()` instead. See `../references/large-file-engine.md`
 for the vectorized cheat sheet.
 
 → capabilities:
@@ -128,7 +127,7 @@ df_raw = pd.read_excel(file_path, sheet_name=sheet, header=None)
 Save filtered/cleaned data as Excel or CSV. Provide download link.
 
 ```python
-output_path = "/mnt/data/result.xlsx"
+output_path = "result.xlsx"  # 写到当前工作目录（或用户指定路径）
 result_df.to_excel(output_path, index=False)
 print(f"[Download](sandbox:{output_path})")
 ```
@@ -140,7 +139,7 @@ print(f"[Download](sandbox:{output_path})")
 ## Key rules
 
 - **Always count rows first** — gate large-file logic on the 10k threshold.
-- **>= 100k rows → MUST load `sn-da-large-file-analysis` skill** — do not attempt to handle with `pd.read_excel()`.
+- **>= 100k rows → MUST read `../references/large-file-engine.md` and follow it** — do not attempt to handle with `pd.read_excel()`.
 - **Column names may contain spaces** (e.g. `'是否通 过'`) — use exact string indexing.
 - **Headerless sheets** — use `header=None` and positional indexing.
 - **Prohibited on large files (>= 100k rows)**:
@@ -160,6 +159,8 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
 _FONT_PATHS = [
+    'C:/Windows/Fonts/simhei.ttf',
+    'C:/Windows/Fonts/msyh.ttc',
     '/mnt/afs_agents/SimHei.ttf',
     '/mnt/afs_agents/mnt/data/SimHei.ttf',
     os.path.expanduser('~/.fonts/SimHei.ttf'),
@@ -191,7 +192,7 @@ read_file(path="<base_path>/<category>/<sub-skill-name>/SKILL.md")
 
 ## Available capability sub-skills
 
-Base path: `<skills_root>/sn-da-excel-workflow/capability/{category}/{sub-skill}/SKILL.md`
+Base path: `<skills_root>/data-analysis/capability/{category}/{sub-skill}/SKILL.md`
 
 ### excel-reading — 读取与解析
 
