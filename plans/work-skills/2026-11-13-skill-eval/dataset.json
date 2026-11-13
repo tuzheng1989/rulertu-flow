@@ -1,0 +1,222 @@
+{
+  "meta": {
+    "dataset_name": "work-skills-dual-skill-eval",
+    "version": "1.0",
+    "agent_under_test": ["deep-research@0.8.0", "write-report"],
+    "created_at": "2026-11-13",
+    "description": "work-skills 整合后双技能冷启动评测：路由推演 11 条 + 执行冒烟 3 条",
+    "metrics": ["correctness", "completeness", "coherence", "safety", "routing_correctness", "contract_completeness", "execution_quality"]
+  },
+  "cases": [
+    {
+      "id": "DR-E01",
+      "category": "routing-trigger",
+      "difficulty": "easy",
+      "input": {
+        "user_message": "帮我深度调研一下 2026 年 AI 编程助手的市场格局，主要玩家和趋势。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/"}
+      },
+      "expected_output": {
+        "key_points": ["触发 deep-research 完整流程", "走 clarify/brief/query 等节点", "研究计划含多 source_type 查询"],
+        "must_not_include": ["跳过澄清直接输出报告", "仅单次搜索即成稿"]
+      },
+      "tags": ["trigger", "full-pipeline"],
+      "notes": "标准触发场景"
+    },
+    {
+      "id": "DR-E02",
+      "category": "routing-channel",
+      "difficulty": "medium",
+      "input": {
+        "user_message": "深度研究一下 React 和 Vue 在 2026 年的生态对比，我们要给新项目做技术选型，重点关注 GitHub 活跃度和社区讨论。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/"}
+      },
+      "expected_output": {
+        "key_points": ["query 生成含 code 通道（GitHub 活跃度→github_search）", "social_en 通道覆盖社区讨论", "按 source_type 分派"],
+        "must_not_include": ["全部查询走 web 通道"]
+      },
+      "tags": ["channel-dispatch", "code-channel"],
+      "notes": "通道分派正确性"
+    },
+    {
+      "id": "DR-E03",
+      "category": "routing-boundary",
+      "difficulty": "hard",
+      "input": {
+        "user_message": "帮我调研 Rulertu Flow 这个开源项目并直接写一份完整的研究报告，要正式一点。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/"}
+      },
+      "expected_output": {
+        "key_points": ["deep-research 接单（从零调研是其职责）", "finalize 产出 report.md", "产物后处理段提示可选接 write-report（compose 改稿/audit 审计）且经用户确认而非自动执行"],
+        "must_not_include": ["拒绝并推给 write-report", "成稿后自动调用 write-report"]
+      },
+      "tags": ["boundary", "handoff", "post-processing"],
+      "notes": "验证 B3 新增产物后处理段的分流行为"
+    },
+    {
+      "id": "DR-E04",
+      "category": "channel-product",
+      "difficulty": "medium",
+      "input": {
+        "user_message": "调研一下 Product Hunt 上最近热门的 AI 笔记应用，列出产品名和融资情况。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/"}
+      },
+      "expected_output": {
+        "key_points": ["source_type=product 走 product 通道", "子命令按语义选（search/leaderboard 或 profile 查融资）", "输出 items[] 含 source_type:product"],
+        "must_not_include": ["用 web 通道替代", "编造融资数据"]
+      },
+      "tags": ["channel-dispatch", "product-channel"],
+      "notes": "product 通道子命令选择"
+    },
+    {
+      "id": "DR-E05",
+      "category": "channel-image",
+      "difficulty": "medium",
+      "input": {
+        "user_message": "帮我找几张 transformer 神经网络架构的示意图，用于我的技术分享幻灯片。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/"}
+      },
+      "expected_output": {
+        "key_points": ["image 通道按需调用（非 source_type 分派体系）", "调用 scripts/channels/image/scripts/serper_image_search.py", "SERPER_API_KEY 缺失时降级 web 并说明", "结果定位为 secondary 来源"],
+        "must_not_include": ["把 image 当作第 7 个 source_type", "在无 key 时栈崩溃或静默失败"]
+      },
+      "tags": ["image-channel", "degradation"],
+      "notes": "v0.8.0 新通道接线行为"
+    },
+    {
+      "id": "DR-E06",
+      "category": "execution-light",
+      "difficulty": "hard",
+      "input": {
+        "user_message": "快速调研一下 Serper.dev API 的定价和免费额度，单轮循环即可，不用太深。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/", "constraints": "max_loops=1，1-2 条 query，不深读，产物落 eval 工作区 outputs/DR-E06/"}
+      },
+      "expected_output": {
+        "key_points": ["产出 report.md + research-process.md + sources.json 结构", "定价数据来自真实搜索并带引用", "通道失败时显式降级不静默"],
+        "must_not_include": ["编造定价数字", "跳过 sources.json"]
+      },
+      "tags": ["execution", "light-loop"],
+      "notes": "轻量真跑；检验 finalize 三件套契约"
+    },
+    {
+      "id": "DR-E07",
+      "category": "boundary-audit-vs-research",
+      "difficulty": "medium",
+      "input": {
+        "user_message": "这段话里说『GPT-5 在 SWE-bench 上拿 了 74.3%』，帮我查证一下这个数据可不可靠。",
+        "context": {"skill_root": "plugins/work-skills/skills/deep-research/"}
+      },
+      "expected_output": {
+        "key_points": ["识别为单点事实查核", "路由决策合理：deep-research 可承接（fact-check 取证）或明确指引 write-report audit（若语境是已有报告引用核验）", "决策说明依据"],
+        "must_not_include": ["含糊不清两边都不接", "直接开始全文审计"]
+      },
+      "tags": ["boundary", "cross-skill"],
+      "notes": "deep-research 与 write-report audit 的边界判断"
+    },
+    {
+      "id": "WR-E01",
+      "category": "routing-mode",
+      "difficulty": "easy",
+      "input": {
+        "user_message": "帮我把这份草稿润色一下，压缩到 1000 字以内。",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/"}
+      },
+      "expected_output": {
+        "key_points": ["路由 compose mode", "写作修改模式（已有文稿输入）", "要求提供文稿路径或文本"],
+        "must_not_include": ["误入引擎创建模式", "误入 audit"]
+      },
+      "tags": ["trigger", "compose"],
+      "notes": "compose 触发词分流"
+    },
+    {
+      "id": "WR-E02",
+      "category": "routing-mode",
+      "difficulty": "easy",
+      "input": {
+        "user_message": "这份报告的引用靠谱吗？帮我核查一下参考文献。",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/"}
+      },
+      "expected_output": {
+        "key_points": ["路由 audit mode", "说明审计产出分级报告不自动改报告", "要求提供报告路径"],
+        "must_not_include": ["直接开始改写报告"]
+      },
+      "tags": ["trigger", "audit"],
+      "notes": "audit 触发词分流"
+    },
+    {
+      "id": "WR-E03",
+      "category": "routing-mode",
+      "difficulty": "medium",
+      "input": {
+        "user_message": "我想知道这类行业分析报告一般应该有哪些章节，有没有规范结构可以参考？",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/"}
+      },
+      "expected_output": {
+        "key_points": ["路由 format mode", "说明将研究该类报告的结构规范（标准制定者/范例）"],
+        "must_not_include": ["误入 compose 直接开写", "凭记忆硬编章节结构不走 format 流程"]
+      },
+      "tags": ["trigger", "format"],
+      "notes": "format 触发词分流"
+    },
+    {
+      "id": "WR-E04",
+      "category": "routing-ambiguous",
+      "difficulty": "hard",
+      "input": {
+        "user_message": "帮我写个报告。",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/"}
+      },
+      "expected_output": {
+        "key_points": ["按三分支裁决处理：研究报告→引导先经 deep-research 取材料；创作型长文档→引擎创建模式；无法判断→询问用户", "不直接索要材料后硬写", "决策有文档依据（SKILL.md 分流裁决段）"],
+        "must_not_include": ["直接进 compose 后卡死在索要材料", "单方面选定分支不询问"]
+      },
+      "tags": ["ambiguous", "three-way"],
+      "notes": "B2 修复 D2 的核心验证 case"
+    },
+    {
+      "id": "WR-E05",
+      "category": "routing-engine",
+      "difficulty": "medium",
+      "input": {
+        "user_message": "从零开始帮我写一本 Python 入门手册，大概十个章节。",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/"}
+      },
+      "expected_output": {
+        "key_points": ["路由引擎创建模式（非 report mode）", "走结构骨架→风格指南→Writer/Reviewer 协作流程", "不进 compose 硬写全文"],
+        "must_not_include": ["单次输出整本手册", "误路由到 compose"]
+      },
+      "tags": ["engine-create"],
+      "notes": "引擎与 mode 的分流"
+    },
+    {
+      "id": "WR-E06",
+      "category": "execution-compose",
+      "difficulty": "hard",
+      "input": {
+        "user_message": "把 samples/sample-draft.md 这份草稿改写压缩到 300 字左右，保留核心判断，别丢事实。",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/", "sample": "plans/work-skills/2026-11-13-skill-eval/samples/sample-draft.md", "constraints": "产物落 outputs/WR-E06/rewrite.md"}
+      },
+      "expected_output": {
+        "key_points": ["走 compose 写作修改模式", "忠于原稿事实与核心判断（草稿含 3 个事实点+1 个数据）", "压缩后 ~300 字", "不新增无依据内容"],
+        "must_not_include": ["丢失关键事实点", "编造新数据", "变成重新研究"]
+      },
+      "tags": ["execution", "compose"],
+      "notes": "compose 真跑"
+    },
+    {
+      "id": "WR-E07",
+      "category": "execution-audit",
+      "difficulty": "hard",
+      "input": {
+        "user_message": "对 samples/smoke-sample.md 做引用审计。",
+        "context": {"skill_root": "plugins/work-skills/skills/write-report/", "sample": "plans/work-skills/2026-11-13-skill-eval/samples/smoke-sample.md", "constraints": "审计报告落 outputs/WR-E07/audit-report.md；样稿文件本身禁止改动"}
+      },
+      "expected_output": {
+        "key_points": ["按 audit.md 流程产出分级审计报告（P0-P3）", "已知幻觉引用（R1：虚构论文 Zhang & Li 2023 + 虚构期刊 + 挂靠数据 47.3%/31%）被标最高级", "修正建议经问询而非直接改稿"],
+        "must_not_include": ["改动样稿文件", "漏检 R1", "静默降级不报告"]
+      },
+      "tags": ["execution", "audit", "boundary"],
+      "notes": "audit 真跑 + 边界断言（hash 不变）；样稿复用 B2 冒烟产物（R1 位置在参考文献第 1 条）"
+    }
+  ]
+}

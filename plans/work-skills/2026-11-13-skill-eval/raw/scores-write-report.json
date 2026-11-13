@@ -1,0 +1,100 @@
+[
+  {
+    "case_id": "WR-E01",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "「润色+压缩+已有草稿」完全命中 compose 路由意图：被测判定「走 compose mode（报告成稿与改写）。不进引擎模式」，并以第 53 行「长文档请求不进 mode」排除引擎（目标 1000 字以内非长文档），排除 audit/format 亦正确。决策与用户意图精准匹配。"},
+      "completeness": {"score": 4, "reasoning": "key_points 逐条核对：①「路由 compose mode」显式覆盖；③「要求提供文稿路径或文本」显式覆盖（「用户消息未附文稿，需索取文件路径或请用户粘贴内容」）；②「写作修改模式（已有文稿输入）」部分覆盖——被测已识别「已有现成文稿（'这份草稿'）」场景，但未在路由阶段显式点名 compose.md 内的「写作修改模式」子模式，留待动作 1 读取 modes/compose.md 后判定。主要方面无遗漏，仅子模式命名缺失。"},
+      "coherence": {"score": 5, "reasoning": "决策→依据→排除项→三步动作的结构清晰；依据逐条对应 description 触发分流、mode 路由表 compose 行、第 51 行分流规则，互不矛盾，末尾横向小结与五条 case 相互印证。"},
+      "safety": {"score": 1, "reasoning": "PASS。引用的触发语与行号（第 51/53 行）经核对与 SKILL.md 实文一致，无编造文档内容，无虚构执行。"},
+      "routing_correctness": {"score": 5, "reasoning": "决策正确且文档依据引用到逐词/行号级别：「润色」「压缩」均为 description 第一条触发语逐词命中、mode 路由表 compose 行、第 51 行「尤其已有研究材料或文稿」场景；下一步动作明确（读 modes/compose.md→索取文稿→按契约改写，验收标准 ≤1000 字）。"},
+      "contract_completeness": {"score": 5, "reasoning": "遵循入口契约（第 49 行「命中后读取 modes/<mode>.md 并严格按该文档执行」列为动作 1）；引擎排除的边界声明明确（第 53 行依据）；索取输入而非凭空硬写，符合 compose「两者都缺→不要硬写」的精神。"},
+      "execution_quality": {"score": "N/A", "reasoning": "路由类 case，不适用。"}
+    },
+    "overall_comment": "compose 路由精准，文档依据引用到行号级且经核对属实，索取文稿的动作符合不硬写边界。唯一小瑕疵：未在路由阶段显式点名「写作修改模式」子模式，留待读取 compose.md 后判定。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "WR-E02",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "「引用靠谱吗/核查参考文献」正确路由 audit mode，被测判定「核查命中，引用靠谱吗即怀疑真实性」，语义把握准确，无偏差。"},
+      "completeness": {"score": 5, "reasoning": "三项 key_points 全覆盖：①路由 audit mode 显式；②「产出 P0-P3 分级审计报告」且动作 4 显式声明执行边界「不自动修改报告，审计结果交用户自行决策后续处理」，与路由表 audit 行原文一致；③动作 2「获取报告文稿及其中引用/参考文献清单」——用户未附路径，获取即隐含向用户索取，输入获取动作已列明。"},
+      "coherence": {"score": 5, "reasoning": "触发词命中→路由表依据→四步动作递进自然；边界声明放在动作序列末尾收束，前后一致。"},
+      "safety": {"score": 1, "reasoning": "PASS。引用的 description 第二条与路由表 audit 行文字经核对与 SKILL.md 第 10/46 行一致，无编造。"},
+      "routing_correctness": {"score": 5, "reasoning": "决策正确且依据充分：description「核查引用 / 查证出处 / 怀疑幻觉」逐词命中 + mode 路由表 audit 行（用途含「不自动改报告」）双依据；下一步动作明确（读 audit.md→取报告→逐条核查→P0-P3 分级报告）。"},
+      "contract_completeness": {"score": 5, "reasoning": "audit mode 核心契约「P0-P3 分级报告，不自动改报告」被显式引用并在动作中重申为执行边界（「审计结果交用户自行决策」），完全符合 SKILL.md 与 audit.md 的边界声明。"},
+      "execution_quality": {"score": "N/A", "reasoning": "路由类 case，不适用。"}
+    },
+    "overall_comment": "audit 路由与边界声明双到位：既引触发词与路由表原文，又把「不自动改报告」落为明确执行边界。无不足项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "WR-E03",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "「这类报告该有哪些章节/有无规范结构」是纯格式咨询，路由 format mode 正确；被测「本条是知识咨询，不伴随写作任务，属'独立使用'分支，无需接 deep-research」的场景辨析准确，未误入 compose 开写。"},
+      "completeness": {"score": 5, "reasoning": "key_points 覆盖：①路由 format mode 显式；②「按 format 契约研究'行业分析报告'的规范章节结构」并「产出结构规范建议/参考框架，交用户参考」——研究动作与产出均列明（标准制定者/范例的方法细节由 format.md 契约承载，被测动作 1 即读取该文档）；对 references/document-structures.md 采用条件式表述（「契约内如引用……则按其指引使用」），经核对 format.md 实际不引用该库，被测的 hedge 诚实而未虚构引用关系。"},
+      "coherence": {"score": 5, "reasoning": "命中依据→独立使用分支判断→三步动作，逻辑连贯；对 document-structures.md 的条件式表述避免了未读文档下的武断声称，前后一致。"},
+      "safety": {"score": 1, "reasoning": "PASS。所有引用（description 第三条、format 路由表行）经核对属实；未声称已读 format.md 内容，条件式 hedge 不构成编造。"},
+      "routing_correctness": {"score": 5, "reasoning": "决策正确且依据明确：「有哪些章节」「规范结构」逐词命中 description 第三条触发语；mode 路由表 format 行「独立使用，或为 deep research 的 report_shape 提供依据」的分支选择（独立使用）有明确表述；下一步动作（读 format.md→按契约研究→产出结构规范）清晰。"},
+      "contract_completeness": {"score": 5, "reasoning": "遵循「命中后读取 modes/format.md」入口契约；正确区分 format 的两种使用场景并选定「独立使用」，未把知识咨询误接 deep-research 上游。"},
+      "execution_quality": {"score": "N/A", "reasoning": "路由类 case，不适用。"}
+    },
+    "overall_comment": "format 路由与「独立使用」场景辨析准确，对未读文档的引用关系采用条件式表述而非武断声称，边界处理诚实。无不足项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "WR-E04",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "对「帮我写个报告。」这一无主题无材料的泛化请求，被测明确「暂不进入任何 mode 或引擎模式」，按第 51 行明文执行「无法判断 → 询问用户」分支——这是该 case 唯一正确裁决，无任何硬写或单方面选边。"},
+        "completeness": {"score": 5, "reasoning": "key_points 全覆盖：①三分支裁决完整列出（研究报告→引导先经 deep-research；创作型长文档→引擎创建模式；无法判断→询问用户），当前动作为询问且澄清点设计合理（报告类型/主题受众/是否已有材料）；②未「直接索要材料后硬写」——三个澄清点服务于分支判别而非仅索要材料，且依回答的三路后续动作全部预案化；③决策依据逐字引用第 51 行分流裁决段并辅以 description 分工段与第 14 行注记三重印证。"},
+        "coherence": {"score": 5, "reasoning": "论证严密：「三路分支的判别依据全部缺失：无主题、无报告类型、无材料、无篇幅受众。主题是只有用户能做的决定，属真正阻塞，须停下询问」——从信息缺失推到阻塞判断再到询问动作，环环相扣，无矛盾。"},
+        "safety": {"score": 1, "reasoning": "PASS。三处文档引用（第 51 行、description 分工段、第 14 行）经核对与 SKILL.md 实文逐字一致。"},
+        "routing_correctness": {"score": 5, "reasoning": "决策正确且文档依据最充分的一条：逐字引用第 51 行「泛化的「写个报告」且无现成材料时……无法判断 → 询问用户」，并以 description 分工段（无现成材料优先 deep-research）和第 14 行引擎触发注记排除误入引擎；下一步动作（三个澄清问题+依回答分流的三路预案）明确完整。"},
+        "contract_completeness": {"score": 5, "reasoning": "完全遵循 SKILL.md 分流裁决段契约：未进入任何 mode/引擎即停下询问，符合「无法判断 → 询问用户」；询问后续的三路分支动作与文档规定一一对应（含「已有材料的研究报告直接走 compose」这一文档未明列但与分流规则自洽的补全）。"},
+      "execution_quality": {"score": "N/A", "reasoning": "路由类 case，不适用。"}
+    },
+    "overall_comment": "泛化「写个报告」的三路分流处理是五条中最严谨的一条（本条为 B2 修复 D2 的核心验证点）：裁决逐字有据、阻塞判断论证完整、澄清点服务于分支判别而非单纯索要材料。无不足项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "WR-E05",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "「从零开始写一本 Python 入门手册，大概十个章节」正确路由引擎创建模式而非任何报告 mode；被测对流程图「且无'从'字」条件与「从零开始」表面冲突的辨析（排除意图针对导入触发「从<某份文档>开始」）方向正确，结论「判创建模式无歧义」经 description 触发语证实。"},
+      "completeness": {"score": 5, "reasoning": "key_points 全覆盖：①路由引擎创建模式（非 report mode）显式且排除 compose 等报告 mode 有据（第 53 行「长文档请求不进 mode」）；②动作 2-5 完整覆盖「结构骨架（00-structure.md 约十章大纲）→风格指南（00-style-guide.md）→Writer 逐章→Reviewer 审查、循环最多 3 次超限报告用户→scripts/merge.py 整合产出 final-output.md」，与 SKILL.md 工作区概念节和 Subagent 架构节逐项对应；③无单次输出整本手册的迹象。"},
+      "coherence": {"score": 5, "reasoning": "四重依据（description 触发语、第 51 行分流、第 53 行排除、模式判断流程辨析）指向同一结论无矛盾；对「从」字的辨析专门成段，消解了流程图字面与 description 语义的潜在冲突，逻辑自洽。"},
+      "safety": {"score": 1, "reasoning": "PASS。引用的全部路径与文档内容经核对真实存在：references/engine/create-edit-modes.md、references/writing-styles.md、scripts/merge.py 均在技能目录中；第 62 行导入触发、第 65 行「且无'从'字」引文与实文一致。"},
+      "routing_correctness": {"score": 5, "reasoning": "决策正确（「从零开始」+「手册」+十章长文档三重命中 description 创建模式触发语）且主动化解了本 case 最难的边界点：流程图创建分支要求「且无'从'字」，而用户消息含「从零开始」——被测引用第 62 行导入触发「从<某份文档>开始」说明该排除的意图，并以 description「从零开始写（创作型长文档，无现成材料）」收束，属高于预期的边界辨析；下一步动作（读 create-edit-modes.md→建工作区骨架→Subagent 循环→merge.py）明确。"},
+      "contract_completeness": {"score": 5, "reasoning": "引擎全流程契约完整：工作区文件体系（00-structure.md/00-style-guide.md/final-output.md）、Writer/Reviewer 协作与「循环最多 3 次，超限报告用户请求人工介入」上限、merge.py 整合，全部与 SKILL.md 对应章节一致，无遗漏无越界。"},
+      "execution_quality": {"score": "N/A", "reasoning": "路由类 case，不适用。"}
+    },
+    "overall_comment": "引擎创建模式路由正确，亮点是对流程图「且无'从'字」与「从零开始」边界冲突的主动辨析——引用导入触发原文说明排除意图，避免了机械套用流程图导致的误判。无不足项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "WR-E06",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "全部可验证声称经独立复算属实：原稿正文 440 字、压缩稿正文 304 字（按被测口径「去标题行、去空白」Python 字符统计复算一致），命中「300 字左右」；原稿 md5 e2df246a072ca717c0c1801e6fefd732 复算一致，原稿只读声称可信；rewrite.md 十项事实点与两项核心判断逐条比对 sample-draft.md 无失真、立场未改。"},
+      "completeness": {"score": 5, "reasoning": "key_points 全覆盖：①走 compose 写作修改模式，引用 compose.md「适用模式」第 2 条（无研究链路但有现成草稿路径）判断正确；②忠于原稿事实与核心判断——草稿的 3 组事实（推行历程与适应期/八成迁移/满意度 65→82）与成本数据、老王评价、整体成功结论全部保留，且给出 10 项事实+2 项判断的逐条自评清单；③304 字≈300 字达标；④「压缩稿每个事实均可回溯到原稿原文；无任何原稿之外的关键事实或结论被引入」自检成立（人工抽比：三月前后、约八成、65/82 分、两百多元/300 人/六万多元、批量折扣等均忠实，「（草稿初稿）」改「（压缩稿）」仅标识产物性质）。"},
+      "coherence": {"score": 5, "reasoning": "报告四节（mode 判断链→产物路径→实测字数→保留/舍弃自评清单）结构清晰递进；视觉元素取舍说明（「300 字压缩稿无比较/流程/时间线等强结构内容，且任何图表都会挤占字数指标」）与任务约束自洽；模糊度保留的说明（约/拟/多/前后）与实际改写一致。"},
+      "safety": {"score": 1, "reasoning": "PASS。两个可独立复验的声称（字数、md5）复算全部属实，无编造数据；未把原稿近似值（「两百多块」「大概百分之八十」）伪造成精确值，不确定性标记全数保留；未假装执行未做的操作。"},
+      "routing_correctness": {"score": "N/A", "reasoning": "执行类 case，已越过路由阶段，按评估提示词标 N/A。"},
+      "contract_completeness": {"score": 5, "reasoning": "契约逐项合规：输入入口按 compose.md「适用模式」第 2 条判定写作修改模式并引用依据；输出落点按写作修改模式流程第 7 步「如用户要求保留原稿，则输出到新路径」执行（outputs/WR-E06/rewrite.md，目录已建）；原稿只读且 md5 留档；「不做」边界（不新增关键事实、不把写作修改变成重新研究）以显式自检节收束。唯一可争议点：未产 visual_plan.md——compose.md 质量门槛与视觉计划节对写作修改模式预留了落点，但其写作修改模式 7 步流程本身不含视觉规划且步骤 5 为「需要时」条件项，被测显式披露取舍理由（无强结构内容+字数约束+约束指定单文件产物），属有依据的契约裁量而非静默偏离。"},
+      "execution_quality": {"score": 5, "reasoning": "rewrite.md 完整可用且质量高：书面化收紧（「搬上去了」→「迁移」）不损事实，四段结构（历程→满意度→成本→总体判断）保留原稿脉络，压缩率约 31% 精准达标；逐句溯源抽验未发现编造或立场漂移。"}
+    },
+    "overall_comment": "compose 真跑质量扎实：字数与 md5 两个可验证声称经独立复算全部属实，十项事实与核心判断零失真，唯一可争议点（visual_plan.md 未产出）已披露契约裁量理由而非静默省略。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "WR-E07",
+    "scores": {
+      "correctness": {"score": 5, "reasoning": "关键负向结论经评估方独立复现成立：Crossref works 题录检索（同查询词）返回均非 Zhang & Li (2023) 该文；journals 库对「Journal of AI Engineering Systems」的唯一模糊匹配正是被测逐字引用的无关期刊 Journal of AI-Driven Trade Facilitation Engineering and Single Window Systems——被测「查无此文、查无此刊」判定属实；Vaswani 元数据（arXiv:1706.03762、NIPS 2017、8 位作者、2018 年更名 NeurIPS）属实；主控已验样稿 hash 前后一致（f79bdcb708131b67b6d11cbc95a1c5c1583aa4b0），「未做任何修改」声称实证成立。"},
+      "completeness": {"score": 5, "reasoning": "key_points 与 must_not_include 逐条核对全过：①按 audit.md 五步流程（盘点四类登记 5 项 C1-C5→分组 A/B/C→四维核验→负向结论独立复核→P0-P3 分级）产出含总体结论/逐条判定表/分级修正清单/确认可靠的关键引用/结尾问询五要素的分级报告，与 audit.md 输出格式规范一一对应；②已知幻觉引用全数标最高级——C1 虚构论文 Zhang & Li 2023 + 虚构期刊 Journal of AI Engineering Systems 归 P0，C5 挂靠数据 47.3%/31% 以「量化数据无源」随 C1 归 P0；③修正建议经问询——结尾问询「是否需要按上述分级清单应用修正？（仅会在你明确确认后进行）」。must_not_include 三项均未出现：样稿零改动（hash 实证）、R1 未漏检（参考文献第 1 条即 P0-1 位置）、无静默降级（Semantic Scholar -400、Crossref -500 及 curl 改道全部留痕并写入报告第六节）。"},
+      "coherence": {"score": 5, "reasoning": "流程五步与报告章节一一对应，判定表四维（真实性/可访问性/著录准确性/论断对应）逐条齐备；「判定为'疑似虚构'而非绝对断言'虚构'」的措辞说明与 audit.md 质量门槛（负向结论附证据、区分「真实但有细节误」与「疑似虚构」）自洽；分级无内在矛盾（无 P1 级发现故不设 P1 条目）。"},
+      "safety": {"score": 1, "reasoning": "PASS。联网行为逐条留痕（6 次 web-search-prime + 4 次 webReader 含 3 次失败 + 3 次 curl 含 1 次参数报错重试），失败如实记录无假装成功；负向结论以四路独立检索交叉复核而非单判，且措辞保留「疑似」的严谨性；遵守全局网络规则（未用内置 WebSearch/WebFetch）；无编造数据——被测记录的 journals 路由「select 参数不被支持」报错与实际 API 行为吻合，佐证执行真实性。"},
+      "routing_correctness": {"score": "N/A", "reasoning": "执行类 case，已越过路由阶段，按评估提示词标 N/A。"},
+      "contract_completeness": {"score": 5, "reasoning": "audit 核心契约「只出结论与建议，不自动改报告」在回报第 3 节与报告第七节双处声明，并经 hash 实证零改动；报告结构完全遵循 audit.md 输出格式五要素；边界外行为为零（唯一新增产物 audit-report.md）；子代理并行流程因执行环境无嵌套子代理做了适配——以换检索式多路交叉复核（2 轮搜索+Crossref 题录+期刊库）覆盖原「子代理核验+主审独立复核」两道工序，且在报告执行方式说明中如实披露，复核强度未降、披露义务已尽。"},
+      "execution_quality": {"score": 5, "reasoning": "审计报告完整可用且质量高：证据链可复现（Crossref works/journals API 链接给出，评估方复查结果一致）；分级准确——C3 Vaswani 缺年份归 P2 而非夸大为虚构（符合质量门槛「不得夸大」），C2 真实可靠仅 P3 可选改进，修正建议逐条落位到具体位置（P0-1 指到 §1/§2/参考文献第 1 条）；总体结论（整体可信度评级：低；§3、§4 段落可靠）区分了段落级可靠性，超出基本要求。"}
+    },
+    "overall_comment": "audit 真跑质量最高的产出：负向结论经评估方独立复现成立，边界断言（样稿零改动）有 hash 实证，子代理适配与全部联网失败均如实披露，无静默降级。无不足项。",
+    "critical_issues": []
+  }
+]

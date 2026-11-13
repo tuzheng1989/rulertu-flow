@@ -1,0 +1,247 @@
+[
+  {
+    "case_id": "DR-E01",
+    "scores": {
+      "correctness": {
+        "score": 4,
+        "reasoning": "路由决策正确：\"深度调研\"命中 SKILL.md 触发条件，完整走 clarify→brief→3 轮循环→finalize；以 web 为主通道的理由（市场格局/玩家/趋势属通用网页情报）符合 §3.2 映射表，us+cn 多区域并行与 recency 过滤均与文档第 1 步、web 参数约定一致。扣 1 分：行动计划第 4 步\"可补 social_en 通道（hackernews/twitter 脚本）\"把 hackernews 误归 social_en——文档映射表中 hackernews 属 code 通道（scripts/channels/code/scripts/），属微小事实偏差，不影响主路由。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "文档要求的流程节点齐备：第 1 步解析（max_loops 默认 3）、1.5 clarify（最多 1 轮、AskUserQuestion 条件）、1.8 brief 维度清单、第 2 步 ResearchState 初始化、3.1 首轮固定 3 条查询、3.2 并行、3.3a/b/c（compress 触发条件正确）、3.4 reflect 阈值、finalize 三件套落盘。key_point\"研究计划含多 source_type 查询\"由后续轮\"可补 social_en 通道、product 通道 profile 查融资\"覆盖（首轮偏 web 亦符合文档\"第 1 轮偏 web 广度发现\"）。must_not_include 两条均未触碰：含 1 轮澄清、3 轮循环非单次搜索。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "六步行动计划编号推进、依赖清晰；\"超阈值且 loop>1 才压缩\"与文档 3.3c 判定式一致，\"<7 继续、≥8 结束\"与 3.4 决策准则一致，无前后矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "纯路由推演，无事实断言与执行声明，无编造。PASS。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "决策正确且引用文档依据（触发条件、§1.5 澄清规则、§3.2 映射表、web 参数 content_size/recency 约定），下一步动作到 finalize 落盘路径逐条明确，达 5 分锚点。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "遵循输入入口（触发词匹配）、澄清单轮约束、自动落盘契约（workspace/reports/{日期}-{主题}-{hex4}/report.md 含 research-process.md、sources.json，与文档第 4/5 步一致）及 AskUserQuestion 仅限\"选项可枚举\"的使用条件。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "标准触发场景路由无失误，全流程节点与文档判定式逐一对应，契约层（落盘三件套、澄清约束）完整；唯一瑕疵是 hackernews 被误归 social_en 通道（实属 code 通道），属不影响主路由的脚本归属偏差。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DR-E02",
+    "scores": {
+      "correctness": {
+        "score": 4,
+        "reasoning": "通道分派决策正确：GitHub 活跃度→github_search.py（code 通道）、社区讨论→twitter/zhihu、综述类（State of JS、roadmap）→web，符合 §3.2 子工具选择；依据段也正确引用\"技术讨论→hackernews_search.py\"（code 通道语义）。扣 1 分：行动计划第 2 步把\"hackernews_search.py + twitter_search.py（social_en）\"并置——hackernews 实属 code 通道脚本（social_en 仅有 twitter/youtube，reddit 已禁用），照此执行会在错误目录找脚本。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "code+social_cn+social_en+web 四通道覆盖与期望 key_points 逐条对应（GitHub 活跃度→github_search、社区讨论→social 通道、按 source_type 分派）；另覆盖免澄清判定（引『注意事项 #5』）、PYTHONIOENCODING 前缀、降级规则（success:false→回退 web 重试一次并 log）、≥2 独立来源交叉验证、write-report compose 后处理提示（须用户确认）。must_not_include\"全部查询走 web 通道\"未触碰。"
+      },
+      "coherence": {
+        "score": 4,
+        "reasoning": "路由决策行（多通道并行）与依据段自洽，但行动计划中 hackernews 的通道归属与自身引用的文档依据（技术讨论→code 通道）相互矛盾，存在可察觉的内部不一致；其余推理链（免澄清→brief 维度→并行→降级→交叉验证→finalize）严密。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "纯路由推演，无编造与虚假执行声明。PASS。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "四通道分派正确且引用映射表、子工具选择与『注意事项 #5』依据；免澄清决策（用户已给定目的与侧重）有理有据；下一步动作（含经 §3.2b web-reader 深读 GitHub 仓库页补 commit/release 数据）明确。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "澄清单轮约束、降级显式 log 不静默、Bash 编码前缀约定、产物后处理\"须用户确认\"边界均显式声明，契约要素齐全。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "四通道分派与降级、交叉验证、产物后处理提示的契约意识是亮点；行动计划中 hackernews 的通道归属与自身依据段矛盾，暴露脚本级细节不够严谨，但不动摇路由决策本身的正确性。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DR-E03",
+    "scores": {
+      "correctness": {
+        "score": 4,
+        "reasoning": "核心路由正确：从零调研属 deep-research 职责，未拒绝或推给 write-report（must_not_include 两条均未触碰）；\"直接写+正式一点\"→跳过澄清有『注意事项 #5』能推断则不问支撑；\"正式\"写入 brief 受众/格式字段引第 1.8 步\"finalize 据其输出格式与受众决定报告结构\"，引用准确。扣 1 分：finalize 后未按 SKILL.md『产物后处理』段提示可选接 write-report（compose 改稿/audit 审计、经用户确认），而本案正是验证该分流行为。"
+      },
+      "completeness": {
+        "score": 3,
+        "reasoning": "覆盖主要流程：免澄清判定、brief 维度、首轮 3 条 query、github_search+web 并行、§3.2b 深读 README/官方文档（单项目调研重心判断正确）、本地仓库材料作补充的边界备注、2 轮早停预估。但缺 SKILL.md 明文的产物后处理提示（期望 key_point 第 3 条完全未覆盖），属明显遗漏，按锚点落 3 分。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "推理链顺畅：\"直接写\"封死澄清回路→\"正式\"入 brief 字段→深读为重心的单项目策略→本地材料边界声明（公开检索为主线、本地作补充）→2 轮可达 reflect ≥8 的预估，前后无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "纯路由推演，无编造。PASS。"
+      },
+      "routing_correctness": {
+        "score": 4,
+        "reasoning": "核心路由决策（deep-research 接单、完整管线、不外推 write-report）正确且引用触发条件与第 1.8 步依据；但 finalize 后未提示产物后处理分流选项，下一步动作链不完整，未达 5 分锚点（下一步动作明确）。"
+      },
+      "contract_completeness": {
+        "score": 3,
+        "reasoning": "主体契约遵循（触发、澄清豁免、brief 驱动、自动落盘），但漏掉 SKILL.md v0.8.0 专设的『产物后处理』契约段（可选接 write-report、不自动执行、经用户确认）——恰为本案（notes：验证 B3 新增产物后处理段分流行为）要验证的边界声明，属主体遵循但有契约偏离。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "核心边界决策（接单不外推、澄清豁免、正式语气入 brief）正确且论证充分，本地材料边界声明是亮点；但漏掉本案专门验证的『产物后处理』分流提示，完整性与契约完备性均因此受损。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DR-E04",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "source_type=product 精确命中（v0.7.0 注记\"Product Hunt 产品/竞品/融资数据\"与请求对口）；子命令按语义递进：search \"AI note app\" --limit 8 发现→leaderboard --date 2026-11-12 取近期热度→逐个 profile 取融资，与文档子工具选择逐条对应；--limit 8 合文档 product 上限 8；先读 CHANNEL.md 再调命令，与\"子命令契约详见 CHANNEL.md 不在此复制\"的指针约定一致。"
+      },
+      "completeness": {
+        "score": 4,
+        "reasoning": "主流程齐全：免澄清判定、brief 定表格式输出、三子命令动线、降级回退、reflect 以清单完整性为主维度、表格型短报告交付。仅未显式说明 product 通道输出已含 source_type:\"product\"、items[] 直接入 search_results（期望 key_point 第 3 条未覆盖）。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "动线顺序合理：brief→读 CHANNEL.md 确认契约→search 发现→leaderboard 热度→profile 融资→失败降级→reflect→finalize，交付物定位（清单/表格而非长文）与请求吻合，无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "融资数据计划经真实 profile 子命令获取而非编造；leaderboard 日期取 2026-11-12（当日为 11-13）合理。PASS。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "product 通道决策正确，引用 v0.7.0 版本注记、§3.2 映射表、子工具选择与 CHANNEL.md 指针四处依据；1-2 轮收窄循环以\"§3.4 reflect 提前达标即 break\"作文档支撑，动作明确。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "显式遵守子命令契约外置约定（动线第一步先读 CHANNEL.md）、降级回退规则（失败/限流→web 重试一次并 log）、融资数据走真实 profile 调用的取数路径声明。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "product 通道子命令动线（search→leaderboard→profile）与 CHANNEL.md 先读约定执行到位，是六条中契约遵循最干净的推演之一；仅输出映射 source_type 标注未显式提及，完整性差一步到满分。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DR-E05",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "正确判定为取图任务而非研究任务——\"找示意图\"不命中触发条件（深入研究/研究一下/调研/全面分析/研究报告均无）且用户未要报告，故不启动完整管线、仅单发 image 通道脚本；脚本路径与参数（scripts/channels/image/scripts/serper_image_search.py、--num 6 --json、--gl us --hl en）与映射表逐字一致；降级路径（web-search-prime 搜图源页+webReader 提取直链）具体可执行。"
+      },
+      "completeness": {
+        "score": 4,
+        "reasoning": "按需调用、脚本调用、无 key 降级 web 并说明、溯源（imageUrl+pageUrl+来源域名）、幻灯片使用前授权/署名提示齐备，\"不产出 report.md\"边界明确；唯漏掉文档实现说明中 image 结果定位为\"secondary 来源\"的层次声明（期望 key_point 第 4 条）。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "四步动线（查 SERPER_API_KEY→可用单发→缺失降级→返回清单）条件分支清晰，决策（不启动管线）与产出形式（清单而非报告）首尾一致。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "无 key 场景显式降级 web 而非崩溃或静默失败，且全程声明严禁内置 WebSearch/WebFetch。PASS。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "\"不走完整管线、按需轻量复用 image 通道\"正是期望路由（image 通道按需调用、非 source_type 分派体系）；决策引用触发条件不匹配+映射表 image 行+实现说明降级注记三处依据；must_not_include 两条（当作第 7 个 source_type/无 key 崩溃静默）均未触碰。"
+      },
+      "contract_completeness": {
+        "score": 4,
+        "reasoning": "降级显式不静默、严禁内置 WebSearch/WebFetch、输出映射（source_type:\"image\"、imageUrl 主产物 pageUrl 溯源）均遵循；漏\"secondary 来源\"定位声明，边界表述有一处缺口，未达满分。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "对\"取图≠研究\"的边界判定准确，降级与溯源动作具体，脚本调用与文档逐字对齐；漏 secondary 来源定位声明是其唯一缺口。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DR-E06",
+    "scores": {
+      "correctness": {
+        "score": 4,
+        "reasoning": "核心定价结论与已记录证据相符：$50/50,000（$1.00/1K）与 $3,750/1,250 万（$0.30/1K）换算自洽且有 [1][3][8]/[1][4][6] 多源支撑，6 个月有效期有 [14] 支撑；免费 2,500 次有 [1][3][5][8] 等 key_facts 直接支撑。扣 1 分：免费额度结论引 [1][3][5][6][8][11]，其中 [6] 与 [11] 的 sources.json key_facts 未记录该事实（[11] 仅记订阅档位单价），引用指针与已录证据部分错位（不排除摘要截断因素）。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "约束全数履行：max_loops=1、2 条 query、按\"不深读\"约束跳过 3.2b 并在报告中把未核验项标\"低置信\"、三件套落 outputs/DR-E06/；report.md 含核心结论表/三维度分段/冲突与不确定点/14 条来源，research-process.md 含节点执行表与偏离记录，sources.json 含 key_facts 标注，降级状态显式记录（次数 0 及\"如实记录，无虚构\"）。期望 key_points 三条全覆盖。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "执行报告五段结构（产物清单→通道记录→降级→流程自评→发现速览）与 report.md（结论表→分段→冲突如实记录→来源）层次清晰；偏离项声明与 research-process.md 互相印证（含 Write 工具被拦截改走 Bash 的记录），无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "无编造：\"每月 2,500 次\"[13] 与\"5,000 免费\"[10] 两处冲突来源明确标注未采信并给出理由；官方定价页未直读一事在报告三处如实声明并建议正式采购前核验；订阅档位疑与 SerpApi 混淆的判断有 [12] 对比参照支撑。PASS。"
+      },
+      "routing_correctness": {
+        "score": "N/A",
+        "reasoning": "执行类 case，已越过路由阶段"
+      },
+      "contract_completeness": {
+        "score": 4,
+        "reasoning": "三件套契约、v0.4.1 引用锚链化（report.md 含 <a id=\"ref-n\"> 锚点，已抽查属实）、节点偏离三项如实记录（subagent 内联/路径覆盖/深读跳过，均附理由）、降级零次显式声明，契约意识强。扣 1 分：同 URL 拆多条 ref（ref 1=2、4=6，14 条实际唯一 URL 12 条）与 3.3b\"URL 自动去重\"约定存在张力，虽尾注自述\"同域名不同信息点分别计\"，属可争议偏离而非隐瞒。"
+      },
+      "execution_quality": {
+        "score": 4,
+        "reasoning": "产出可用且质量高：结论表带置信度分级、冲突专节、采购核验建议，忠实于输入材料（2 次真实搜索 9+9 条结果、14 条来源可溯源）。小瑕疵：[6][11] 引用指针与 key_facts 证据不完全对应；同 URL 拆条使\"14 条来源\"略虚高（唯一 URL 12 条）。按\"产出可用，有小瑕疵\"落 4 分。"
+      }
+    },
+    "overall_comment": "真跑执行质量高：冲突如实标注未采信、偏离三项记录在案、降级零次显式声明，无任何编造迹象；扣分在个别引用指针与已录证据错位及同 URL 拆条与去重约定的张力，属可信产出上的精度小疵。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DR-E07",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "准确识别为单点事实查核，以压缩形态（单轮、搜索层+§3.2b 原始核验与交叉验证）承接而非硬套 3 轮报告管线；74.3% 需锚定 SWE-bench 具体 variant（Full/Verified/Lite）与时间点、\"variant 错配即不可靠\"的查核维度拆解切中要害；冲突时\"标存疑不强行裁断\"符合 §3.2b 规则原文。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "全链条动作齐备：迷你 brief（查核对象+结论三态产出形式）、2-3 条查询、并行搜索、webReader 深读 SWE-bench 官方排行榜与 OpenAI 官方公告（一手来源优先、二手聚合降置信）、≥2 独立来源交叉、冲突处理规则、输出形式（判定+证据链[n]+variant/时间限定）、可选落盘短 md；并一行提及 academic-research-skills:deep-research 显式 fact-check 模式作跨技能备选。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "直面文档缺口（\"查证\"不在触发条件字面清单）并给出 §3.2b 明文覆盖（\"关键数字…优先回到原始来源确认；至少 2 个独立来源交叉确认\"）的衔接论证，是六条推演中最完整的一处边界推理；行动计划与决策无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "未对 74.3% 真伪预作断言，输出限定为\"可靠/不可靠/存疑\"三态待查框架，无编造结论。PASS。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "路由决策合理且有依据引用：deep-research 经 §3.2b fact-check 取证承接（期望 key_point 明示允许此路由），明确不走全文审计、不接 write-report 后处理（无已有报告语境，write-report audit 不适用）；同时指出跨技能 fact-check 备选。must_not_include 两条（含糊两边都不接/直接开始全文审计）均未触碰。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "边界声明显式：压缩形态不走 3 轮管线、结论三态输出、冲突记录规则（§3.2b）、\"可选落盘\"而非强制三件套（与轻量请求相称）、不执行 write-report 后处理的边界声明，契约要素齐全。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "六条推演中边界推理最扎实的一条：直面触发条件缺口并以 §3.2b 原文衔接、variant 拆解专业、跨技能备选一行带过不抢戏；无实质缺陷。",
+    "critical_issues": []
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "research_id": "DR-E06",
+  "date": "2026-11-13",
+  "topic": "Serper.dev API 的定价和免费额度",
+  "loops": 1,
+  "channels_used": ["web"],
+  "degradations": 0,
+  "sources": [
+    {"ref": 1, "title": "Serper API Key: Get One Free, Pricing and Examples (2026)", "url": "https://keirolabs.cloud/blog/serper-api-guide-2026", "snippet": "Free: 2,500 free queries when you sign up, no credit card. Price: prepaid credit packages, $50 for 50,000 ($1.00 per 1,000) down to $3,750 for 12.5 million", "source_type": "web", "key_facts": ["free_2500_signup", "pricing_50_50k", "pricing_3750_12.5M"]},
+    {"ref": 2, "title": "Serper API Key Guide (Serper vs SerpAPI 价格区间)", "url": "https://keirolabs.cloud/blog/serper-api-guide-2026", "snippet": "Serper covers Google only and costs $0.30 to $1.00 per 1,000 searches. SerpAPI covers many search engines and costs $3.75 to $25 per ...", "source_type": "web", "key_facts": ["price_range_0.30-1.00_per_1k"]},
+    {"ref": 3, "title": "crawl and search for cheapest prices (serperdev vs crawleodev)", "url": "https://www.crawleo.dev/blog/serperdev-vs-crawleodev-features-pricing-pros-and-cons-2026", "snippet": "2,500 free queries to start (no credit card required), $50 for 50,000 credits (~$1.00 per 1,000 requests)", "source_type": "web", "key_facts": ["free_2500_signup", "pricing_50_50k"]},
+    {"ref": 4, "title": "Serper API — Docs, OpenAPI & Kin Score", "url": "https://apis.io/providers/serper", "snippet": "Serper uses a credit-based model with 2,500 free queries and volume pricing down to $0.30 per 1,000 requests. no credit card required", "source_type": "web", "key_facts": ["credit_model", "free_2500_signup", "min_price_0.30_per_1k"]},
+    {"ref": 5, "title": "web-researcher-mcp API_SETUP.md", "url": "https://github.com/zoharbabin/web-researcher-mcp/blob/main/docs/API_SETUP.md", "snippet": "Free tier: 2,500 queries (one-time credit, then paid)", "source_type": "web", "key_facts": ["free_2500_one_time"]},
+    {"ref": 6, "title": "Serper API — apis.io ($0.30/1K 佐证)", "url": "https://apis.io/providers/serper", "snippet": "volume pricing down to $0.30 per 1,000 requests. Starter $50 credits", "source_type": "web", "key_facts": ["min_price_0.30_per_1k"]},
+    {"ref": 7, "title": "Best SERP APIs in 2026: 8 Google Search APIs Tested", "url": "https://www.octoparse.com/blog/best-serp-api", "snippet": "SERP API pricing in 2026 ranges from about $0.30 to $25 per 1,000 searches; Serper gives 2,500 free credits on signup", "source_type": "web", "key_facts": ["free_2500_signup", "market_price_range"]},
+    {"ref": 8, "title": "10 Best Free SERP APIs in 2026: Free Tiers Compared", "url": "https://brightdata.com/blog/web-data/best-free-serp-apis", "snippet": "New accounts get 2,500 free queries, with no credit card. credits are prepaid, from $50 for 50,000", "source_type": "web", "key_facts": ["free_2500_signup", "pricing_50_50k"]},
+    {"ref": 9, "title": "Cheapest & Fastest vs Broadest Google Search API (2026)", "url": "https://fastcrw.com/alternatives/serper-vs-serpapi", "snippet": "Starter $25/mo for 1,000 ($25/1k), Developer $75/mo for 5,000 ($15/1k), Production $150/mo", "source_type": "web", "key_facts": ["subscription_tiers_unverified", "possible_confusion_with_serpapi"]},
+    {"ref": 10, "title": "Serper.dev Alternative & Pricing", "url": "https://serpscraper.dev/vs/serper-dev", "snippet": "1 credit = 10 results; 5,000 free credits once at signup", "source_type": "web", "key_facts": ["conflicting_claim_not_adopted"]},
+    {"ref": 11, "title": "SerpApi vs Serper.dev: 500 Queries Through Both, Tested", "url": "https://apiserpent.com/blog/serpapi-vs-serper-benchmark", "snippet": "Per-call cost (Developer plan), $15.00/1K (Developer, $75/mo for 5,000), $1.00/1K (Starter)", "source_type": "web", "key_facts": ["subscription_tiers_unverified"]},
+    {"ref": 12, "title": "Plans and Pricing — SerpApi (对比参照)", "url": "https://serpapi.com/pricing", "snippet": "Starter $25/month 1,000 searches per month. Developer $75/month ... $275/month", "source_type": "web", "key_facts": ["comparison_reference"]},
+    {"ref": 13, "title": "How to use Serper.dev API for Google search automation", "url": "https://www.codewords.ai/blog/serper-dev", "snippet": "Serper Dev offers 2,500 free queries per month (与主流一次性说法冲突，未采信)", "source_type": "web", "key_facts": ["conflicting_claim_monthly"]},
+    {"ref": 14, "title": "Serper Pricing 2026: Credits, 6-Month Expiry", "url": "https://apiserpent.com/blog/serper-pricing-credits-explained", "snippet": "The homepage lists six-month validity and 2,500 free queries. Reports higher credit use for deeper results", "source_type": "web", "key_facts": ["credits_expiry_6_months", "deep_search_costs_more_credits"]}
+  ]
+}
