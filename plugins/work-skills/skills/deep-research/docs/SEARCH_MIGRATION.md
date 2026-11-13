@@ -44,9 +44,9 @@ v0.4.x 的搜索层虽已迁移到 MCP 工具，但仍只有 `web-search-prime` 
 |---|---|---|
 | `web` | MCP web-search-prime | 保留 v0.4 |
 | `academic` | deepxiv CLI | `deepxiv search --format json` / `deepxiv paper --section` |
-| `code` | sn-search-code 脚本 | github / stackoverflow / hackernews / huggingface |
-| `social_cn` | sn-search-social-cn 脚本 | zhihu / bilibili / douyin |
-| `social_en` | sn-search-social-en 脚本 | twitter / youtube（reddit 已禁用） |
+| `code` | code 通道 | github / stackoverflow / hackernews / huggingface |
+| `social_cn` | social_cn 通道 | zhihu / bilibili / douyin |
+| `social_en` | social_en 通道 | twitter / youtube（reddit 已禁用） |
 
 主控按 query 节点产出的 `source_type` 分派；query 同时标注 `source_tier`（primary/secondary/supplementary）表达来源优先级。
 
@@ -78,9 +78,9 @@ v0.5.0 的五通道缺产品维度数据源（产品发现、竞品对比、融�
 
 | source_type | 通道 | 入口 |
 |---|---|---|
-| `product` | sn-search-producthunt 脚本 | search / semantic / alternatives / profile / category / leaderboard / categories |
+| `product` | product 通道 | search / semantic / alternatives / profile / category / leaderboard / categories |
 
-调用方式与其余 sn-search-* 通道一致（`PYTHONIOENCODING=utf-8 python ../sn-search-producthunt/scripts/producthunt_search.py {子命令} {参数}`），子命令契约详见 `sn-search-producthunt/SKILL.md`。
+调用方式与其余脚本通道一致（`PYTHONIOENCODING=utf-8 python scripts/channels/product/scripts/producthunt_search.py {子命令} {参数}`），子命令契约详见 `scripts/channels/product/CHANNEL.md`。
 
 ### 数据定位与使用边界
 
@@ -89,3 +89,43 @@ Product Hunt 数据由 maker 自报，默认 `source_tier: secondary`，关键�
 ### 匿名访问可能收紧
 
 匿名访问是当前对该端点的观测行为，上游可能收紧（要求 OAuth / API key）。收紧时脚本返回 `success:false`（退出码 1），既有降级规则兜底（专门通道失败回退 MCP `web-search-prime`，见 SKILL.md 3.2），研究不中断。
+
+## 2026-11-13 五通道物理收编 + image 通道上线
+
+### 收编动机
+
+原 4 个脚本通道（code / social_cn / social_en / product）物理存放在 `skills/` 顶层的 `sn-search-*` 独立 skill 目录，SKILL.md 与 config.json 里的调用路径以跨目录相对路径（`../` 前缀引用顶层 sn-search-* 目录）或安装期绝对前缀（`.claude` 安装根拼接 sn-search-* 目录）书写，随技能安装位置变化易断裂。本次将 5 个目录整体迁入 deep-research 技能内部，调用路径统一为相对技能根的 `scripts/channels/<key>/scripts/`，路径与技能位置解耦。
+
+### 新布局
+
+```
+deep-research/
+└── scripts/
+    └── channels/
+        ├── code/         （原 sn-search-code）
+        ├── social_cn/    （原 sn-search-social-cn）
+        ├── social_en/    （原 sn-search-social-en）
+        ├── product/      （原 sn-search-producthunt）
+        └── image/        （原 sn-search-image，新增通道）
+
+每个通道目录内：CHANNEL.md（通道契约文档，由原 SKILL.md 去 frontmatter 改名而来）
++ scripts/（脚本原样随迁）+ requirements.txt（如有，原样随迁）。
+```
+
+### 目录名映射
+
+| 原顶层目录 | 新位置（channels/ 下） | 通道键 |
+|---|---|---|
+| sn-search-code/ | code/ | code |
+| sn-search-social-cn/ | social_cn/ | social_cn |
+| sn-search-social-en/ | social_en/ | social_en |
+| sn-search-producthunt/ | product/ | product |
+| sn-search-image/ | image/ | image |
+
+### image 通道上线
+
+新增 image 通道：Serper.dev Google 图搜脚本（`scripts/channels/image/scripts/serper_image_search.py`），需 `SERPER_API_KEY` 环境变量，缺失时降级 web。定位为 **web 通道的配图/视觉证据增强，source_tier: secondary**；不入 source_type 分派体系（source_type 保持 6 类），由调用方按需触发。输出主产物为 imageUrl，pageUrl 保留溯源。
+
+### 顶层清零
+
+`skills/` 顶层 5 个 `sn-search-*` 目录已全部迁出（含 `sn-search-producthunt/scripts/__pycache__` 清理），顶层无残留。

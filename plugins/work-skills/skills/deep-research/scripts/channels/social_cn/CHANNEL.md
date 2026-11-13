@@ -1,8 +1,4 @@
----
-name: sn-search-social-cn
-description: 搜索中文社交平台：B站视频、知乎问答、抖音视频。部分平台需要 cookie 认证，稳定性因平台而异。
-user-invocable: false
----
+> 本文件为 social_cn 通道契约文档（原 sn-search-social-cn skill，2026-11-13 收编进 deep-research）。
 
 # sn-search-social-cn - 中文社交平台搜索
 

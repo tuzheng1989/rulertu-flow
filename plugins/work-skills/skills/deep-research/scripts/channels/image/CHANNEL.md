@@ -1,9 +1,4 @@
----
-name: sn-search-image
-description: USE FOR Google-backed image discovery via Serper.dev. Returns image URLs, page URLs, titles, and source domains.
-user-invocable: false
-metadata: {"openclaw":{"requires":{"bins":["python"],"env":["SERPER_API_KEY"]},"primaryEnv":"SERPER_API_KEY"}}
----
+> 本文件为 image 通道契约文档（原 sn-search-image skill，2026-11-13 收编进 deep-research）。
 
 # Serper Image Search
 

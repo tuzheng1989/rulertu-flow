@@ -1,7 +1,7 @@
 # work-skills 技能整合：搜索通道收编 + write-report 组建
 
 - **日期**：2026-11-13
-- **状态**：待评审（handoff 自 evoCenter skill 治理会话）
+- **状态**：B1 已收口（2026-11-13，Executor+Auditor T2 全流程，验收 10/10；独立评审经用户裁定跳过）；B2 待开工；B3 待开工
 - **目标插件**：work-skills（deep-research 0.7.0 → 0.8.0；插件 2.5.0 → 2.6.0；新增 write-report 1.0.0）
 - **关联仓**：evoCenter（vault，仅 CLAUDE.md 引用联动，无代码改动）
 
@@ -131,6 +131,7 @@ skills/write-report/
 2. 根 `.claude-plugin/marketplace.json` 的 work-skills 条目描述同步。
 3. deep-research：版本 0.7.0 → 0.8.0，description 补 image 通道一句；SKILL.md 末尾新增「产物后处理」段——report.md 生成后可选接 write-report（compose 改稿 / audit 审计），指引而非自动执行。
 4. evoCenter `CLAUDE.md`：调研工作表中 sn-research-report / sn-report-audit / sn-report-format-discovery 三行收敛为一行 write-report（write-report 组装后）。
+5. （B1 收口移交）channels/ 内旧布局路径清理：三个 CHANNEL.md 依赖安装指引（code / social_cn / social_en）与三个 search_utils.py 缺 httpx 运行时报错指引的 `skills/sn-search-<X>/requirements.txt` → 新路径；SEARCH_MIGRATION.md 收编节代码围栏排版修正；producthunt_search.py User-Agent 是否更名定夺。
 
 **验收**：
 

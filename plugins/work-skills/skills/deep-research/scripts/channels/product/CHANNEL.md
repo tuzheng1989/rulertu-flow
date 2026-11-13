@@ -1,8 +1,4 @@
----
-name: sn-search-producthunt
-description: 搜索 Product Hunt 产品数据：产品发现、竞品/替代品查找、产品档案（评分/评论/融资）、分类榜单与分类列表。当任务涉及产品发现、竞品分析、市场调研、融资数据时触发；供 deep-research product 通道按 source_type=product 分派调用。
-user-invocable: false
----
+> 本文件为 product 通道契约文档（原 sn-search-producthunt skill，2026-11-13 收编进 deep-research）。
 
 # sn-search-producthunt - Product Hunt 搜索
 
@@ -67,10 +63,10 @@ python scripts/producthunt_search.py categories
 
 ## 与 deep-research 的关系
 
-本脚本是 deep-research 的 **product 通道入口**（`source_type: product`），调用方式与其他 sn-search-* 通道一致：
+本脚本是 deep-research 的 **product 通道入口**（`source_type: product`），调用方式与其他脚本通道一致（cwd = deep-research 技能根）：
 
 ```bash
-PYTHONIOENCODING=utf-8 python ../sn-search-producthunt/scripts/producthunt_search.py semantic "{query}" --limit {N}
+PYTHONIOENCODING=utf-8 python scripts/channels/product/scripts/producthunt_search.py semantic "{query}" --limit {N}
 ```
 
 Product Hunt 数据由 maker 自报，关键事实（融资额、评分、用户规模）需与 web / academic 通道交叉验证，不宜单独作为结论依据。

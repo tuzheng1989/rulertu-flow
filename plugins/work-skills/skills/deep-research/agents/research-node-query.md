@@ -78,7 +78,7 @@
 | 开源项目、代码实现、技术问答、模型/数据集 | `code` | GitHub 仓库、Stack Overflow、HuggingFace |
 | 中文用户经验、中文社区讨论、中文视频 | `social_cn` | 知乎、B站、抖音上的使用反馈 |
 | 英文社区讨论、英文视频、英文舆情 | `social_en` | Twitter、YouTube（Reddit 不可用） |
-| 竞品分析、产品发现、替代品对比、融资信息、发布榜单 | `product` | Product Hunt 产品库（走 sn-search-producthunt 脚本） |
+| 竞品分析、产品发现、替代品对比、融资信息、发布榜单 | `product` | Product Hunt 产品库（走 product 通道 channels/product） |
 | 官方文档、监管公告、公司披露、新闻报道、机构页面 | `web` | 官方/新闻/监管/通用网页 |
 
 **选择原则：**

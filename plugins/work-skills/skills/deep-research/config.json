@@ -51,25 +51,31 @@
     },
     "code": {
       "type": "script",
-      "entry": ".claude/skills/sn-search-code/scripts/{github|stackoverflow|hackernews|huggingface}_search.py",
+      "entry": "scripts/channels/code/scripts/{github|stackoverflow|hackernews|huggingface}_search.py",
       "fallback": "web"
     },
     "social_cn": {
       "type": "script",
-      "entry": ".claude/skills/sn-search-social-cn/scripts/{zhihu|bilibili|douyin}_search.py",
+      "entry": "scripts/channels/social_cn/scripts/{zhihu|bilibili|douyin}_search.py",
       "fallback": "web"
     },
     "social_en": {
       "type": "script",
-      "entry": ".claude/skills/sn-search-social-en/scripts/{twitter|youtube}_search.py",
+      "entry": "scripts/channels/social_en/scripts/{twitter|youtube}_search.py",
       "fallback": "web",
       "note": "reddit_search.py 已禁用"
     },
     "product": {
       "type": "script",
-      "entry": ".claude/skills/sn-search-producthunt/scripts/producthunt_search.py",
+      "entry": "scripts/channels/product/scripts/producthunt_search.py",
       "fallback": "web",
       "note": "Product Hunt 产品/竞品/融资/榜单（maker 自报，secondary，英文市场偏重）"
+    },
+    "image": {
+      "type": "script",
+      "entry": "PYTHONIOENCODING=utf-8 python scripts/channels/image/scripts/serper_image_search.py \"{query}\" --num {N} --json",
+      "fallback": "web",
+      "note": "Google 图搜（Serper.dev），web 通道配图/视觉证据增强，source_tier: secondary；SERPER_API_KEY 缺失时降级 web"
     }
   },
 

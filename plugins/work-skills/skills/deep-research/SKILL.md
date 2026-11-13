@@ -140,25 +140,28 @@ author: Claude Code
 |-------------|------|----------|
 | `web` | MCP `web-search-prime` | MCP 工具 `mcp__web-search-prime__web_search_prime`（保留 v0.4 行为） |
 | `academic` | deepxiv CLI | Bash：`PYTHONIOENCODING=utf-8 deepxiv search "{query}" --limit {N} --format json`（可选 `--mode hybrid` `--min-citations {n}` `--categories {cs.X}` `--date-from {YYYY-MM-DD}`） |
-| `code` | sn-search-code 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-code/scripts/{github\|stackoverflow\|hackernews\|huggingface}_search.py "{query}" --limit {N}` |
-| `social_cn` | sn-search-social-cn 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-social-cn/scripts/{zhihu\|bilibili\|douyin}_search.py "{query}" --limit {N}` |
-| `social_en` | sn-search-social-en 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-social-en/scripts/{twitter\|youtube}_search.py "{query}" --limit {N}`（reddit 已禁用，跳过） |
-| `product` | sn-search-producthunt 脚本 | Bash：`PYTHONIOENCODING=utf-8 python ../sn-search-producthunt/scripts/producthunt_search.py {子命令} {参数}` |
+| `code` | code 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/code/scripts/{github\|stackoverflow\|hackernews\|huggingface}_search.py "{query}" --limit {N}` |
+| `social_cn` | social_cn 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/social_cn/scripts/{zhihu\|bilibili\|douyin}_search.py "{query}" --limit {N}` |
+| `social_en` | social_en 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/social_en/scripts/{twitter\|youtube}_search.py "{query}" --limit {N}`（reddit 已禁用，跳过） |
+| `product` | product 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/product/scripts/producthunt_search.py {子命令} {参数}` |
+| image | Serper 图搜脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/image/scripts/serper_image_search.py "{query}" --num {N} --json` |
 
 **子工具选择**（同一通道内多脚本时按 query 语义选最对口的）：
 - `code`：仓库/模型/数据集→`github_search.py`/`huggingface_search.py`；技术问答→`stackoverflow_search.py`；技术讨论→`hackernews_search.py`
 - `social_cn`：深度讨论→`zhihu_search.py`；视频→`bilibili_search.py`/`douyin_search.py`
 - `social_en`：讨论→`twitter_search.py`；视频→`youtube_search.py`
 - `academic`：默认 `deepxiv search`；已有 arxiv_id 想读全文→走 3.2b 的 `deepxiv paper`
-- `product`：参数按 query 语义选子命令——产品/关键词发现→`search`/`semantic`；替代品→`alternatives --name "<产品名>"`；产品档案（评分/融资）→`profile --name "<产品名>"`；分类产品→`category`；榜单→`leaderboard --date YYYY-MM-DD`；分类清单→`categories`（子命令契约详见 `../sn-search-producthunt/SKILL.md`，不在此复制）
+- `product`：参数按 query 语义选子命令——产品/关键词发现→`search`/`semantic`；替代品→`alternatives --name "<产品名>"`；产品档案（评分/融资）→`profile --name "<产品名>"`；分类产品→`category`；榜单→`leaderboard --date YYYY-MM-DD`；分类清单→`categories`（子命令契约详见 `scripts/channels/product/CHANNEL.md`，不在此复制）
+- `image`：配图/视觉证据按需调用（Serper 图搜），`--num` 控制数量，`--gl`/`--hl` 指定国家与语言偏好
 
 **统一调用约定：**
-- 所有 Bash 命令加 `PYTHONIOENCODING=utf-8` 前缀（Windows 编码，deepxiv 与 sn 脚本均需）
+- 所有 Bash 命令加 `PYTHONIOENCODING=utf-8` 前缀（Windows 编码，deepxiv 与通道脚本均需）
 - `web` 通道参数沿用 v0.4：`content_size: "high"`、`location: {search_location}`、`search_recency_filter` 参考 brief 时效要求
 - 输出统一映射为 `search_results`，**每条补 `source_type` 字段**（供 summary 标注来源层次与交叉验证）：
   - deepxiv：`result[].{title, arxiv_id→url: https://arxiv.org/abs/{arxiv_id}, tldr||abstract→snippet, source_type:"academic"}`
-  - sn-search-*：`items[].{title, url, snippet, source_type:"<对应类型>"}`
-  - sn-search-producthunt：输出已含 `source_type:"product"`，`items[]` 直接入 `search_results`
+  - code / social_cn / social_en 通道：`items[].{title, url, snippet, source_type:"<对应类型>"}`
+  - product 通道：输出已含 `source_type:"product"`，`items[]` 直接入 `search_results`
+  - image 通道：`{title, url: imageUrl, pageUrl, source_domain, source_type:"image"}`（imageUrl 为主产物，pageUrl 保留溯源）
   - web：`{title, url, snippet, source_type:"web"}`
 
 **降级规则（关键，所有专门通道统一）：**
@@ -391,10 +394,11 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 |-------------|------|------|----------|
 | `web` | **mcp__web-search-prime__web_search_prime** | 通用网页搜索（官方/新闻/监管/综合） | search_query / content_size / location / search_recency_filter |
 | `academic` | **deepxiv CLI** | 学术论文搜索 + 渐进式精读 | search: `--limit --format json --mode --min-citations --categories --date-from`；paper: `--brief/--head/--section` |
-| `code` | **sn-search-code 脚本** | GitHub / Stack Overflow / Hacker News / HuggingFace | `--limit`（GitHub 另有 `--type`） |
-| `social_cn` | **sn-search-social-cn 脚本** | 知乎 / B站 / 抖音 | `--limit` |
-| `social_en` | **sn-search-social-en 脚本** | Twitter / YouTube（reddit 已禁用） | `--limit` |
-| `product` | **sn-search-producthunt 脚本** | Product Hunt 产品 / 竞品 / 融资 / 榜单 | 子命令按语义选 + `--limit`（上限 8） |
+| `code` | **code 通道脚本** | GitHub / Stack Overflow / Hacker News / HuggingFace | `--limit`（GitHub 另有 `--type`） |
+| `social_cn` | **social_cn 通道脚本** | 知乎 / B站 / 抖音 | `--limit` |
+| `social_en` | **social_en 通道脚本** | Twitter / YouTube（reddit 已禁用） | `--limit` |
+| `product` | **product 通道脚本** | Product Hunt 产品 / 竞品 / 融资 / 榜单 | 子命令按语义选 + `--limit`（上限 8） |
+| `image` | **Serper 图搜脚本** | Google 图搜（Serper.dev） | `--num`（需 SERPER_API_KEY，缺失降级 web） |
 
 其他工具：
 
@@ -417,15 +421,16 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 
 ### 搜索与抓取（多源）【v0.5.0 改】
 
-搜索按 query 的 `source_type` 分派到 6 个通道（web=MCP / academic=deepxiv / code / social_cn / social_en=脚本 / product=sn-search-producthunt 脚本），网页抓取分学术（deepxiv paper）与非学术（MCP web-reader）。遵循全局网络访问规则。
+搜索按 query 的 `source_type` 分派到 6 个通道 + 按需 image 增强通道（web=MCP / academic=deepxiv / code / social_cn / social_en=脚本 / product=channels/product 脚本），网页抓取分学术（deepxiv paper）与非学术（MCP web-reader）。遵循全局网络访问规则。
 
 - **web 通道（MCP web-search-prime）** - 通用网页搜索，返回标题/链接/摘要
   - `location`：`us`（英文资料）或 `cn`（中文资料），可多区域并行
   - `content_size`：深度研究用 `high`
   - `search_recency_filter`：参考 brief 的时效要求
 - **academic 通道（deepxiv）** - 学术论文搜索（`deepxiv search --format json`）+ 渐进式精读（`deepxiv paper`），走自有后端，10k/天额度
-- **code / social 通道（sn-search-* 脚本）** - 开发者资源与社区讨论，Bash 调用，输出标准 JSON
-- **product 通道（sn-search-producthunt 脚本）** - Product Hunt 产品 / 竞品 / 融资数据，maker 自报，英文市场偏重，Bash 调用，输出标准 JSON
+- **code / social 通道脚本** - 开发者资源与社区讨论，Bash 调用，输出标准 JSON
+- **product 通道脚本** - Product Hunt 产品 / 竞品 / 融资数据，maker 自报，英文市场偏重，Bash 调用，输出标准 JSON
+- **image 通道（Serper 图搜脚本）** - Google 图搜，web 通道的配图/视觉证据增强，secondary 来源；SERPER_API_KEY 缺失时降级 web。
 - **mcp__web-reader__webReader** - 非学术网页全文抓取，输出 markdown
 
 **注意**：

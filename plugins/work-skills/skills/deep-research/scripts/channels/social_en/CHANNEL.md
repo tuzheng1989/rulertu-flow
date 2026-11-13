@@ -1,8 +1,4 @@
----
-name: sn-search-social-en
-description: 搜索英文社交平台：Reddit 帖子、Twitter/X 推文、YouTube 视频。用于获取英文社区讨论和视频内容。
-user-invocable: false
----
+> 本文件为 social_en 通道契约文档（原 sn-search-social-en skill，2026-11-13 收编进 deep-research）。
 
 # sn-search-social-en - 英文社交平台搜索
 
