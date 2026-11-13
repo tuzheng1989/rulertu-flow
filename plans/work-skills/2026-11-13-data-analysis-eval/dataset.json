@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "dataset_name": "data-analysis-skill-eval",
+    "version": "1.0",
+    "agent_under_test": ["data-analysis@1.0.0"],
+    "created_at": "2026-11-13",
+    "description": "data-analysis 技能冷启动评测：路由推演 8 + 执行冒烟 2，重点验证字体块/CSV 指引/决策 7 路径三处修复实效",
+    "metrics": ["correctness", "completeness", "coherence", "safety", "routing_correctness", "contract_completeness", "execution_quality"]
+  },
+  "cases": [
+    {
+      "id": "DA-E01",
+      "category": "routing-excel",
+      "difficulty": "easy",
+      "input": {"user_message": "帮我分析这份销售数据 Excel，看看各区域的表现。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["路由 modes/excel.md", "六步流程（行数探查→大文件门→…→导出）", "按需挂载 capability 子技能"], "must_not_include": ["误入 document/image mode", "跳过行数探查直接 read_excel"]},
+      "tags": ["trigger", "excel"], "notes": "标准 Excel 正例"
+    },
+    {
+      "id": "DA-E02",
+      "category": "routing-document-scan",
+      "difficulty": "hard",
+      "input": {"user_message": "这批是扫描版的 PDF 发票，帮我提取每张的金额和发票号。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["路由 modes/document.md", "扫描型 PDF 走渲染为图片 + 视觉直读路径", "引用 ../../modes/image.md 提取指引（决策 7 路径修复验证：从 doc-capability/pdf-analysis 出发可达）", "render_scanned_pdf_pages 方法在位"], "must_not_include": ["对扫描页直接跑文本提取", "引用不可达路径"]}
+      ,
+      "tags": ["trigger", "document", "scan", "decision7"], "notes": "重点验证决策 7 路径修复"
+    },
+    {
+      "id": "DA-E03",
+      "category": "routing-image",
+      "difficulty": "medium",
+      "input": {"user_message": "这是软件界面的截图，帮我把里面的表格数据提取出来转成 Excel。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["路由 modes/image.md", "视觉直读（Read 工具）无外部 API", "UI 截图类提取要点", "结构化后 Excel 导出"], "must_not_include": ["调用外部 vision API", "误入 excel mode 先行"]},
+      "tags": ["trigger", "image"], "notes": "image mode 正例（UI 截图类）"
+    },
+    {
+      "id": "DA-E04",
+      "category": "routing-largefile",
+      "difficulty": "hard",
+      "input": {"user_message": "有个 200 万行的 Excel 要做分组统计，机器内存只有 8G，怎么处理？", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["进 excel mode 后大文件门判定 ≥100k 强制读引擎档", "路由 references/large-file-engine.md", "openpyxl read_only 流式 + Parquet 转换方案", "禁止直接 pd.read_excel"], "must_not_include": ["直接 pd.read_excel 全量加载", "忽略内存约束"]},
+      "tags": ["trigger", "large-file"], "notes": "大文件门路由"
+    },
+    {
+      "id": "DA-E05",
+      "category": "routing-mixed",
+      "difficulty": "medium",
+      "input": {"user_message": "这是上季度的销售 Excel 和一张产品架构截图，Excel 帮我统计各产品线销售额，截图帮我提取里面的技术选型清单。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["混合输入各自路由（规则 1）", "Excel→excel mode、截图→image mode", "两路结果汇总交付"], "must_not_include": ["只处理其中一个文件", "混用 mode 流程"]},
+      "tags": ["mixed"], "notes": "混合输入路由"
+    },
+    {
+      "id": "DA-E06",
+      "category": "boundary-refuse",
+      "difficulty": "medium",
+      "input": {"user_message": "帮我把这张照片裁剪成方形再加个复古滤镜。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["拒绝并说明不归本技能（互斥边界第 1 条）", "不尝试加载任何 mode"], "must_not_include": ["接受任务并进入 image mode", "提供裁剪/滤镜代码"]},
+      "tags": ["boundary", "refuse"], "notes": "图片编辑拒绝"
+    },
+    {
+      "id": "DA-E07",
+      "category": "boundary-handoff",
+      "difficulty": "medium",
+      "input": {"user_message": "把这个 PDF 报告转成 Markdown 文件。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["指给 anydoc-to-md（互斥边界：本技能管分析不管转换）", "不启动 document mode 提取流程"], "must_not_include": ["自己写转换代码", "进入 document mode"]},
+      "tags": ["boundary", "handoff"], "notes": "格式转换分流"
+    },
+    {
+      "id": "DA-E08",
+      "category": "boundary-handoff",
+      "difficulty": "easy",
+      "input": {"user_message": "帮我把这份分析报告的结论部分润色一下，更正式一些。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/"}},
+      "expected_output": {"key_points": ["指给 write-report compose mode（互斥边界）", "不进入 excel/document/image mode"], "must_not_include": ["自己动手润色", "误入 image mode（报告里如有图）"]},
+      "tags": ["boundary", "handoff"], "notes": "成稿改写分流"
+    },
+    {
+      "id": "DA-E09",
+      "category": "execution-csv",
+      "difficulty": "hard",
+      "input": {"user_message": "分析 samples/sales-gbk.csv 这个文件，按地区统计订单金额合计。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/", "sample": "plans/work-skills/2026-11-13-data-analysis-eval/samples/sales-gbk.csv", "constraints": "产物落 outputs/DA-E09/result.md；样本为 GBK 编码、含中文列名，考验 CSV 指引实效"}},
+      "expected_output": {"key_points": ["按 excel.md CSV 指引正确读入（encoding 处理）", "分组统计正确（与造数一致）", "产物落盘"], "must_not_include": ["编码错误导致乱码或失败后放弃", "用 openpyxl 读 csv"]},
+      "tags": ["execution", "csv"], "notes": "重点验证 CSV 指引修复实效"
+    },
+    {
+      "id": "DA-E10",
+      "category": "execution-chart-font",
+      "difficulty": "hard",
+      "input": {"user_message": "用这组数据（华南 14220 / 华北 15080 / 华东 23670 / 西南 14260）画一张柱状图，图内标题和坐标轴用中文，然后读一下你生成的图确认渲染正确。", "context": {"skill_root": "plugins/work-skills/skills/data-analysis/", "constraints": "图表落 outputs/DA-E10/chart.png；随后用 Read 工具读取该图并描述图中文字与数值"}},
+      "expected_output": {"key_points": ["按 excel.md/image.md 字体块代码执行（Windows 候选路径生效）", "生成的图中文正常渲染（无方框乱码）", "Read 视觉直读确认图中中文可辨识、数值与数据一致"], "must_not_include": ["中文显示为方框/乱码", "跳过字体设置直接画图", "调用外部 API"]},
+      "tags": ["execution", "font", "visual"], "notes": "重点验证字体块 Windows 修复实效（L1：无乱码）"
+    }
+  ]
+}

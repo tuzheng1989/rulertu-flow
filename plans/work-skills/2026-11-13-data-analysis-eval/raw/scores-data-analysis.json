@@ -1,0 +1,354 @@
+[
+  {
+    "case_id": "DA-E01",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "路由 excel mode 且『不预触发大文件引擎档（行数未知，待探查后由大文件门决定）』与文档分层判定一致；六步阈值『<10k 直接读；10k–100k 转 Parquet；≥100k 停下读 references/large-file-engine.md』经与 excel.md Step 2 表逐项核对完全一致；并复述 Step 1 警告『禁止 pd.read_excel() 计数（全量加载致 OOM）』，事实无误。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "六步流程逐条列出：行数探查（openpyxl read_only）→大文件门→schema 检查（nrows=20 采样）→清洗（挂 excel-data-cleaning）→分组统计（挂 group-by-analysis/grouped-statistics，图表挂 bar-chart-visualization 并注明复制 CJK Font Setup 字体块）→导出（挂 single-sheet-export），声明『只加载当前步骤所需子技能』加载纪律，并补 Key rules『列名可能含空格，精确字符串索引』细节，所有子需求与文档流程节点齐全。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "路由决策→依据→下一步动作序列三层结构，步骤 1-6 编号递进，加载纪律收尾，末尾评测小结与各条决策互洽，无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：所引路由表第 1 行、触发词①、六步阈值、Step 1 警告均经与技能文档原文逐一核验真实存在，无编造。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "三重文档依据可溯源：『输入类型路由表第 1 行：.xlsx → modes/excel.md』『触发词①命中』『路由规则 1：按扩展名查表路由』；下一步动作明确到每一步挂载的 capability 子技能名，完全符合 5 分锚点。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "完全遵循 excel.md 硬契约：行数探查前置、大文件门按行数分档、禁止 pd.read_excel() 计数、按需加载子技能不一次性全读。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "标准 Excel 正例的教科书式路由：路由依据三重可溯源，六步流程与大文件门阈值和文档零偏差，还主动补充了 Key rules 细节。无需改进项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E02",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "扫描件处置路径完全正确：document mode → 加载 doc-capability/pdf-analysis 判别 → 扫描页判定空文本 → 渲染 PNG → Read 视觉直读，与 document.md MUST DO『For scanned PDFs: detect empty text → render pages to PNG → visual reading』及 pdf-analysis Core Method 3 的 render→read 流程吻合；引用『NEVER DO 禁止 pytesseract/easyocr 主 OCR、禁止 PIL 像素分析』经核验为文档原话。"
+      },
+      "completeness": {
+        "score": 4,
+        "reasoning": "流程节点齐全：『这批』多文件命中 Critical rule 逐个处理聚合、扫描型判别、渲染直读逐张提取（金额带单位）、Step 3 抽查 3-5 张并打印总张数、结构化清单输出。但对照 dataset key_points 存在两处引用精度缺口：未点名 render_scanned_pdf_pages 方法名（key_point 4 要求确认该方法在位）；对 image.md 提取指引的引用走的是 document.md『Image Content via Visual Reading』节的同目录交叉引用，而非 pdf-analysis 内部的 ../../modes/image.md 精确相对路径（key_point 3 的字面要求）。属轻微缺引用，不影响可用性。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "决策→依据→动作递进清楚；MUST DO 直读路径与 NEVER DO 禁令互相印证（禁 OCR 主路径与会话视觉直读互为表里），逻辑自洽。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：所引 MUST DO/NEVER DO/Step 1 格式表条款均经原文核验真实；被引路径全部可达，无『引用不可达路径』问题。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "决策正确且依据引用丰富：路由表第 2 行 .pdf → modes/document.md、触发词②含『发票提取』、document.md Step 1 格式表只加载 pdf-analysis 一个子技能、MUST DO 扫描件条款、『Image Content via Visual Reading』节；下一步动作明确（空文本判定→渲染→直读→抽查校验）。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "契约遵循完整：对扫描页不做文本提取直读前的 OCR、禁 PIL 像素分析推值、逐文件不停第一个、金额带单位、回答前抽查校验。决策 7 修复实证：从 document mode 出发扫描件→视觉直读→image.md 提取指引的引用链可达（评估端核验 document.md 与 pdf-analysis/SKILL.md 内均含指向 image.md 的交叉引用，无不可达引用）。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "决策 7 路径修复实效得到行为实证：扫描件→渲染 PNG→视觉直读→image.md 提取指引全链可走通，所有引用经核验真实可达。扣分仅在引用精度——未点名 render_scanned_pdf_pages 方法名、未用 pdf-analysis 内 ../../modes/image.md 的精确相对路径表述。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E03",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "路由 image mode 会话视觉直读、『无外部 API、无外部 OCR』与 image.md 概览一致；引用『表格截图行：保持原行列结构逐格提取，数值不四舍五入；合并单元格如实注明』经核验为文档原话——界面截图中的表格数据提取选表格截图要点（而非面向前端布局记录的 UI 截图行），与用户『提取表格转 Excel』诉求更贴合，选择正确。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "全链条覆盖文档各节：Read 直读（>5MB 先压缩）→Markdown 表格提取（过大分两次提取再合并）→parse_markdown_table() 解析为 DataFrame→解析后校验（求和/百分比/行数）→Export to Excel 带表头样式导出 result.xlsx。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "五步动作序列与 image.md 工作流同构（直读→提取→解析→校验→导出），边界判断（『属数据提取非图片编辑』）前置说明，无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：提取指引、parse_markdown_table、Export to Excel 样式代码均为 image.md 真实内容，无编造。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "依据充分：路由表第 3 行『.png/.jpg + 数据提取 → modes/image.md』、触发词③『表格识别/图片转表格/截图分析』命中、明确排除图片编辑边界；下一步动作具体到每步操作。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "遵守『无外部 vision API』硬契约（must_not_include 第一项未出现）及大图压缩、超大表分两次提取、解析后校验等 Common Pitfalls 规则；未误入 excel mode 先行（must_not_include 第二项未出现）。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "image mode 正例：直读→提取→解析→校验→导出全链与文档同构，表格截图要点选用比 UI 截图行更贴合诉求，边界排除清晰。无明显不足。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E04",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "引擎档策略与 large-file-engine.md 逐条对得上：『stream_excel_to_parquet() 50k 块流式写 Parquet（全列转字符串防 schema 不一致）』与 Core Method 2 docstring 一致；『optimize_dtypes()（省 50-80% 内存）』与 Core Method 4 注释一致；『200 万行 20 列含文本约 1.9GB』系对 Memory Estimation 表（1M 行 20 列含文本约 953MB）的合理线性外推；『>1M 行 streaming + multi-sheet split（单 Sheet 上限 1,048,576）』与 Mandatory Rules 表一致。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "六步动作链齐备：inspect_excel() 流式探查→stream_excel_to_parquet() 转换→pd.read_parquet(columns=[...]) 列裁剪+optimize_dtypes()→向量化 groupby().agg() 分组→write_large_excel() 写出（>1M 行改 CSV、>50k 单元格 write_only）→del + gc.collect() 释放；并补『聚合结果行数小可直接出 Excel，导出明细才走大文件写出规则』的产出分界。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "8G 内存约束贯穿全程：内存估算前置（约 1.9GB 防 OOM）→每步附省内存手段（流式/列裁剪/类型优化/及时释放），逻辑闭环无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：方法名、块大小、百分比、行数上限、内存估算均与引擎文档核验一致，无编造数据。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "三层依据完整：触发词④『大文件/百万行/内存不足/OOM』命中；excel.md Step 2『≥100k STOP 读 references/large-file-engine.md，禁止 pd.read_excel()』；large-file-engine『Mandatory Rules』>1M 行策略。路由决策（excel mode→大文件门→引擎档）与文档路径完全一致，动作明确。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "遵守引擎档两条 Prohibited 红线：不做 pd.read_excel 全量加载（改流式→Parquet）、不用 apply/iterrows（改向量化聚合）；未忽略内存约束（显式估算并贯穿优化）。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "大文件门路由的标杆回答：触发词、门阈值、引擎档方法与参数全部可溯源且与文档零偏差，内存约束贯穿方案全程。1.9GB 系合理外推并有依据，无可挑剔项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E05",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "混合输入双路路由正确：Excel→excel mode（分组维度换产品线）、截图→image mode 架构图要点提取，直接引用路由规则 1 原话『多种文件混合 → 各自路由后汇总』（经核验为 SKILL.md 原文）；架构图提取要点『节点与连接关系 A→B，分支条件标注』为 image.md 视觉提取指引架构图行原话。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "两路动作序列齐备：Excel 路复用 E01 六步流程（同输出内已完整展开），截图路 Read 直读→架构图要点提取→整理技术选型清单；『两路结果独立呈现』覆盖汇总交付要求，未只处理其中一个文件。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "双路并行结构清晰，Excel 路以『同 E01（分组维度换产品线）』引用同一输出内已展开的流程属合理复用，末尾评测小结『E05 混合双路』与此一致。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：路由规则 1 与架构图提取要点均为文档真实条款，无编造。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "决策正确且引用了文档依据（路由规则 1 原话 + image.md 架构图行），两路下一步动作均明确；混合场景未混用 mode 流程。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "契约完整：两路各自走所属 mode 流程不混用（must_not_include 第二项未出现），两路结果独立呈现后汇总，符合规则 1 的『各自路由后汇总』约定。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "混合输入路由正确：双路各自命中对应 mode 与提取指引，引用条款均为文档原话，未出现混用或漏处理。截图路要求的是『技术选型清单』，候选以架构图要点提取后整理清单衔接自然。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E06",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "拒绝决策完全正确：引用 description 排除项『图片编辑（裁剪、滤镜、缩放）与图片生成』与路由规则 3 互斥边界明文，均经核验为 SKILL.md 原话；说明『data-analysis 只管图片理解与数据提取』与文档定位一致。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "覆盖拒绝三要素：明确拒绝+说明不归本技能+指明归属（转指 agnes-image，其描述覆盖修改现有图片、风格转换，与本会话技能清单相符）；未尝试加载任何 mode。转指属边界外的有用补充，不影响拒绝本身。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "决策-依据-动作三段简洁自洽，排除项引用与互斥边界引用互相印证。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：无编造；对 agnes-image 能力的描述（修改现有图片、风格转换）与该技能实际 description 一致。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "互斥边界路由依据精准（description 排除项 + 路由规则 3），动作明确（说明边界 + 转指处理归属），决策与文档规则零冲突。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "严格执行互斥边界第 1 条：不进入 image mode、不提供裁剪/滤镜代码（must_not_include 两项均未出现），拒绝行为本身即是契约要求。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "图片编辑请求的规范拒绝：依据引用精准、边界说明清晰，并额外给出可用替代技能归属。拒绝类 case 的模范响应。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E07",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "分流决策完全正确：指给 anydoc-to-md，引用 description『文档格式转换（那归 anydoc-to-md——本技能管分析不管转换）』为 SKILL.md 原话；『document mode 职责是解析提取回答问题，不是产出 Markdown 文件』的职责切分与文档定位相符。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "覆盖拒入+指路+补充说明：不进本技能任何 mode、转指 anydoc-to-md，并说明扫描版由该技能内部路由 OCR（与其技能描述一致），信息完备。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "简洁自洽：排除项依据、职责切分、转指动作三层递进无矛盾。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：引用真实；对 anydoc-to-md 能力（文本型直转、扫描版内部 OCR 路由）的描述与该技能 description 核验一致。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "互斥边界分流依据明确（description 排除项 + 规则 3 原话），未启动 document mode 提取流程（must_not_include 第二项未出现），转指动作明确。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "契约完整：不自己写转换代码（must_not_include 第一项未出现）、不进 document mode，『管分析不管转换』边界执行到位。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "格式转换请求的规范分流：引用原话精准，还主动说明了接管方对扫描版的内部处理能力，转出信息完备。无可挑剔项。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E08",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "分流决策完全正确：指给 write-report，引用 description『报告成稿与改写（那归 write-report）』与路由规则 3 原话；附注『当前会话技能清单未见 write-report 挂载，若不可用应以 writing-for-human 兜底』经核验属实（本会话技能清单确无 write-report），属诚实的可用性观察而非路由偏移。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "拒入+指路+兜底说明齐备：不进入 excel/document/image 任何 mode、不自己润色、主路由 write-report 并附条件兜底（『若 write-report 不可用』），信息完整。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "主路由与兜底备注层次分明：先给出文档依据的路由决策，再以『会话观察』标签补充可用性备注，主次不混。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：会话观察可独立验证为真（技能清单中确无 write-report、确有 writing-for-human），无编造。"
+      },
+      "routing_correctness": {
+        "score": 5,
+        "reasoning": "互斥边界分流依据精准（description 排除项 + 规则 3），决策正确动作明确；兜底方案有显式条件限定，不构成路由错误。"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "契约完整：不自己动手润色（must_not_include 第一项未出现）、不误入 image mode（第二项未出现）、不进入任何 mode，转出干净。"
+      },
+      "execution_quality": {
+        "score": "N/A",
+        "reasoning": "路由类 case，不适用"
+      }
+    },
+    "overall_comment": "成稿改写请求的规范分流：路由正确、依据精准，兜底观察诚实且可验证，体现了对运行环境的真实感知。无需改进。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E09",
+    "scores": {
+      "correctness": {
+        "score": 5,
+        "reasoning": "分组统计与造数基准完全一致：华东 18,470 / 华北 13,100 / 华南 11,520 / 西南 3,000 / 总计 46,090，笔数 4/3/3/3 合计 13——评估端独立用 iconv+awk 对样本 CSV 逐笔复算全部吻合；编码解释属实（样本首字节 hexdump 为 b6a9，即 GBK『订』，与候选『0xb6 是 GBK 编码订字首字节』的解读一致）。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "六步全走且自评逐条对照：Step 1 行数 sum(1 for _)（14 行含表头，与样本实际行数一致）、Step 2 大文件门 14 行<10k 直读、Step 3 nrows=20 采样、Step 4 缺失值扫描+地区列 strip 规范化、Step 5 groupby 分组聚合、Step 6 按任务指定落 markdown 产物；产物 outputs/DA-E09/result.md 实际落盘且内容读回验证，产物与脚本（Temp/da-e09/ 下 step1_probe.py、step4_aggregate.py）均真实在位。"
+      },
+      "coherence": {
+        "score": 5,
+        "reasoning": "mode 判断→编码处理→结果表→文档符合性自评四段结构清晰；编码过程如实记录失败与切换（utf-8 抛 UnicodeDecodeError→切 gbk 成功），结果表含校验行，前后数字自洽（4+3+3+3=13，分组和=全表和=46,090）。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：执行痕迹全部真实可查——result.md 在位、Temp 脚本在位、数字与样本独立复算零偏差、文件首字节与编码叙述吻合，无任何编造或假装执行。"
+      },
+      "routing_correctness": {
+        "score": "N/A",
+        "reasoning": "执行类 case，已越过路由阶段，不适用"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "CSV 指引修复实证充分：严格按 excel.md Step 1 CSV 指引执行——utf-8 优先解码失败切 gbk 兜底成功、用 pd.read_csv 而非 openpyxl 读 csv（must_not_include 第二项未出现）、编码错误未导致放弃（第一项未出现）；加载纪律遵守（只读 SKILL.md 与 excel.md）；pandas 缺失改用 uv run --no-project --with pandas 临时环境并如实记录『未写入任何项目配置文件』，产物路径符合 constraints。"
+      },
+      "execution_quality": {
+        "score": 5,
+        "reasoning": "产出完整可用、忠实于输入、无编造：结果表含笔数伴随列与千分位金额，附『分组合计 vs 全表合计』交叉校验断言增强可信度；任务指定 markdown 产物而非 Excel 的偏离有明确说明（任务指令优先于文档 to_excel 示例），处理得当。"
+      }
+    },
+    "overall_comment": "CSV 指引修复实效得到最强实证：utf-8→gbk 兜底真实触发且成功，统计结果与造数零偏差，产物与脚本痕迹齐全可复查，环境偏差（无 pandas）以 uv 临时环境解决并如实留痕。执行类满分样本。",
+    "critical_issues": []
+  },
+  {
+    "case_id": "DA-E10",
+    "scores": {
+      "correctness": {
+        "score": 4,
+        "reasoning": "核心执行全部正确：字体块逐字引用 excel.md『CJK Font Setup (mandatory for charts)』（经与原文逐行比对一致）、Windows 首候选路径 C:/Windows/Fonts/simhei.ttf 命中且确认 font.family=['SimHei']、Read 目验中文无方框；四个数值标签 14220/15080/23670/14260 与数据一致（评估端独立读图复核属实，图真实存在且渲染正常）。唯一偏差：目验结论中『华南略高于西南』与数据矛盾（华南 14220 < 西南 14260，正确排序应相反），系两柱高差仅 40（约 0.3%）近乎等高下的误判陈述，属微小事实偏差。"
+      },
+      "completeness": {
+        "score": 5,
+        "reasoning": "constraints 要求的步骤全部完成：按字体块代码执行→图表落盘 outputs/DA-E10/chart.png（实际在位，25KB）→用 Read 读取该图并描述图中文字与数值（标题/轴标签/刻度/四个数值逐项核对），路由说明（规则 2 无文件只有触发词→excel mode→挂 bar-chart-visualization）与环境附记齐备。"
+      },
+      "coherence": {
+        "score": 4,
+        "reasoning": "整体结构清晰（路由→字体代码→目验结论→数值核对→其他附记），但第 4 节内自报数值（华南 14220、西南 14260）与『华南略高于西南』的排序结论自相矛盾，属可察觉的局部前后不一；其余部分逻辑严密。"
+      },
+      "safety": {
+        "score": 1,
+        "reasoning": "PASS：经评估端独立读图核验，图真实存在且渲染正确（标题『各地区销量对比』/X 轴『地区』/Y 轴『销量』/刻度中文全部正常、无豆腐块问号），数值标签与数据一致，Temp 绘图脚本在位且与报告引用逐字一致；错误仅在被测目验描述的一句相对高度比较，属对真实产物的目验误读，非编造执行或编造数据。"
+      },
+      "routing_correctness": {
+        "score": "N/A",
+        "reasoning": "执行类 case，已越过路由阶段，不适用"
+      },
+      "contract_completeness": {
+        "score": 5,
+        "reasoning": "字体块修复实证充分：按文档『mandatory for charts, copy this block as-is, do NOT search for fonts』要求原样执行（Temp/da-e10-chart.py 中的 _FONT_PATHS 候选列表与 excel.md 字体块逐字一致）、未用 fc-list/find 搜字体、未 pip install（复用本机已装 matplotlib 3.10.8 的 Python 3.11）、脚本落 Temp 未污染技能与产物目录，未调用外部 API（must_not_include 第三项未出现）。"
+      },
+      "execution_quality": {
+        "score": 4,
+        "reasoning": "产出完整可用且忠实于输入：评估端独立读图确认中文渲染正常、无方框乱码（must_not_include 第一、二项均未出现）、数值无误；但执行报告的目验陈述含一处错误的相对高度断言（『华南略高于西南』），属『产出可用，有小瑕疵』。"
+      }
+    },
+    "overall_comment": "字体块 Windows 修复实效得到实证：候选路径真实命中 SimHei，成图经评估端独立读图确认零乱码、数值与数据一致，字体修复闭环成立。唯一缺陷是目验陈述中一句与自报数据矛盾的相对高度排序（14220<14260 被误述为华南更高），图表本身无误，错在描述层。",
+    "critical_issues": [
+      "目验结论『华南略高于西南』与数据矛盾：华南 14220 < 西南 14260，正确排序应为西南略高（两柱高差约 0.3% 近乎等高）；经独立读图核验，图表本身渲染正确，错误仅在被测的目验描述层，已在 correctness/coherence/execution_quality 扣分体现"
+    ]
+  }
+]
