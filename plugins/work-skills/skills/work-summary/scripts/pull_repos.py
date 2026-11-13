@@ -234,8 +234,14 @@ def main():
     out = json.dumps(summary, ensure_ascii=False, indent=2)
     print(out)
     if args.json:
-        with open(args.json, "w", encoding="utf-8") as f:
-            f.write(out)
+        try:
+            d = os.path.dirname(args.json)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            with open(args.json, "w", encoding="utf-8") as f:
+                f.write(out)
+        except OSError as e:
+            print(f"[warn] JSON 另存失败（不影响 stdout）: {e}", file=sys.stderr)
     # 有失败时分叉/失败仓库的退出码非零，便于调用方感知
     sys.exit(1 if (summary["failed"] or summary["diverged"]) else 0)
 
