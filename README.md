@@ -116,7 +116,7 @@ python -m pytest plugins/copyright-skills/tests -q
 
 ## rulertu-frontend：前端开发
 
-前端开发工程师插件：`frontend-dev` 代理（在现有项目中完成界面开发、前端排障、性能优化与浏览器验收，Claude Code 侧经 `rulertu-frontend:frontend-dev` 调用）加 6 个配套技能——`build-web-interface-cn`（网页界面开发）、`troubleshoot-frontend-functionality-cn`（前端问题排查与修复）、`optimize-web-performance-cn`（网页性能优化）、`test-browser-experience-cn`（网页功能与兼容性测试）、`interface-requirement-contract-cn`（前端需求与验收设计）、`interaction-state-implementation-cn`（页面交互与状态开发）。
+前端开发工程师插件：`frontend-dev` 代理（在现有项目中完成界面开发、前端排障、性能优化与浏览器验收，Claude Code 侧经 `rulertu-frontend:frontend-dev` 调用）加 7 个配套技能——`build-web-interface-cn`（网页界面开发）、`troubleshoot-frontend-functionality-cn`（前端问题排查与修复）、`optimize-web-performance-cn`（网页性能优化）、`test-browser-experience-cn`（网页功能与兼容性测试）、`interface-requirement-contract-cn`（前端需求与验收设计）、`interaction-state-implementation-cn`（页面交互与状态开发）、`agent-frontend-cn`（Agent 对话前端方法论）。
 
 技能来自 z.ai 官方技能包（Apache-2.0），各技能目录保留 LICENSE 与 NOTICE。
 

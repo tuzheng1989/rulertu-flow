@@ -15,6 +15,12 @@
 
 清单权威来源：D:/runspace/evoCenter/研发项目简介.md 的「自研项目」表格（参考仓库分组一律不拉）。
 解析方式：抓取「## 自研项目」到下一个「## 」之间的表格行，取每行第一列目录名。
+
+重点关注机制（2026-11-12 用户定）：
+  FOCUS_REPOS 是重点仓库清单（本文件内置，随 rulertu-flow 仓库双机同步）：
+    - 重点仓库：fetch + ff-only 合并（原有行为）
+    - 非重点仓库：只 fetch 汇报是否有更新（behind 数），不合并到本地
+  --focus-only 可只处理重点仓库。
 """
 
 import argparse
@@ -29,6 +35,26 @@ RUNSPACE = "D:/runspace"
 EVOCENTER = os.path.join(RUNSPACE, "evoCenter")
 INTRO_DOC = os.path.join(EVOCENTER, "研发项目简介.md")
 PROXY = "http://127.0.0.1:7890"
+
+# 重点关注仓库（2026-11-12 用户定）：周报主动拉代码；其余自研仓只 fetch 汇报是否有更新。
+# 目录名与 D:/runspace 下实际目录一致，比较时用 casefold 容错大小写。
+FOCUS_REPOS = [
+    "evoCenter",
+    "peirasim",
+    "smartAfsim",
+    "evochat",
+    "smart-plotting",
+    "rhetra-harness",
+    "agent-retrieval",
+    "kyros-gardener",
+    "kyros-sentinel",
+    "SkillEvolve",
+    "rulertu-flow",
+]
+
+
+def is_focus(repo: str) -> bool:
+    return repo.casefold() in {r.casefold() for r in FOCUS_REPOS}
 
 
 def read_repo_list() -> list:
@@ -84,8 +110,11 @@ def fetch_with_fallback(repo_path: str, timeout: int) -> tuple:
     return (False, " | ".join(attempts))
 
 
-def pull_one(repo: str, timeout: int) -> dict:
-    """处理单个仓库：fetch → status 判断 → ff-only 合并。返回结果 dict。"""
+def pull_one(repo: str, timeout: int, merge: bool = True) -> dict:
+    """处理单个仓库：fetch → status 判断 →（重点仓）ff-only 合并。返回结果 dict。
+
+    merge=False（非重点仓库）：fetch 后只汇报 behind 数，不合并到本地。
+    """
     repo_path = os.path.join(RUNSPACE, repo)
     result = {"repo": repo, "status": "unknown", "detail": ""}
     if not os.path.isdir(os.path.join(repo_path, ".git")):
@@ -119,6 +148,12 @@ def pull_one(repo: str, timeout: int) -> dict:
         result["detail"] = "已是最新"
         return result
 
+    # 非重点仓库：只汇报落后，不合并（2026-11-12 用户定）
+    if not merge:
+        result["status"] = "behind_unmerged"
+        result["detail"] = f"远端有 {behind.group(1)} 个新提交（非重点关注，仅汇报未拉取）"
+        return result
+
     # 落后 → ff-only 合并
     n = behind.group(1)
     ok, out = run_git(repo_path, ["merge", "--ff-only", f"origin/{branch.split('/')[-1]}"], timeout, False)
@@ -139,11 +174,15 @@ def main():
     ap.add_argument("--list-only", action="store_true", help="只打印仓库清单不执行")
     ap.add_argument("--force", action="store_true", help="忽略缓存，全部仓库重新 fetch")
     ap.add_argument("--cache-hours", type=float, default=24, help="缓存有效期小时数（默认 24）")
+    ap.add_argument("--focus-only", action="store_true", help="只处理重点关注仓库（跳过非重点仓）")
     args = ap.parse_args()
 
-    repos = read_repo_list()
+    all_repos = read_repo_list()
+    repos = [r for r in all_repos if is_focus(r)] if args.focus_only else all_repos
     if args.list_only:
-        print("\n".join(repos))
+        focus_mark = lambda r: "*" if is_focus(r) else " "  # noqa: E731
+        print("\n".join(f"{focus_mark(r)} {r}" for r in all_repos))
+        print("(标 * 为重点关注仓库)", file=sys.stderr)
         return
 
     # 跳过缓存：上一次运行记录（<24h 内 unchanged/no_git/local_ahead 的仓库不重复 fetch，
@@ -168,7 +207,7 @@ def main():
             results.append(r)
             print(f"[{r['status']:>12}] {repo}: {r['detail']}", file=sys.stderr)
             continue
-        r = pull_one(repo, args.timeout)
+        r = pull_one(repo, args.timeout, merge=is_focus(repo))
         results.append(r)
         print(f"[{r['status']:>12}] {repo}: {r['detail']}", file=sys.stderr)
         # 写缓存（仅可缓存状态）
@@ -182,8 +221,10 @@ def main():
 
     summary = {
         "total": len(results),
+        "focus_repos": FOCUS_REPOS,
         "updated": [r["repo"] for r in results if r["status"] == "updated"],
         "unchanged": [r["repo"] for r in results if r["status"] == "unchanged"],
+        "behind_unmerged": [r for r in results if r["status"] == "behind_unmerged"],
         "local_ahead": [{"repo": r["repo"], "detail": r["detail"]} for r in results if r["status"] == "local_ahead"],
         "diverged": [r for r in results if r["status"] == "diverged"],
         "failed": [r for r in results if r["status"] == "failed"],
@@ -193,8 +234,14 @@ def main():
     out = json.dumps(summary, ensure_ascii=False, indent=2)
     print(out)
     if args.json:
-        with open(args.json, "w", encoding="utf-8") as f:
-            f.write(out)
+        try:
+            d = os.path.dirname(args.json)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            with open(args.json, "w", encoding="utf-8") as f:
+                f.write(out)
+        except OSError as e:
+            print(f"[warn] JSON 另存失败（不影响 stdout）: {e}", file=sys.stderr)
     # 有失败时分叉/失败仓库的退出码非零，便于调用方感知
     sys.exit(1 if (summary["failed"] or summary["diverged"]) else 0)
 
