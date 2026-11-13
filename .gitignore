@@ -6,3 +6,5 @@ plugins/rulertu-flow/skills/update/proxy.env
 .scratch/
 plugins/work-skills/skills/work-summary/scripts/.pull_repos_cache.json
 scripts/pull_result.json
+plugins/family-skills
+plugins/secret-skills
