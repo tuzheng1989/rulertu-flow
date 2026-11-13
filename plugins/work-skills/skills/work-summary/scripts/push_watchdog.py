@@ -56,6 +56,7 @@ def check_one(repo: str, timeout: int) -> dict:
         return result
     first = out.splitlines()[0] if out.strip() else ""
     if "..." not in first:
+        # 无 upstream 是项目自身状态（如纯本地仓），不是「已提交未推送」，不进报告防噪音
         result["status"] = "no_upstream"
         result["detail"] = f"分支无 upstream，跳过（{first.strip('# ').strip()}）"
         return result
@@ -88,7 +89,7 @@ def main():
         print(f"[{r['status']:>11}] {repo}: {r['detail'] or '干净'}", file=sys.stderr)
 
     acted = [r for r in results if r["status"] in ("pushed", "push_failed")]
-    abnormal = [r for r in results if r["status"] in ("push_failed", "failed", "no_upstream")]
+    abnormal = [r for r in results if r["status"] in ("push_failed", "failed")]
     summary = {
         "focus_repos": FOCUS_REPOS,
         "pushed": [r for r in results if r["status"] == "pushed"],
