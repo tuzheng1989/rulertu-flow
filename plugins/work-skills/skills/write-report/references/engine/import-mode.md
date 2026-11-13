@@ -91,6 +91,8 @@ python scripts/parse-docx.py {input_path} --output {workspace}/raw-content.md
 
 **调用 analyzer subagent**：
 
+> 优先调用随技能分发的 `.claude/agents` 定义（插件 agent 形式）；宿主不支持时用 general-purpose + 本文提示词作替身。
+
 ```yaml
 使用 Task 工具启动 analyzer:
   subagent_type: general-purpose
@@ -219,6 +221,8 @@ mkdir -p .longText/{title_slug}/references/{raw,indexed}
 #### 5.4 生成章节文件
 
 **调用 converter subagent**：
+
+> 优先调用随技能分发的 `.claude/agents` 定义（插件 agent 形式）；宿主不支持时用 general-purpose + 本文提示词作替身。
 
 ```yaml
 使用 Task 工具启动 converter:

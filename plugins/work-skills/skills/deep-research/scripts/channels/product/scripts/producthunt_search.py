@@ -41,7 +41,7 @@ def _http_post_json(url: str, payload: dict) -> tuple[int, str]:
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
-            "User-Agent": "sn-search-producthunt/1.0",
+            "User-Agent": "deep-research-product/1.0",
         },
         method="POST",
     )

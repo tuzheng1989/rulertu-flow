@@ -18,7 +18,7 @@ except ImportError:
     json.dump(
         {
             "success": False,
-            "error": "缺少 httpx，请运行：python-m pip install -r skills/sn-search-social-en/requirements.txt",
+            "error": "缺少 httpx，请运行：python -m pip install -r deep-research/scripts/channels/social_en/requirements.txt",
         },
         sys.stdout,
         ensure_ascii=False,

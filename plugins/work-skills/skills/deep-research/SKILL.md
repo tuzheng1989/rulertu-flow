@@ -1,7 +1,7 @@
 ---
 name: deep-research
-description: 深度研究助手，通过迭代式"搜索-总结-反思"循环生成带引用的综合性研究报告。当用户说"深入研究XX"、"研究一下XX"、"调研XX"或明确表示需要全面了解某个主题时触发。支持配置循环次数（"循环N次"）与搜索区域（"中文/英文"或"us/cn"）。v0.4.0 新增意图澄清、研究简报驱动、多查询并行与摘要压缩。v0.5.0 引入多源搜索通道（deepxiv / sn-search-* 脚本 + MCP），按查询来源类型智能分派并支持通道降级。v0.6.0 新增自动落盘功能，报告完成后自动保存到文件系统。v0.6.1 深读层引入 alphaXiv 增强（AI blog 前置导读 + .md 全文降级备选）。v0.7.0 新增 product 通道（Product Hunt 产品/竞品/融资数据，Bash 脚本直调官方 MCP 端点，匿名可用，失败降级 web）。
-version: 0.7.0
+description: 深度研究助手，通过迭代式"搜索-总结-反思"循环生成带引用的综合性研究报告。当用户说"深入研究XX"、"研究一下XX"、"调研XX"或明确表示需要全面了解某个主题时触发。支持配置循环次数（"循环N次"）与搜索区域（"中文/英文"或"us/cn"）。v0.4.0 新增意图澄清、研究简报驱动、多查询并行与摘要压缩。v0.5.0 引入多源搜索通道（deepxiv / sn-search-* 脚本 + MCP），按查询来源类型智能分派并支持通道降级。v0.6.0 新增自动落盘功能，报告完成后自动保存到文件系统。v0.6.1 深读层引入 alphaXiv 增强（AI blog 前置导读 + .md 全文降级备选）。v0.7.0 新增 product 通道（Product Hunt 产品/竞品/融资数据，Bash 脚本直调官方 MCP 端点，匿名可用，失败降级 web）。v0.8.0 五个搜索通道收编进 scripts/channels/ 内部布局并新增 image 通道（Serper.dev 图搜，web 通道的配图/视觉证据增强，SERPER_API_KEY 缺失时降级 web）。
+version: 0.8.0
 author: Claude Code
 ---
 
@@ -474,3 +474,11 @@ echo "$sources" | jq '.' > "$REPORT_DIR/sources.json" 2>/dev/null || echo "$sour
 5. **澄清单轮约束**：clarify 最多 1 轮，能推断则不问
 6. **压缩兜底**：若 compress 结果反而更长或丢失明显信息，回退使用原摘要
 7. **维度一致性**：summary / reflect / finalize 三者的分段维度必须统一来自 research_brief
+
+---
+
+## 产物后处理
+
+finalize 产出 report.md 后，可选接同插件 write-report 技能做后处理（不自动执行，经用户确认）：
+- 需要改稿 / 润色 / 重组结构 → write-report compose mode（产物目录即本技能 finalize 输出）
+- 需要核查引用 / 怀疑幻觉 → write-report audit mode

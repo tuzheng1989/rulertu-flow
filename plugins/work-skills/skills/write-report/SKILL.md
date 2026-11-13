@@ -100,7 +100,7 @@ write-report 是报告成稿后处理与长文档创作的单一入口。上层�
 
 ### 工作区概念
 
-引擎工作区是一个目录：`00-structure.md`（章节大纲，固定）、`00-style-guide.md`（风格指南，固定）、`00-source-info.md`（导入模式的原始文档信息）、`chapter-*.md`（各章内容）、`final-output.md`（`scripts/merge.py` 整合产物）；导入模式工作区另含 `references/`（原始内容与索引）。文件体系与输出清单详见 `references/engine/workspace-and-files.md`。
+引擎工作区是一个目录：`00-structure.md`（章节大纲，固定）、`00-style-guide.md`（风格指南，固定）、`00-source-info.md`（导入模式的原始文档信息）、`chapter-*.md`（各章内容）、`final-output.md`（`scripts/merge.py` 整合产物）；导入模式工作区另含 `references/`（原始内容与索引）。文件体系与输出清单详见 `references/engine/workspace-and-files.md`。工作区根路径：创建模式通常为 `workspace/{project-name}/`，导入模式按导入时的 workspace 参数（两种根并存是引擎既有设计）。
 
 ## 资产索引
 

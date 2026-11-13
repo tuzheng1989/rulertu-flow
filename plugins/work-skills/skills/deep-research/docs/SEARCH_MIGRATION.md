@@ -107,10 +107,9 @@ deep-research/
         ├── social_en/    （原 sn-search-social-en）
         ├── product/      （原 sn-search-producthunt）
         └── image/        （原 sn-search-image，新增通道）
-
-每个通道目录内：CHANNEL.md（通道契约文档，由原 SKILL.md 去 frontmatter 改名而来）
-+ scripts/（脚本原样随迁）+ requirements.txt（如有，原样随迁）。
 ```
+
+每个通道目录内：CHANNEL.md（通道契约文档，由原 SKILL.md 去 frontmatter 改名而来）+ scripts/（脚本原样随迁）+ requirements.txt（如有，原样随迁）。
 
 ### 目录名映射
 

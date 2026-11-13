@@ -175,7 +175,7 @@ python scripts/merge.py \
 
 **Step 5: 重新整合**
 ```bash
-python scripts/long-text/scripts/merge.py \
+python scripts/merge.py \
     --workspace .longText/microservices-architecture/
 ```
 

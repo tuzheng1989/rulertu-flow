@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Long-Text Chapter Merger
+write-report Chapter Merger
 整合多个章节文件为单一文档
 
 使用方法:

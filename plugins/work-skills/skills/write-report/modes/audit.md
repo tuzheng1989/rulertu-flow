@@ -8,7 +8,7 @@
 
 按顺序判断：
 
-1. **标准全量审计**：给定 `report.md` 路径 → 盘点全部引用项 → 分组并行核验 → 出分级审计报告。默认输入为 `workspace/reports/` 下最新的 `report_dir/report.md`。
+1. **标准全量审计**：给定 `report.md` 路径 → 盘点全部引用项 → 分组并行核验 → 出分级审计报告。默认输入为 `workspace/reports/`（deep-research 产物根目录）下最新的 `report_dir/report.md`。
 2. **定向核验**：用户指定某条/某几条引用或某个可疑论断 → 深度核验 → 出单条结论。
 3. **两者都缺**：回退，提示用户指定报告路径或核验目标。
 
@@ -31,7 +31,7 @@
 ## 审计方法
 
 ### 输入
-- `report.md` 路径（默认 `workspace/reports/{YYYY-MM-DD}-{topic}-{hex4}/report.md`）
+- `report.md` 路径（默认 `workspace/reports/{YYYY-MM-DD}-{topic}-{hex4}/report.md`，deep-research 产物根目录）
 - 可选：用户指定的单条/若干条定向核验目标
 
 ### 核验四维
@@ -81,7 +81,7 @@
 
 ## 子代理约定
 
-- 一律加 `model: sonnet`（项目记忆偏好：既绕网关 529，也是子代理常态默认）。
+- 一律加 `model: sonnet`（用户此前明确的偏好约定：既绕网关 529，也是子代理常态默认）。
 - 子代理必须用 web_search + webReader 实际联网，**禁止凭记忆作答**——这是审计可信度的底线。
 - 子代理返回结构化判定（中文条目清单：判定 / 证据链接 / 细节核对 / 论断是否相符 / 备注）。
 - 若要求 JSON 输出：提示词里明确"字符串内引用用中文引号「」或转义，输出后用 json.loads 校验"（子代理 JSON 转义高频翻车点）。

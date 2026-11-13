@@ -1,5 +1,5 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "name": "deep-research",
   "description": "深度研究助手，通过迭代式'搜索-总结-反思'循环生成带引用的综合性研究报告",
   "context": "fork",

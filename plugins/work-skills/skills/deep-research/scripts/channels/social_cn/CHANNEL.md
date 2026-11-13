@@ -10,16 +10,16 @@
 
 ## 依赖
 
-运行脚本前先安装本 skill 的 Python 依赖：
+运行脚本前先安装本通道的 Python 依赖（技能根目录下 `deep-research/scripts/channels/social_cn/requirements.txt`）：
 
 ```bash
-python -m pip install -r skills/sn-search-social-cn/requirements.txt
+python -m pip install -r deep-research/scripts/channels/social_cn/requirements.txt
 ```
 
 如果项目使用 `uv` 环境：
 
 ```bash
-uv pip install -r skills/sn-search-social-cn/requirements.txt
+uv pip install -r deep-research/scripts/channels/social_cn/requirements.txt
 ```
 
 | 脚本 | 平台 | 稳定性 | 认证方式 |
