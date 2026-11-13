@@ -1,28 +1,25 @@
----
-name: sn-research-report
-description: |
-  基于已有研究材料或草稿生成/修改最终 Markdown 研究报告的成稿 skill。
-
-  遇到以下情况使用：
-  ①已有 deep-research 产物（report.md、research-process.md、sources.json），需要改写或重组为更规范的最终报告；
-  ②已有报告、草稿或文稿路径，需要重写、改写、润色、压缩、扩写、重组结构、增强摘要或补充表格/图示；
-  ③需要在报告成稿阶段主动规划并插入 Markdown 表格、Mermaid 图、AI 概念配图等视觉元素。
-
-  仅用于终稿生成和文稿定向编辑；不用于从零调研、研究规划、联网取证或迭代搜索循环（那是 deep-research 的职责）。
-  如果用户只是要求"深度研究/调研/写一份研究报告"且没有现成材料，应优先使用 deep-research。
----
+> 本文件为 write-report 的 compose mode（原报告成稿 skill，2026-11-13 组建进 write-report）。执行入口与 mode 路由见 SKILL.md。
 
 # Research Report
 
 把已经形成的判断写成读者能使用的报告。报告不是材料拼接，而是围绕读者任务、主线判断、证据和不确定性组织出来的交付物。
 
+## 输入入口
+
+compose 接受两种输入入口：
+
+1. **deep-research 产物目录**：`report.md` + `research-process.md` + `sources.json` 所在的产物目录。语义对应：`sources.json` 是证据与来源池、`research-process.md` 是研究过程与判断记录、`report.md` 是初稿或既有成稿。
+2. **任意已有文稿路径**：现成草稿、报告或待修改文本。
+
+拿到输入后，按下方「适用模式」的顺序判断走终稿生成模式还是写作修改模式。
+
 ## 适用模式
 
 按顺序判断：
 
-1. **有 `{report_dir}/synthesis.md`、`plan.json`、`sub_reports/*.md`**：走**终稿生成模式**，默认写入 `{report_dir}/report.md`。
+1. **有 deep-research 产物三件套，或旧工作流的 `synthesis.md` / `plan.json` / `sub_reports/*.md`**：走**终稿生成模式**，默认写入 `{report_dir}/report.md`。三件套场景下，下文的 `synthesis.md` 读作研究过程与判断记录（research-process.md + report.md 初稿），`sub_reports/*.md` 读作 supporting notes，`plan.json.report_shape` 缺失时按读者任务选默认结构。
 2. **没有完整研究链路，但有现成草稿、文稿路径或待修改文本**：走**写作修改模式**，默认写回用户指定目标文件。
-3. **两者都缺**：先要求输入文稿或研究材料，不要硬写。
+3. **两者都缺**：若用户要的是创作型长文档（手册/教程/书稿），转 write-report 引擎创建模式（见 SKILL.md 引擎模式）；若是研究报告，引导先经 deep-research 取得材料。不要硬写。
 
 ## 边界
 
@@ -37,6 +34,7 @@ description: |
 **不做：**
 - 不在缺少依据时新增关键事实或关键结论。
 - 不把写作修改变成重新研究。
+- 不做从零调研、研究规划、联网取证或迭代搜索循环（那是 deep-research 的职责）。
 - 不把子报告或笔记按顺序拼成终稿。
 - 不写脚注、文末参考文献或来源编号。
 - 不用 AI 图片承载精确数字、坐标轴、表格或可核验地图。
@@ -114,7 +112,7 @@ description: |
 
 ### 视觉计划文件
 
-视觉计划必须单独写入 `{report_dir}/visual_plan.md`，不要写入 `report.md`。
+视觉计划必须单独写入 `visual_plan.md` 文件，不要写入 `report.md`。落点：终稿生成模式写入 `{report_dir}/visual_plan.md`；写作修改模式写入与输出文稿同目录的 `visual_plan.md`。
 
 `report.md` 只保留实际交付给读者的正文、表格、Mermaid 图和图片引用；`visual_plan.md` 用作生成过程记录和质量检查依据。
 
@@ -223,13 +221,13 @@ flowchart LR
 
 ## AI 配图
 
-需要 AI 配图时，依赖并使用已注入的 `sn-image-base` skill。请查阅 `sn-image-base` 的使用说明，并按它当前公开的接口调用 `sn-image-generate`。
+AI 配图是**条件能力**：仅当当前运行环境提供可用的图片生成技能（如 `agnes-image`、`sn-image-base` 或同类）时才走此节；环境没有时直接按依赖规则第 4 条降级，不要假装图片已生成。
 
 依赖规则：
-1. 需要生成图片时，先查阅 `sn-image-base` 的 `SKILL.md`；如需精确参数，再查阅它的 `reference/api_spec.md`。
-2. 使用 `sn-image-base` 暴露的 `sn-image-generate` 能力实际生成图片文件。
+1. 环境有图片生成技能时，先查阅该技能的使用说明；如需精确参数，再查阅它的接口参考文档。
+2. 使用该技能实际生成图片文件，参数（如宽高比、尺寸、保存路径）按其当前公开接口适配。
 3. 保存路径必须位于 `{report_dir}/images/`，并在 `report.md` 中使用相对路径嵌入。
-4. 如果当前运行环境无法加载或调用 `sn-image-base`，不要假装已生成图片；说明依赖不可用，并询问用户是否修复依赖或改用 Mermaid/表格替代。
+4. 如果当前运行环境没有或无法调用任何图片生成技能，不要假装已生成图片；说明依赖不可用，并询问用户是否配置图片生成能力或改用 Mermaid/表格替代。
 
 ### 生成流程
 
@@ -240,17 +238,7 @@ flowchart LR
 - `filename`：保存到 `{report_dir}/images/` 的文件名，小写字母、数字和连字符，例如 `market-structure.png`。
 - `prompt`：图像提示词，包含主题、构图、风格、禁用文字或少文字要求。
 
-调用命令：
-
-```bash
-mkdir -p {report_dir}/images
-python3 /scripts/sn_agent_runner.py sn-image-generate \
-  --prompt "..." \
-  --aspect-ratio "16:9" \
-  --image-size "2k" \
-  --save-path "{report_dir}/images/{filename}.png" \
-  --output-format json
-```
+调用方式按所选图片生成技能的接口执行，生成到 `{report_dir}/images/{filename}.png`；具体命令以该技能文档为准，本文件不绑定固定命令。
 
 调用后确认文件存在且非空，再写入 `report.md`：
 

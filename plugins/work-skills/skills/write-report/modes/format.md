@@ -1,24 +1,12 @@
----
-name: sn-report-format-discovery
-description: |
-  发现特定报告类型的结构规范与写作约束的独立技能。
-
-  当需要判断"这类报告应该长什么样"、为报告生成章节结构/必备元素/风格约束，
-  或为 deep research 的 report_shape 提供依据时使用。
-
-  适用于行业/市场/竞品分析、技术选型、政策/法律/公共事务、学术/医学综述、
-  尽职调查、事件追踪与事实核查等场景，也可单独用于报告格式研究。
-
-  **完全独立可复用**，既可以独立使用，也可以嵌入 deep research 工作流。
----
+> 本文件为 write-report 的 format mode（原报告格式研究 skill，2026-11-13 组建进 write-report）。执行入口与 mode 路由见 SKILL.md。
 
 # Report Format Discovery
 
 回答"这类报告应该长什么样"。它研究的是**报告格式本身**，不是正文事实、研究结论或执行计划。
 
-这个 skill 既可以：
+本 mode 既可以：
 - **独立使用**：用户单独询问某类报告的标准结构、章节建议、必备元素和写法约束。
-- **嵌入 deep research**：为 `plan.json.report_shape` 或其他结构化格式规格提供依据。
+- **嵌入上游工作流**：为 deep research 等上游工作流的报告结构规格（如 report_shape 类结构化定义，以其实际约定的载体为准）提供依据。
 
 ## 核心原则
 

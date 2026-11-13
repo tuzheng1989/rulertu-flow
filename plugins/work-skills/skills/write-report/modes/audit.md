@@ -1,16 +1,4 @@
----
-name: sn-report-audit
-description: |
-  报告引用与参考文献审计器。对研究报告（尤指 sn-research-report 生成的 report.md）做引用真实性、可访问性、著录准确性与论断-出处对应的逐条核验，产出分级审计报告（P0-P3）与修正建议，不自动改报告。
-
-  遇到以下情况使用：
-  ① 报告成稿后、归档迁移前，需核验引用与参考文献的可靠性；
-  ② 用户明确要求"审计报告 / 核查引用 / 验证参考文献 / 查证出处 / check citations"；
-  ③ 用户怀疑报告中某条引用、某框架名或某量化数据是 LLM 幻觉，需要查实。
-
-  仅用于引用与参考文献的真实性、可访问性、著录准确性与论断-出处对应核验；不用于报告结构调整、文风润色，也不用于事实主张的深度取证回溯。
-  报告类成稿与重写请用 sn-research-report；从零调研取证请用 deep-research。
----
+> 本文件为 write-report 的 audit mode（原报告引用审计 skill，2026-11-13 组建进 write-report）。执行入口与 mode 路由见 SKILL.md。
 
 # 报告审计（Report Audit）
 
