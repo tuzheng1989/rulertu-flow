@@ -22,7 +22,7 @@
 ```json
 {
   "queries": [
-    {"query": "<搜索查询1>", "intent": "<查询角度/意图>", "source_type": "<academic|code|social_cn|social_en|web>", "source_tier": "<primary|secondary|supplementary>"},
+    {"query": "<搜索查询1>", "intent": "<查询角度/意图>", "source_type": "<academic|code|social_cn|social_en|product|web>", "source_tier": "<primary|secondary|supplementary>"},
     {"query": "<搜索查询2>", "intent": "<查询角度/意图>", "source_type": "...", "source_tier": "..."},
     {"query": "<搜索查询3>", "intent": "<查询角度/意图>", "source_type": "...", "source_tier": "..."}
   ]
@@ -35,7 +35,7 @@
 |------|------|------|
 | `query` | string | 搜索查询 |
 | `intent` | string | 查询角度/意图 |
-| `source_type` | `academic` \| `code` \| `social_cn` \| `social_en` \| `web` | 该查询应走的搜索通道，决定主控调用哪个搜索工具（见「source_type 选择指南」） |
+| `source_type` | `academic` \| `code` \| `social_cn` \| `social_en` \| `product` \| `web` | 该查询应走的搜索通道，决定主控调用哪个搜索工具（见「source_type 选择指南」） |
 | `source_tier` | `primary` \| `secondary` \| `supplementary` | 来源优先级：`primary`=原始/官方 > `secondary`=权威二级 > `supplementary`=社区补充 |
 
 ## 执行逻辑
@@ -78,12 +78,15 @@
 | 开源项目、代码实现、技术问答、模型/数据集 | `code` | GitHub 仓库、Stack Overflow、HuggingFace |
 | 中文用户经验、中文社区讨论、中文视频 | `social_cn` | 知乎、B站、抖音上的使用反馈 |
 | 英文社区讨论、英文视频、英文舆情 | `social_en` | Twitter、YouTube（Reddit 不可用） |
+| 竞品分析、产品发现、替代品对比、融资信息、发布榜单 | `product` | Product Hunt 产品库（走 sn-search-producthunt 脚本） |
 | 官方文档、监管公告、公司披露、新闻报道、机构页面 | `web` | 官方/新闻/监管/通用网页 |
 
 **选择原则：**
 - 一条 query 选**最主要**的一个 source_type（不重复搜）
 - 官方/新闻/监管类事实优先 `web`（原始来源）
 - 不确定时默认 `web`（通用通道覆盖最广，且是其他通道失败时的降级目标）
+- Product Hunt 数据由 maker 自报，`product` 查询标注 `source_tier: secondary`，关键事实需与 web/academic 交叉验证
+- PH 榜单只反映互动信号排名，不等于竞品全集；竞品发现优先 `alternatives`/`semantic` 子命令而非只看榜
 
 ---
 

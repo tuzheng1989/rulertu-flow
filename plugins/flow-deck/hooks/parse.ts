@@ -184,7 +184,7 @@ export function collectChanges(
         : a.path.localeCompare(b.path))
 }
 
-/** 五阶段序进度：index 从 1 计（完成比例 index/total）；未知阶段无序号（total 0，渲染退化为纯文字） */
+/** 两阶段序进度：index 从 1 计（完成比例 index/total）；存量旧阶段与未知阶段无序号（total 0，渲染退化为纯文字） */
 export type PhaseProgress = {
   current: string
   index: number
@@ -193,7 +193,7 @@ export type PhaseProgress = {
 
 /** 执行上报的极简进度条数据：`progressBar(index, total)` 即条，右侧 `current · index/total` */
 export function phaseProgress(phase: string): PhaseProgress {
-  const phases = ['开工', '派单', '执行', '验证', '收口']
+  const phases = ['执行', '验证']
   const index = phases.indexOf(phase)
   return { current: phase, index: index === -1 ? 0 : index + 1, total: index === -1 ? 0 : phases.length }
 }
@@ -410,19 +410,54 @@ export function parseDepGraph(value: unknown): DepGraph | null {
   return { plan: record.plan, batches }
 }
 
+/** 校验跨会话恢复的批次进度 map：整体非对象/数组返回 null；
+ *  逐键只收 string 值，其余键剔除（个别坏键不弃整份，口径同 parseDepGraph） */
+export function parseProgressMap(value: unknown): Record<string, string> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const out: Record<string, string> = {}
+  for (const [key, phase] of Object.entries(value)) {
+    if (typeof phase === 'string') out[key] = phase
+  }
+  return out
+}
+
 export type DepNodeStatus = 'done' | 'active' | 'pending'
 
 export type DepNode = BatchDep & {
   status: DepNodeStatus
+  /** 推导后阶段：查表值、拓扑下推的「收口」或无记录的「待执行」；状态符号与文本行同源 */
+  phase: string
 }
 
-/** 结合各批阶段记录标注状态：收口=完成，有记录=进行中，未上报=待执行 */
+/** 结合各批阶段记录标注状态：收口=完成，有记录=进行中，未上报=待执行；
+ *  第二遍拓扑下推——任一节点收口 ⇒ 其 dependsOn 闭包（含传递）强制 done 且阶段置「收口」
+ *  （依赖语义下「下游收口前上游必已收口」恒成立，单点漏报不破坏整图可信度；
+ *  仅视图修正不改写 progress 数据，末批漏报无下游不在覆盖面内） */
 export function depStatuses(graph: DepGraph, progress: Record<string, string>): DepNode[] {
-  return graph.batches.map(node => {
+  const nodes = graph.batches.map(node => {
     const phase = progress[`${graph.plan}#${node.batch}`]
-    if (phase === undefined) return { ...node, status: 'pending' as const }
-    return { ...node, status: phase === '收口' ? ('done' as const) : ('active' as const) }
+    if (phase === undefined) return { ...node, status: 'pending' as const, phase: '待执行' }
+    return { ...node, status: phase === '收口' ? ('done' as const) : ('active' as const), phase }
   })
+  // 下推用栈迭代 + 已处理集合：dependsOn 引用图中不存在的批次名跳过，图有环时集合保证终止
+  const byBatch = new Map(nodes.map(node => [node.batch, node]))
+  const settled = new Set<string>()
+  const stack = nodes.filter(node => node.status === 'done').map(node => node.batch)
+  while (stack.length > 0) {
+    const batch = stack.pop() as string
+    if (settled.has(batch)) continue
+    settled.add(batch)
+    for (const dep of byBatch.get(batch)?.dependsOn ?? []) {
+      const upstream = byBatch.get(dep)
+      if (upstream === undefined) continue
+      if (upstream.status !== 'done') {
+        upstream.status = 'done'
+        upstream.phase = '收口'
+      }
+      if (!settled.has(dep)) stack.push(dep)
+    }
+  }
+  return nodes
 }
 
 /** 任务控制台皮肤术语表（B1 条目 9）：7 条映射一词一义，只换文案不改图形结构与信息量；

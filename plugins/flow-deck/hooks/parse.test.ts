@@ -37,6 +37,7 @@ import {
   parseNumstat,
   parseSections,
   parsePorcelain,
+  parseProgressMap,
   parseReviewJson,
   parseStateJson,
   roundScores,
@@ -260,10 +261,11 @@ describe('parse', () => {
     expect(collectChanges(null, [])).toEqual([])
   })
 
-  test('phaseProgress 映射五阶段序号，未知阶段无序号', () => {
-    expect(phaseProgress('开工')).toEqual({ current: '开工', index: 1, total: 5 })
-    expect(phaseProgress('执行')).toEqual({ current: '执行', index: 3, total: 5 })
-    expect(phaseProgress('收口')).toEqual({ current: '收口', index: 5, total: 5 })
+  test('phaseProgress 两阶段序号；存量与未知阶段无序号（total 0 退化纯文字）', () => {
+    // B3 上报契约缩为两阶段；存量持久化值（开工/派单）与未知阶段同走 indexOf -1 退化
+    expect(phaseProgress('执行')).toEqual({ current: '执行', index: 1, total: 2 })
+    expect(phaseProgress('验证')).toEqual({ current: '验证', index: 2, total: 2 })
+    expect(phaseProgress('开工')).toEqual({ current: '开工', index: 0, total: 0 })
     expect(phaseProgress('自定义阶段')).toEqual({ current: '自定义阶段', index: 0, total: 0 })
   })
   test('extractRound 认识 review-RN.json', () => {
@@ -529,6 +531,18 @@ describe('parse', () => {
     expect(parseDepGraph(null)).toBe(null)
   })
 
+  test('parseProgressMap 校验跨会话进度恢复：合法全收、整体非对象 null、混值剔键、空对象合法', () => {
+    expect(parseProgressMap({ 'demo#B1': '收口', 'demo#B2': '执行' })).toEqual({ 'demo#B1': '收口', 'demo#B2': '执行' })
+    // 整体非对象（含数组与 null）：一律 null，恢复侧降级为空 map
+    expect(parseProgressMap('garbage')).toBe(null)
+    expect(parseProgressMap(['demo#B1'])).toBe(null)
+    expect(parseProgressMap(null)).toBe(null)
+    // 混合值：非 string 值的键剔除，其余键保留（个别坏键不弃整份，D9）
+    expect(parseProgressMap({ 'demo#B1': '收口', 'demo#B2': 3, 'demo#B3': null })).toEqual({ 'demo#B1': '收口' })
+    // 空对象合法
+    expect(parseProgressMap({})).toEqual({})
+  })
+
   test('depStatuses 按 progress 标注三态', () => {
     const graph = parseDepGraph({
       plan: 'demo',
@@ -537,15 +551,44 @@ describe('parse', () => {
     if (graph === null) throw new Error('fixture 不可为 null')
     // 无记录全部待执行
     expect(depStatuses(graph, {})).toEqual([
-      { batch: 'B1', dependsOn: [], status: 'pending' },
-      { batch: 'B2', dependsOn: ['B1'], status: 'pending' },
+      { batch: 'B1', dependsOn: [], status: 'pending', phase: '待执行' },
+      { batch: 'B2', dependsOn: ['B1'], status: 'pending', phase: '待执行' },
     ])
     // 收口=完成；其他阶段=进行中；其他方案的记录不影响
     const progress = { 'demo#B1': '收口', 'demo#B2': '执行', 'other#B1': '收口' }
     expect(depStatuses(graph, progress)).toEqual([
-      { batch: 'B1', dependsOn: [], status: 'done' },
-      { batch: 'B2', dependsOn: ['B1'], status: 'active' },
+      { batch: 'B1', dependsOn: [], status: 'done', phase: '收口' },
+      { batch: 'B2', dependsOn: ['B1'], status: 'active', phase: '执行' },
     ])
+  })
+
+  test('depStatuses 拓扑下推：done 沿 dependsOn 闭包传播，视图修正不改 progress 原文', () => {
+    const graph = parseDepGraph({
+      plan: 'demo',
+      batches: [
+        { batch: 'B1', dependsOn: [] },
+        { batch: 'B2', dependsOn: ['B1'] },
+        { batch: 'B3', dependsOn: ['B2'] },
+      ],
+    })
+    if (graph === null) throw new Error('fixture 不可为 null')
+    // B2 收口而 B1 无记录 → B1 推导 done 且阶段置「收口」（dependsOn 语义：下游收口前上游必已收口）
+    const pushed = depStatuses(graph, { 'demo#B2': '收口' })
+    expect(pushed.map(node => [node.batch, node.status, node.phase])).toEqual([
+      ['B1', 'done', '收口'],
+      ['B2', 'done', '收口'],
+      ['B3', 'pending', '待执行'],
+    ])
+    // B3 收口沿 B2→B1 链式传递（含传递闭包）
+    expect(depStatuses(graph, { 'demo#B3': '收口' }).map(node => node.status)).toEqual(['done', 'done', 'done'])
+    // dependsOn 引用图中不存在的批次名：跳过不崩
+    const dangling = parseDepGraph({ plan: 'demo', batches: [{ batch: 'B2', dependsOn: ['B9'] }] })
+    if (dangling === null) throw new Error('fixture 不可为 null')
+    expect(depStatuses(dangling, { 'demo#B2': '收口' })).toEqual([
+      { batch: 'B2', dependsOn: ['B9'], status: 'done', phase: '收口' },
+    ])
+    // 末批漏报（无下游）→ 维持查表结果（覆盖面负断言）
+    expect(depStatuses(graph, { 'demo#B1': '收口' }).map(node => node.status)).toEqual(['done', 'pending', 'pending'])
   })
 
   test('buildPlanReview 组装概览并以最新轮判定达标', () => {

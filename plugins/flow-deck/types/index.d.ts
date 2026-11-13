@@ -68,7 +68,7 @@ export type ExecutionReport = {
   plan: string
   /** 批次标识，如 B2 */
   batch: string
-  /** 当前阶段：开工 | 派单 | 执行 | 验证 | 收口 */
+  /** 当前阶段：上报契约两值（执行 | 验证）；收口为内部终态——验证全绿升格或显式上报，存量值可能为旧五枚举 */
   phase: string
   /** 风险定级：T0-T3 */
   tLevel?: string
@@ -174,9 +174,9 @@ declare module 'claude-code' {
       batchScope: BatchScope | null
       /** 已越界提醒过的归一化路径键，同批同文件不重复告警；批次重声明或新会话时清空 */
       guardWarned: string[]
-      /** 各批次最新阶段，键 <plan>#<batch>，flow_report 逐批累积 */
+      /** 各批次最新阶段，键 <plan>#<batch>，flow_report 逐批累积；经 `$.store` 键 `progressMap` 跨会话恢复 */
       progress: Record<string, string>
-      /** 当前方案的波次依赖图；未声明则 null */
+      /** 当前方案的波次依赖图；未声明则 null；经 `$.store` 键 `depsGraph` 跨会话恢复 */
       deps: DepGraph | null
       /** 最近一次 git 仓库状态快照；非 git 仓库或尚未取数则 null */
       git: GitStatus | null

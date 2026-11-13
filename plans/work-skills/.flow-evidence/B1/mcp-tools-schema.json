@@ -1,0 +1,280 @@
+{
+  "get_categories": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "get_products": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "category_slug": {
+        "type": "string",
+        "maxLength": 100,
+        "description": "Filter by category slug. Use get_categories to discover valid slugs and pick the most specific matching one (e.g. \"ai-dictation-apps\" for dictation queries, not the broader parent)."
+      },
+      "order": {
+        "type": "string",
+        "enum": [
+          "highest_rated",
+          "recent_launches"
+        ],
+        "default": "highest_rated",
+        "description": "Sort: \"highest_rated\" (default) or \"recent_launches\". Pick \"recent_launches\" only when the user asked for recency / newest."
+      },
+      "open_source": {
+        "type": "string",
+        "enum": [
+          "any",
+          "open_source_only"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no open-source filter); \"open_source_only\" only when the user said open source / OSS / FOSS."
+      },
+      "pricing": {
+        "type": "string",
+        "enum": [
+          "any",
+          "free",
+          "free_options",
+          "payment_required"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no pricing filter); \"free\" / \"free_options\" / \"payment_required\" only when the user said the matching word."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8,
+        "description": "Number of products (default 8, max 8)."
+      }
+    },
+    "required": [
+      "category_slug"
+    ],
+    "additionalProperties": false
+  },
+  "find_alternatives": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "product_name": {
+        "type": "string",
+        "maxLength": 200,
+        "description": "Name or slug of the product to find alternatives for (e.g., \"cursor\", \"notion\", \"zapier\")."
+      },
+      "order": {
+        "type": "string",
+        "enum": [
+          "highest_rated",
+          "most_relevant",
+          "recent_launches"
+        ],
+        "default": "most_relevant",
+        "description": "\"most_relevant\" (default), \"highest_rated\", or \"recent_launches\". Pick a non-default value only when the user asked for it."
+      },
+      "pricing": {
+        "type": "string",
+        "enum": [
+          "any",
+          "free",
+          "free_options",
+          "payment_required"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no pricing filter); \"free\" / \"free_options\" / \"payment_required\" only when the user said the matching word."
+      },
+      "open_source": {
+        "type": "string",
+        "enum": [
+          "any",
+          "open_source_only"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no open-source filter); \"open_source_only\" only when the user said open source / OSS / FOSS."
+      },
+      "recency": {
+        "type": "string",
+        "enum": [
+          "all_time",
+          "today",
+          "this_week",
+          "this_month",
+          "this_quarter",
+          "this_year"
+        ],
+        "default": "all_time",
+        "description": "\"all_time\" (default — no recency filter); \"today\" / \"this_week\" / \"this_month\" / \"this_quarter\" / \"this_year\" only when the user named that time window."
+      },
+      "tags": {
+        "type": "array",
+        "maxItems": 5,
+        "items": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "default": [],
+        "description": "Feature-tag filter. Default []: no tag filter. Use only for genuine feature tags (\"self-hosted\", \"ai\"). Do NOT use for \"free\" or \"open source\" — those have their own keys."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8,
+        "description": "Maximum number of alternatives (default: 8)."
+      }
+    },
+    "required": [
+      "product_name"
+    ],
+    "additionalProperties": false
+  },
+  "get_product_profile": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "product_name": {
+        "type": "string",
+        "maxLength": 200,
+        "description": "Product name or slug to look up (e.g., \"notion\", \"linear\", \"figma\")."
+      }
+    },
+    "required": [
+      "product_name"
+    ],
+    "additionalProperties": false
+  },
+  "search_launches": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "maxLength": 500,
+        "description": "Words to match literally in launch names and taglines, such as a product name. Not a description search."
+      },
+      "category_slug": {
+        "type": "string",
+        "maxLength": 100,
+        "description": "Filter by category slug. Use get_categories to discover valid slugs and pick the most specific matching one (e.g. \"ai-dictation-apps\" for dictation queries, not the broader parent)."
+      },
+      "days_ago": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 365,
+        "default": 30,
+        "description": "Only launches within the last N days, 1–365 (default 30). Use 7 for this week, 30 for this month, 90 for this quarter, 365 for this year. Older launches are out of range; semantic_product_search with recency \"all_time\" finds products of any age by topic, ranked by relevance rather than launch date."
+      },
+      "yc": {
+        "type": "string",
+        "enum": [
+          "any",
+          "yc_only"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no YC filter); \"yc_only\" only when the user said YC / Y Combinator."
+      },
+      "open_source": {
+        "type": "string",
+        "enum": [
+          "any",
+          "open_source_only"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no open-source filter); \"open_source_only\" only when the user said open source / OSS / FOSS."
+      },
+      "pricing": {
+        "type": "string",
+        "enum": [
+          "any",
+          "free",
+          "free_options",
+          "payment_required"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no pricing filter); \"free\" / \"free_options\" / \"payment_required\" only when the user said the matching word."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8,
+        "description": "Maximum number of launches, 1–8 (default 8)."
+      }
+    },
+    "additionalProperties": false
+  },
+  "semantic_product_search": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "maxLength": 120,
+        "description": "Short noun-phrase query — 3 to 8 words, no conjunctions, no conversational filler (\"product that\", \"tool for\", \"I want\"). Products are embedded from structured summaries covering product type, capabilities, problem solved, target audience, and use cases, so queries match best when they mirror that shape: <core-capability> <optional audience> <optional form-factor>. Only include a form factor (cli tool, terminal ui, mobile app, chrome extension, self-hosted service) when the user explicitly asks for one or clearly implies it — never invent one. Same rule for audience (developers, small teams, founders, freelancers): include only when the user names or implies it. Good: \"monitor ai agents\" (form factor unspecified), \"self-hosted analytics small teams\" (audience + form factor specified), \"cli tool share ai coding sessions developers\" (all three specified). Bad: \"web platform monitor ai agents operations\" when the user just said \"a product that monitors AI agents\" — the form factor was fabricated. Longer multi-clause queries collapse the neighborhood and return fewer results."
+      },
+      "pricing": {
+        "type": "string",
+        "enum": [
+          "any",
+          "free",
+          "free_options",
+          "payment_required"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no pricing filter); \"free\" / \"free_options\" / \"payment_required\" only when the user said the matching word."
+      },
+      "open_source": {
+        "type": "string",
+        "enum": [
+          "any",
+          "open_source_only"
+        ],
+        "default": "any",
+        "description": "\"any\" (default — no open-source filter); \"open_source_only\" only when the user said open source / OSS / FOSS."
+      },
+      "recency": {
+        "type": "string",
+        "enum": [
+          "all_time",
+          "today",
+          "this_week",
+          "this_month",
+          "this_quarter",
+          "this_year"
+        ],
+        "default": "all_time",
+        "description": "\"all_time\" (default — no recency filter); \"today\" / \"this_week\" / \"this_month\" / \"this_quarter\" / \"this_year\" only when the user named that time window."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8,
+        "description": "Maximum number of products (default: 6)."
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "additionalProperties": false
+  },
+  "get_leaderboard": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "date": {
+        "type": "string",
+        "description": "Period in YYYY-MM-DD (day), YYYY-Www (ISO week), YYYY-MM (month), or YYYY (year) format. E.g. \"2024-11-14\", \"2024-W46\", \"2024-11\", \"2024\"."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8,
+        "description": "Maximum number of ranked products (default: 5, max: 8)."
+      }
+    },
+    "required": [
+      "date"
+    ],
+    "additionalProperties": false
+  }
+}

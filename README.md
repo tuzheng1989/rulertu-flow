@@ -8,7 +8,7 @@
 |------|------|
 | `rulertu-flow` | 工作流引擎：T0–T3 风险分级的方案编写、分批实施与独立验证，配 commit/PR 文案技能与提交守卫 |
 | `work-skills` | 22 个日常工作技能：阅读研究、思维工具、写作改写、文档转换、工作总结 |
-| `agent-skills` | 8 个 Agent 工程技能：Agent 设计知识包、主动型 Agent 架构、评测、DeepAgents、检索指南 |
+| `agent-skills` | 9 个 Agent 工程技能：Agent 设计知识包、Jev 社区实践、主动型 Agent 架构、评测、DeepAgents、检索指南 |
 | `copyright-skills` | 5 个知识产权申报技能：软著材料生成与合规预审、专利分析与交底书 |
 | `rulertu-frontend` | 前端开发工程师代理 + 6 个配套技能（z.ai 官方技能包，Apache-2.0） |
 | `flow-deck` | 工作流可视化仪表盘：评审进度、批次守卫、依赖 DAG、git 状态与子代理监控 |
@@ -77,15 +77,16 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 - **写作与转化**：`writing-for-human`（面向人类读者的写作、改稿与审阅）、`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
 - **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
 - **工作总结**：`work-summary`（汇总个人或团队工作记录，支持持久工作区及跨周期分尺度融合）
-- **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `deepxiv`
+- **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `sn-search-producthunt` / `deepxiv`
 
 依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。
 
 ## agent-skills：Agent 工程
 
-8 个技能：
+9 个技能：
 
 - `ai-agent-design`：《深入理解 AI Agent》知识包统一路由，含百科 / 原文 / 方法 / 案例 / 实践五组件（原书插图不随插件分发）
+- `jev-agent-design`：Jev Agent 社区架构案例、接入改造与评测指南，覆盖动作循环、路由、上下文压缩、检索与验证
 - `proactive-agent-design`：主动型 Agent 6A 架构设计、评审诊断与主动行为评测——设计九问、分段介入与四份交付模板
 - `agent-evaluator`：Agent 评测 Harness 构建
 - `deepagents`：LangChain DeepAgents 使用指南（`deepagents-update` 负责同步其文档与 Python 包）

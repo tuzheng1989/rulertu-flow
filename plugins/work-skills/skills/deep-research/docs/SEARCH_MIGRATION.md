@@ -67,3 +67,25 @@ sn-search-academic 的 `arxiv_search.py` 直打 arxiv 公开 API，易被 429 �
 ### 未迁移部分（延续）
 
 `scripts/orchestrator.py` 仍未随本次多源通道改造——它仍是基于 Claude CLI + meta-search 的独立命令行编排路径，不影响会话内运行时。会话内执行技能一律走 SKILL.md 的多源通道流程。
+
+## v0.7.0：product 通道（Product Hunt）
+
+### 背景
+
+v0.5.0 的五通道缺产品维度数据源（产品发现、竞品对比、融资信息、发布榜单）。v0.7.0 新增 `product` 通道：Bash 脚本直调 Product Hunt 官方 MCP 端点（`https://mcp.producthunt.com/mcp`），匿名 JSON-RPC，无需 OAuth / API key。**为何不注册 MCP server**：该端点全量暴露 17 个工具且含写操作工具，注册后全量常驻会话工具列表；脚本只封装其中 7 个只读工具，按需调用、零常驻。
+
+### 通道架构
+
+| source_type | 通道 | 入口 |
+|---|---|---|
+| `product` | sn-search-producthunt 脚本 | search / semantic / alternatives / profile / category / leaderboard / categories |
+
+调用方式与其余 sn-search-* 通道一致（`PYTHONIOENCODING=utf-8 python ../sn-search-producthunt/scripts/producthunt_search.py {子命令} {参数}`），子命令契约详见 `sn-search-producthunt/SKILL.md`。
+
+### 数据定位与使用边界
+
+Product Hunt 数据由 maker 自报，默认 `source_tier: secondary`，关键事实（融资额、评分、用户规模）需与 web / academic 通道交叉验证；库容偏英文市场、独立开发者与 VC 关注的产品，中文产品覆盖弱；榜单排名反映互动信号，不等于竞品全集——竞品发现优先 `alternatives` / `semantic` 子命令而非只看榜。
+
+### 匿名访问可能收紧
+
+匿名访问是当前对该端点的观测行为，上游可能收紧（要求 OAuth / API key）。收紧时脚本返回 `success:false`（退出码 1），既有降级规则兜底（专门通道失败回退 MCP `web-search-prime`，见 SKILL.md 3.2），研究不中断。
