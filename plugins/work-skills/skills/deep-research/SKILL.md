@@ -140,11 +140,11 @@ author: Claude Code
 |-------------|------|----------|
 | `web` | MCP `web-search-prime` | MCP 工具 `mcp__web-search-prime__web_search_prime`（保留 v0.4 行为） |
 | `academic` | deepxiv CLI | Bash：`PYTHONIOENCODING=utf-8 deepxiv search "{query}" --limit {N} --format json`（可选 `--mode hybrid` `--min-citations {n}` `--categories {cs.X}` `--date-from {YYYY-MM-DD}`） |
-| `code` | code 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/code/scripts/{github\|stackoverflow\|hackernews\|huggingface}_search.py "{query}" --limit {N}` |
-| `social_cn` | social_cn 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/social_cn/scripts/{zhihu\|bilibili\|douyin}_search.py "{query}" --limit {N}` |
-| `social_en` | social_en 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/social_en/scripts/{twitter\|youtube}_search.py "{query}" --limit {N}`（reddit 已禁用，跳过） |
-| `product` | product 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/product/scripts/producthunt_search.py {子命令} {参数}` |
-| image | Serper 图搜脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/image/scripts/serper_image_search.py "{query}" --num {N} --json` |
+| `code` | **code** 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/code/scripts/{github\|stackoverflow\|hackernews\|huggingface}_search.py "{query}" --limit {N}` |
+| `social_cn` | **social_cn** 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/social_cn/scripts/{zhihu\|bilibili\|douyin}_search.py "{query}" --limit {N}` |
+| `social_en` | **social_en** 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/social_en/scripts/{twitter\|youtube}_search.py "{query}" --limit {N}`（reddit 已禁用，跳过） |
+| `product` | **product** 通道脚本 | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/product/scripts/producthunt_search.py {子命令} {参数}` |
+| image | **image** 通道脚本（Serper 图搜） | Bash：`PYTHONIOENCODING=utf-8 python scripts/channels/image/scripts/serper_image_search.py "{query}" --num {N} --json` |
 
 **子工具选择**（同一通道内多脚本时按 query 语义选最对口的）：
 - `code`：仓库/模型/数据集→`github_search.py`/`huggingface_search.py`；技术问答→`stackoverflow_search.py`；技术讨论→`hackernews_search.py`
@@ -152,7 +152,7 @@ author: Claude Code
 - `social_en`：讨论→`twitter_search.py`；视频→`youtube_search.py`
 - `academic`：默认 `deepxiv search`；已有 arxiv_id 想读全文→走 3.2b 的 `deepxiv paper`
 - `product`：参数按 query 语义选子命令——产品/关键词发现→`search`/`semantic`；替代品→`alternatives --name "<产品名>"`；产品档案（评分/融资）→`profile --name "<产品名>"`；分类产品→`category`；榜单→`leaderboard --date YYYY-MM-DD`；分类清单→`categories`（子命令契约详见 `scripts/channels/product/CHANNEL.md`，不在此复制）
-- `image`：配图/视觉证据按需调用（Serper 图搜），`--num` 控制数量，`--gl`/`--hl` 指定国家与语言偏好
+- `image`：配图/视觉证据按需调用（Serper 图搜），结果定位为 **secondary 来源**，`--num` 控制数量，`--gl`/`--hl` 指定国家与语言偏好
 
 **统一调用约定：**
 - 所有 Bash 命令加 `PYTHONIOENCODING=utf-8` 前缀（Windows 编码，deepxiv 与通道脚本均需）
