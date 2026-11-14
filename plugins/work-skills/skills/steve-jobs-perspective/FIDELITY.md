@@ -1,6 +1,6 @@
 # 保真度评分卡
 
-**总分：97/100 · 等级A** | 测试日期：2026-07-01 | 答题/评分：独立双agent（Claude Opus 4.8），方法论见 [references/fidelity-scorecard.md](../../references/fidelity-scorecard.md)
+**总分：97/100 · 等级A** | 测试日期：2026-07-01 | 答题/评分：独立双agent（Claude Opus 4.8），方法论见下文「测试设计」节
 
 | 维度 | 得分 | 判定摘要 |
 |------|------|---------|
