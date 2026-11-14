@@ -76,7 +76,7 @@ python scripts/parse-docx.py document.docx --output .longText/document/raw-conte
 ### 5. 网页 URL
 
 **特点**：
-- 使用网页抓取能力获取（url-to-md 技能或 MCP `web-reader`；meta-web 为旧环境依赖）
+- 使用网页抓取能力获取（docs-trans 的 url-to-md mode 或 MCP `web-reader`；meta-web 为旧环境依赖）
 - 支持动态网页
 - 自动过滤广告和导航
 
@@ -86,7 +86,7 @@ python scripts/parse-docx.py document.docx --output .longText/document/raw-conte
 ```
 
 **注意事项**：
-- 需要网页抓取能力可用（url-to-md 技能或 MCP `web-reader`；meta-web 为旧环境依赖，不可用时以本仓能力替代）
+- 需要网页抓取能力可用（docs-trans 的 url-to-md mode 或 MCP `web-reader`；meta-web 为旧环境依赖，不可用时以本仓能力替代）
 - 登录后内容无法获取
 - JavaScript 渲染内容可能有延迟
 
@@ -101,7 +101,7 @@ python scripts/parse-docx.py document.docx --output .longText/document/raw-conte
 | PDF | 解析 PDF 文件 | parse-pdf.py |
 | DOCX | 解析 Word 文档 | parse-docx.py |
 | MD/TXT | 直接读取 | Read 工具 |
-| 网页 | 获取网页内容 | url-to-md 技能或 MCP `web-reader`（meta-web 为旧环境依赖） |
+| 网页 | 获取网页内容 | docs-trans 的 url-to-md mode 或 MCP `web-reader`（meta-web 为旧环境依赖） |
 
 ### 阶段 2: 结构分析
 

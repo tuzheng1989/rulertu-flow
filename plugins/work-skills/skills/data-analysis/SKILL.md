@@ -20,7 +20,7 @@ description: |
   ⑤用户上传或指定了 .xlsx / .xls / .csv / .docx / .doc / .pdf / .pptx / .ppt /
   .png / .jpg / .jpeg / .gif / .webp / .bmp 文件并要求分析、提取、统计或可视化。
   仅不用于：图片编辑（裁剪、滤镜、缩放）与图片生成；文档格式转换（那归
-  anydoc-to-md——本技能管分析不管转换）；报告成稿与改写（那归 write-report）；
+  docs-trans——本技能管分析不管转换）；报告成稿与改写（那归 write-report）；
   不涉及表格数据的纯文本处理；单个公式计算的简单问答。
 ---
 
@@ -40,7 +40,7 @@ description: |
 路由规则：
 1. 用户给了文件 → 按扩展名查表路由；多种文件混合 → 各自路由后汇总。
 2. 用户没给文件只有触发词 → 按触发词组匹配 mode（Excel 组→excel，文档组→document，图片组→image，大文件组→excel 的引擎档）。
-3. 互斥边界：图片编辑/生成请求**拒绝**并说明不归本技能；"把这个 PDF 转成 Markdown"类格式转换请求指给 **anydoc-to-md**；"帮我改写/成稿这份报告"类请求指给 **write-report**。
+3. 互斥边界：图片编辑/生成请求**拒绝**并说明不归本技能；"把这个 PDF 转成 Markdown"类格式转换请求指给 **docs-trans**；"帮我改写/成稿这份报告"类请求指给 **write-report**。
 
 ## Modes
 

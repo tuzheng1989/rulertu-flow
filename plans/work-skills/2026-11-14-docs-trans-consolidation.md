@@ -1,7 +1,7 @@
 # work-skills 文档转换整合：docs-trans 组建 + gongwen-trans 升级
 
 - **日期**：2026-11-14
-- **状态**：待评审（用户裁定：方案出来后跳过对抗评审，自审后直接开工；已确认本机有 Word）
+- **状态**：已完成（2026-11-14）——B1 docs-trans 组建收口（骨架经 9dfadac 先行入库，8a1d79e 补齐；T3 双重验证：Auditor 通过 + 第二意见修后可用，3 高项修复）；B2 gongwen-trans 收口（9dfadac；Auditor 通过 + 第二意见可直接使用）；B3 联动收尾（升版 2.8.0 + 6 处引用 + 根 README 同步 + .gitignore 死规则更新）
 - **目标插件**：work-skills（docs-trans 新增、gongwen-docx 升级为 gongwen-trans、插件 2.7.0 → 2.8.0）
 
 ---

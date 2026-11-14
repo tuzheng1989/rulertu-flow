@@ -74,12 +74,12 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 - **阅读与研究**：`article-guide`（文章互动导读：选项式确定起点、分块讲解、按需搜索与保存学习进度）、`deep-research`（深度研究，多源搜索通道）、`company-research`（公司调研）、`strategic-analysis`（战略分析）
 - **思维工具**：`brainstorm`（思维探索引擎三模式：深钻——单点钻透到领域专家级洞察；扩散——可能性地图横向铺开，只发散不收敛；创意——把参考物的深层机制翻译成意料之外、情理之中的设计）、`feynman-tutor`（费曼式教学）
-- **写作与转化**：`writing-for-human`（面向人类读者的写作、改稿与审阅）、`long-text`（长文写作）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
-- **文档转换**：`anydoc-to-md` / `url-to-md` / `md-to-pdf` / `html-to-pdf`、`screen-condense`（录屏自动精简）
+- **写作与转化**：`writing-for-human`（面向人类读者的写作、改稿与审阅）、`write-report`（报告成稿后处理：compose 改稿 / audit 引用审计 / format 格式研究，内置长文引擎）、`humanizer`（去 AI 味改写与检测）、`book-to-skill`（书籍转技能）、`paper-to-code`（论文转代码）
+- **文档转换**：`docs-trans`（转换单一入口：anydoc-to-md 文档转 MD 含 OCR 三级路由 / url-to-md 网页转 MD / md-to-pdf 含 Mermaid 预渲染 / html-to-pdf）、`gongwen-trans`（GB/T 9704 公文 DOCX/PDF 生成）、`screen-condense`（录屏自动精简）
 - **工作总结**：`work-summary`（汇总个人或团队工作记录，支持持久工作区及跨周期分尺度融合）
-- **搜索通道**（`deep-research` 的依赖）：`sn-search-code` / `sn-search-social-cn` / `sn-search-social-en` / `sn-search-producthunt` / `deepxiv`
+- **数据分析**：`data-analysis`（Excel/Word/PDF/PPT/图片 数据分析统一入口，含大文件 Parquet 引擎与 47 个 capability 子技能）
 
-依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`url-to-md` 需要 bun，首次使用时在其 `scripts/` 目录执行 `bun install`（node_modules 不随仓库分发）；`md-to-pdf` 需按其 `requirements.txt` 安装并下载 playwright 浏览器；`html-to-pdf` 需本机 Chrome。
+依赖说明：`deep-research` 需要 `web-search-prime` / `web-reader` 两个 MCP server 与 deepxiv CLI（专门通道失败会自动降级到 MCP 搜索）；`docs-trans` 各 mode 依赖见其 SKILL.md 依赖速查表（url mode 需 bun 首次 `bun install`；md-to-pdf 需 playwright；html-to-pdf 需本机 Chrome）；`gongwen-trans` 的 pdf 输出需本机 Microsoft Word；`data-analysis` 的 matplotlib 画图依赖中文字体（字体块已内置 Windows 候选）。
 
 ## agent-skills：Agent 工程
 

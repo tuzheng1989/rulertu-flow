@@ -79,7 +79,7 @@ python scripts/parse-docx.py {input_path} --output {workspace}/raw-content.md
 
 #### 2.2 网页内容
 
-使用网页抓取能力获取（本仓环境优先用 url-to-md 技能或 MCP `web-reader`；源文档所称 meta-web 技能为旧环境依赖，不可用时以本仓能力替代）：
+使用网页抓取能力获取（本仓环境优先用 docs-trans 技能的 url-to-md mode 或 MCP `web-reader`；源文档所称 meta-web 技能为旧环境依赖，不可用时以本仓能力替代）：
 
 ```yaml
 抓取网页:

@@ -1,7 +1,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-plugins/work-skills/skills/url-to-md/scripts/node_modules/
+plugins/work-skills/skills/docs-trans/scripts/url/node_modules/
 plugins/rulertu-flow/skills/update/proxy.env
 .scratch/
 plugins/work-skills/skills/work-summary/scripts/.pull_repos_cache.json
