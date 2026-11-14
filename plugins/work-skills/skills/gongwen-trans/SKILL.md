@@ -1,33 +1,52 @@
 ---
-name: gongwen-docx
+name: gongwen-trans
 description: |
-  将 Markdown 文件转换为符合 GB/T 9704-2012 标准的公文 DOCX 文件。
+  生成符合 GB/T 9704-2012 标准的公文 DOCX 或 PDF 文件。
   支持通知、报告、请示、批复、函等公文字类型，自动应用对应的格式差异。
   当用户要求"转成公文"、"生成DOCX公文"、"公文格式"、"转成word公文"、
   "导出为公文格式"、"生成通知"、"生成报告"、"生成请示"、"生成批复"、"生成函"、
-  "公文排版"时触发。即使用户只说"转成docx"但上下文明显是公文，也应触发。
+  "公文排版"、"生成公文 pdf"、"公文转 pdf"、"红头文件 pdf"时触发。
+  即使用户只说"转成docx"但上下文明显是公文，也应触发。
   工具型技能，输出位置由调用方（项目指令或用户指定）决定；未指定时输出到
-  输入文件同目录、同名 .docx。
-version: 1.1.0
+  输入文件同目录、同名 .docx（或用户明确要 PDF 时的同名 .pdf）。
+version: 1.2.0
 ---
 
-# 公文 DOCX 转换
+# 公文转换（DOCX / PDF）
 
-将 Markdown + YAML frontmatter 格式的文档转换为符合 GB/T 9704-2012 标准的党政机关公文 DOCX。
+将 Markdown + YAML frontmatter 格式的文档转换为符合 GB/T 9704-2012 标准的党政机关公文 DOCX 或 PDF。
 
 ## 用法
 
 ```
+# 默认输出 DOCX
 python {baseDir}/scripts/gongwen-to-docx.py <input.md> -o <output.docx>
+
+# 输出 PDF（需本机安装 Microsoft Word）
+python {baseDir}/scripts/gongwen-to-pdf.py <input.md|input.docx> [--output <output.pdf>] [--keep-docx]
 ```
 
 ### Agent 执行步骤
 
 1. 确定 SKILL.md 所在目录为 `{baseDir}`
-2. 读取输入 MD 文件，验证 frontmatter 完整性（`title` 为必填字段）
-3. 确定输出路径：用户或项目指令有指定时用指定值；否则默认输出到输入文件同目录、同名 `.docx`
-4. 执行转换脚本
-5. 向用户报告结果
+2. 确定输出格式：用户消息中出现 PDF 字样或明确要求 PDF 时走 `gongwen-to-pdf.py`，否则默认 DOCX 走 `gongwen-to-docx.py`
+3. 读取输入 MD 文件，验证 frontmatter 完整性（`title` 为必填字段）
+4. 确定输出路径：用户或项目指令有指定时用指定值；否则默认输出到输入文件同目录、同名 `.docx`（PDF 时同名 `.pdf`）
+5. 执行转换脚本
+6. 向用户报告结果
+
+## 输出格式
+
+- **默认 DOCX**：走 `gongwen-to-docx.py`，本机无额外依赖。
+- **PDF**：走 `gongwen-to-pdf.py`——内部先按既有流程产出 docx，再经 docx2pdf（Word COM）渲染为 PDF，版式与 DOCX 完全一致。
+  - 输入可以是 `.md`（内部链式产出中间 docx `<原名>.gongwen-tmp.docx`，转换成功后默认删除；`--keep-docx` 可保留——保留的即该 tmp 命名文件）或现成的 `.docx`（直接转换，原 docx 不会删除）。
+  - **PDF 输出需本机安装 Microsoft Word**（docx2pdf 依赖 Word COM）；Word 不可用时脚本会给出明确提示并退出。
+  - 互斥边界：公文的 PDF 走本技能；普通（非公文）文档转 PDF 归 `docs-trans` 技能的 md-to-pdf mode。
+
+## 依赖
+
+- `python-docx`、`PyYAML`：DOCX 产出所需（既有依赖）。
+- `docx2pdf`（含 `pywin32`）：仅 PDF 输出需要（`pip install docx2pdf`），且要求本机已安装 Microsoft Word。
 
 ## 输入格式
 
@@ -129,6 +148,7 @@ reference_doc: 引用的来文       # 可选：仅批复类型使用
 | 方正小标宋简体未安装 | 系统缺少标准字体 | 自动回退为宋体+加粗（非致命警告） |
 | **粗体** 未生效 | Markdown 格式问题 | 确保使用 `**text**` 格式（两边各两个星号） |
 | 标题层级未识别 | 中文编号格式不对 | 使用 `一、` `(一)` `1.` 格式，或 `#` 前缀 |
+| 公文 PDF 转换需要 Microsoft Word | 本机无 Word（仅 PDF 输出） | 安装 Microsoft Word，或改为输出 DOCX |
 
 **关于 frontmatter：**
 
