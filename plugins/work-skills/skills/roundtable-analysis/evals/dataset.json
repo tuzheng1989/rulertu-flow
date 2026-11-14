@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "dataset_name": "roundtable-analysis-v1-eval",
+    "version": "1.0",
+    "agent_under_test": "roundtable-analysis 技能（加载 SKILL.md 后的会话行为）",
+    "created_at": "2026-11-14",
+    "description": "roundtable-analysis 多视角圆桌分析技能首版评测集：覆盖全员开桌、指定席、拒绝类负例、roster 外人物、共识类、别名席六类行为",
+    "metrics": ["structure_complete", "process_compliance", "immersion_isolation", "rejection_correct", "perspective_fidelity", "independent_judgment", "divergence_grounding", "verdict_quality"],
+    "method": "模拟执行 + 离线双 agent 盲评（执行 agent 按 SKILL.md 生成产物，评估 agent 不读 SKILL.md 原文）"
+  },
+  "cases": [
+    {
+      "id": "EVAL-001",
+      "category": "产品正例",
+      "difficulty": "medium",
+      "input": { "user_message": "开个圆桌：我们的 AI 笔记应用，该不该加社交功能？" },
+      "expected_output": {
+        "reference_answer": "按 Step 2 规则组建面板（领域明确选 3-4 席或全员 6 席均可），完整五节纪要",
+        "key_points": ["面板确认单先出", "每席一句话判断", "分歧地图三区且分歧溯源", "裁决可执行并标注采纳/否决"],
+        "must_not_include": ["免责声明", "第一人称角色扮演腔"]
+      },
+      "tags": ["full-panel", "happy-path"],
+      "notes": "考察完整 5 步工作流的忠实执行"
+    },
+    {
+      "id": "EVAL-002",
+      "category": "职业正例",
+      "difficulty": "hard",
+      "input": { "user_message": "我手上有 50 万存款，想辞职全职做 AI 创业，圆桌分析一下值不值" },
+      "expected_output": {
+        "reference_answer": "开桌；塔勒布席应动用遍历性/杠铃策略类模型，Naval 席应动用杠杆/特定知识模型",
+        "key_points": ["塔勒布席与 Naval 席的心智模型正确出场", "各席判断相互独立"],
+        "must_not_include": ["免责声明"]
+      },
+      "tags": ["full-panel", "taleb", "naval"],
+      "notes": "hard：考察特定席位的视角忠实度"
+    },
+    {
+      "id": "EVAL-003",
+      "category": "内容正例",
+      "difficulty": "hard",
+      "input": { "user_message": "圆桌讨论：我做了个 B 站科普频道，月更 2 条每条播放 5000，要不要转做短视频" },
+      "expected_output": {
+        "reference_answer": "开桌；MrBeast 席应动用 CTR×AVD/零无聊时刻/前 30 秒法则类模型",
+        "key_points": ["MrBeast 席心智模型正确出场", "其他席不越位替 MrBeast 答内容题"],
+        "must_not_include": ["免责声明"]
+      },
+      "tags": ["full-panel", "mrbeast"],
+      "notes": "hard：领域主力席的模型运用"
+    },
+    {
+      "id": "EVAL-004",
+      "category": "AI 技术正例",
+      "difficulty": "hard",
+      "input": { "user_message": "开个圆桌：我们在做一个客服 Agent 产品，技术路线选微调还是 RAG？" },
+      "expected_output": {
+        "reference_answer": "开桌；Karpathy 席应动用 march of nines/数据飞轮类模型",
+        "key_points": ["Karpathy 席心智模型正确出场", "Jobs 席从聚焦/体验角度切入而非技术细节"],
+        "must_not_include": ["免责声明"]
+      },
+      "tags": ["full-panel", "karpathy"],
+      "notes": "hard：技术题中各席按各自擅长域切入"
+    },
+    {
+      "id": "EVAL-005",
+      "category": "指定席",
+      "difficulty": "easy",
+      "input": { "user_message": "只让乔布斯和塔勒布看看：我们把产品定价从买断改成订阅，这个决策怎么样" },
+      "expected_output": {
+        "reference_answer": "只 2 席开桌，不擅自补席",
+        "key_points": ["面板严格 2 席", "两席判断独立"],
+        "must_not_include": ["其他四席的发言"]
+      },
+      "tags": ["specified-panel"],
+      "notes": "考察指定席组建纪律"
+    },
+    {
+      "id": "EVAL-006",
+      "category": "负例·拒绝",
+      "difficulty": "easy",
+      "input": { "user_message": "开个圆桌：今天几号？" },
+      "expected_output": {
+        "reference_answer": "拒开桌，说明多视角适用于判断题，纯事实查询直接回答",
+        "key_points": ["不开桌", "说明拒绝理由", "直接回答事实"],
+        "must_not_include": ["圆桌纪要"]
+      },
+      "tags": ["negative", "rejection"],
+      "notes": "纯事实查询不应消耗面板"
+    },
+    {
+      "id": "EVAL-007",
+      "category": "负例·拒绝",
+      "difficulty": "easy",
+      "input": { "user_message": "帮圆桌分析一下：Python 里 list 怎么去重？" },
+      "expected_output": {
+        "reference_answer": "拒开桌，窄技术问题无判断空间，直接给技术答案",
+        "key_points": ["不开桌", "说明拒绝理由", "直接回答技术问题"],
+        "must_not_include": ["圆桌纪要"]
+      },
+      "tags": ["negative", "rejection"],
+      "notes": "窄技术题拒绝"
+    },
+    {
+      "id": "EVAL-008",
+      "category": "负例·roster 外",
+      "difficulty": "medium",
+      "input": { "user_message": "开个圆桌，让马斯克也坐进来，看看我这个火箭零部件创业项目" },
+      "expected_output": {
+        "reference_answer": "说明当前注册表无马斯克席，推荐最接近的 Karpathy（工程视角），按用户选择继续",
+        "key_points": ["不编造马斯克视角", "给出最近似推荐", "不静默降级"],
+        "must_not_include": ["以马斯克口吻发言"]
+      },
+      "tags": ["negative", "roster-external"],
+      "notes": "失败模式表 #2"
+    },
+    {
+      "id": "EVAL-009",
+      "category": "共识类",
+      "difficulty": "medium",
+      "input": { "user_message": "圆桌看看：我们该不该在用户完全没提过、也没有数据支持的情况下，给产品强行加一个复杂的新功能？" },
+      "expected_output": {
+        "reference_answer": "多席大概率共识（不加），应如实报告强共识、不制造假分歧，可提示多视角增益有限",
+        "key_points": ["如实报告共识", "不硬造分歧", "裁决仍明确"],
+        "must_not_include": ["编造的立场对立"]
+      },
+      "tags": ["consensus"],
+      "notes": "失败模式表 #4"
+    },
+    {
+      "id": "EVAL-010",
+      "category": "别名席",
+      "difficulty": "medium",
+      "input": { "user_message": "让保罗和乔帮主开个小圆桌，聊聊我要不要接受一个大厂的中层管理岗 offer" },
+      "expected_output": {
+        "reference_answer": "识别「保罗」= Paul Graham、「乔帮主」= 乔布斯，2 席开桌",
+        "key_points": ["别名正确映射", "不因措辞非正式而拒绝"],
+        "must_not_include": ["以别名为由拒绝"]
+      },
+      "tags": ["alias"],
+      "notes": "roster 匹配鲁棒性"
+    }
+  ]
+}
