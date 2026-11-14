@@ -5,6 +5,23 @@
 
 ---
 
+## 环境自检（doctor）
+
+使用本桥接（即 SKILL.md 的方式 B）前，先确认环境就绪：
+
+```bash
+python --version
+python -c "import deepeval; print(deepeval.__version__)"
+```
+
+任一失败时的处理：
+
+- Python 缺失或版本过低：安装 Python（版本要求见 deepeval 官方文档）
+- deepeval 未安装：`pip install deepeval`
+- 环境无法就绪时，降级回本 skill 的纯 Prompt 驱动评测（零部署），不要卡在环境安装上反复排查
+
+---
+
 ## 决策树：何时使用 deepeval
 
 ```
