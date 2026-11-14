@@ -1,6 +1,6 @@
 {
   "name": "work-skills",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "description": "工作型技能合集：文章导读、深度研究、数据分析、战略分析、多视角圆桌分析、写作改稿、文档转换与思维工具",
   "author": {
     "name": "rulertu",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Work Skills",
     "shortDescription": "文章导读、深度研究、战略分析、多视角圆桌分析、写作改稿、文档转换与思维工具",
-    "longDescription": "25 个工作型技能：文章互动导读（article-guide）、深度研究（deep-research + 多源搜索通道）、战略分析、多视角圆桌分析（roundtable-analysis，召集乔布斯/Karpathy/Paul Graham/MrBeast/塔勒布/纳瓦尔六席具象视角独立判断后综合裁决，人格视角技能 karpathy/paul-graham/mrbeast/taleb/naval/steve-jobs-perspective 均可单席沉浸对话）、头脑风暴、费曼教学、文档与网页转换（PDF/Markdown）、录屏自动精简、长文写作、面向人类的写作与改稿（writing-for-human）、去 AI 味改写、本地语义搜索（sag）等。",
+    "longDescription": "19 个工作型技能：文章互动导读（article-guide）、深度研究（deep-research + 多源搜索通道）、战略分析、多视角圆桌分析（roundtable-analysis，双模式：圆桌模式召集乔布斯/Karpathy/Paul Graham/MrBeast/塔勒布/纳瓦尔六席具象视角独立判断后综合裁决，单席模式点名某一席沉浸式持续对话，六席人格卡内化于技能 references/personas/）、头脑风暴、费曼教学、文档与网页转换（PDF/Markdown）、录屏自动精简、长文写作、面向人类的写作与改稿（writing-for-human）、去 AI 味改写、本地语义搜索（sag）等。",
     "developerName": "rulertu",
     "category": "Productivity",
     "capabilities": ["Research", "Documents", "Writing", "Search"],
