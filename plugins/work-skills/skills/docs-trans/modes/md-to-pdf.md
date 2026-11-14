@@ -1,7 +1,4 @@
----
-name: md-to-pdf
-description: "Markdown 转 PDF 工具，支持预渲染 Mermaid、PlantUML、SVG、HTML 图表为 PNG 嵌入 PDF。当用户说'把这个 md 转成 pdf'、'导出 pdf'、'生成 pdf 文档'、'md 转 pdf'、'markdown 转 pdf'、'打印这个文档'或提到需要将 Markdown 文档转换为 PDF 格式时触发此技能。支持中英文混排、代码高亮、自定义样式、目录生成、页眉页脚等高级功能。"
----
+> 本文件为 docs-trans 的 md-to-pdf mode（2026-11-14 组建）。执行入口与 mode 路由见 SKILL.md。脚本路径相对本文件所在目录（modes/）解析。
 
 # MD to PDF
 
@@ -54,44 +51,44 @@ output/
 ### 禁用预渲染
 
 ```bash
-python scripts/md_to_pdf.py input.md --no-pre-render
+python ../scripts/mdpdf/md_to_pdf.py input.md --no-pre-render
 ```
 
 ## 快速开始
 
 ```bash
 # 转换单个文件（默认启用预渲染）
-python scripts/md_to_pdf.py input.md -o output.pdf
+python ../scripts/mdpdf/md_to_pdf.py input.md -o output.pdf
 
 # 禁用预渲染，使用 CDN 渲染 Mermaid
-python scripts/md_to_pdf.py input.md --no-pre-render
+python ../scripts/mdpdf/md_to_pdf.py input.md --no-pre-render
 
-# 指定输出目录
-python scripts/md_to_pdf.py input.md --output-dir ./pdfs
+# 指定输出路径（-o）
+python ../scripts/mdpdf/md_to_pdf.py input.md -o ./pdfs/output.pdf
 
 # 使用自定义样式
-python scripts/md_to_pdf.py input.md --style ./assets/custom.css
+python ../scripts/mdpdf/md_to_pdf.py input.md --style ../scripts/mdpdf/assets/custom.css
 ```
 
 ### 批量转换
 
 ```bash
-python scripts/md_to_pdf.py ./docs --batch --output-dir ./pdfs
-python scripts/md_to_pdf.py ./docs --batch --recursive
+python ../scripts/mdpdf/md_to_pdf.py ./docs --batch -o ./pdfs
+python ../scripts/mdpdf/md_to_pdf.py ./docs --batch --recursive
 ```
 
 ### 高级选项
 
 ```bash
 # 带目录
-python scripts/md_to_pdf.py input.md --toc --toc-depth 3
+python ../scripts/mdpdf/md_to_pdf.py input.md --toc --toc-depth 3
 
-# 页眉页脚和页码
-python scripts/md_to_pdf.py input.md --header --footer --page-numbers
+# 从 JSON 配置文件加载参数（字段见 assets/md-to-pdf.config.json）
+python ../scripts/mdpdf/md_to_pdf.py input.md --config ../scripts/mdpdf/assets/md-to-pdf.config.json
 
 # 页面设置
-python scripts/md_to_pdf.py input.md --page-size A4 --orientation portrait
-python scripts/md_to_pdf.py input.md --margin-top 20mm --margin-bottom 20mm --margin-left 15mm --margin-right 15mm
+python ../scripts/mdpdf/md_to_pdf.py input.md --page-size A4 --orientation portrait
+python ../scripts/mdpdf/md_to_pdf.py input.md --margin-top 20mm --margin-bottom 20mm --margin-left 15mm --margin-right 15mm
 ```
 
 ## 内部链接与锚链
@@ -182,6 +179,14 @@ Bob --> Alice: Hi
 
 ## 故障排除
 
+### Mermaid 预渲染需网络
+`diagram_renderer.py` 从 jsdelivr CDN 加载 mermaid.js——离线环境 Mermaid 图表预渲染不可用，可改用 `--no-pre-render`（CDN 渲染同样需网络）或将 Mermaid 块替换为预生成图片。PlantUML 服务端亦需网络。
+
+### 图表语法参考
+Mermaid 完整语法与示例见 `../references/mermaid-syntax.md`。
+
+
+
 ### 图表不显示
 
 1. 确认安装了 Playwright 浏览器：`playwright install chromium`
@@ -202,7 +207,7 @@ body { font-family: "Microsoft YaHei", "SimSun", sans-serif; }
 
 ## 技术实现
 
-- `scripts/md_to_pdf.py` - 主转换脚本（Markdown → HTML → PDF）
-- `scripts/diagram_renderer.py` - 图表预渲染模块（检测 → 保存 → 渲染 → 替换）
-- `assets/custom.css` - 自定义样式
-- `assets/md-to-pdf.config.json` - 配置文件
+- `../scripts/mdpdf/md_to_pdf.py` - 主转换脚本（Markdown → HTML → PDF）
+- `../scripts/mdpdf/diagram_renderer.py` - 图表预渲染模块（检测 → 保存 → 渲染 → 替换）
+- `../scripts/mdpdf/assets/custom.css` - 自定义样式
+- `../scripts/mdpdf/assets/md-to-pdf.config.json` - 配置文件

@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "C:\Users\tuzhe\runspace\rulertu-flow\plugins\work-skills\skills\docs-trans\scripts\mdpdf\md_to_pdf.py", line 26, in <module>
+    from playwright.sync_api import sync_playwright
+ModuleNotFoundError: No module named 'playwright'

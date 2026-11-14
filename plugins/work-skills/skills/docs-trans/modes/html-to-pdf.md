@@ -1,8 +1,4 @@
----
-name: html-to-pdf
-description: 将HTML文件（单个或多个、含幻灯片演示文稿）转换为PDF。自动从HTML的设计尺寸推断纸张比例，保持原始布局与背景色，多文件自动按序合并。每当用户需要将HTML导出为PDF、把幻灯片/HTML演示文稿转成PDF、合并多个PDF，或提到"HTML转PDF""生成PDF""打印PDF""slides转PDF"时，使用此技能。
-compatibility: 需要 Chrome 浏览器、Python 3.x；合并需 PyPDF2（pip install PyPDF2）
----
+> 本文件为 docs-trans 的 html-to-pdf mode（2026-11-14 组建）。执行入口与 mode 路由见 SKILL.md。脚本路径相对本文件所在目录（modes/）解析。
 
 # HTML to PDF 技能
 
@@ -17,17 +13,17 @@ compatibility: 需要 Chrome 浏览器、Python 3.x；合并需 PyPDF2（pip ins
 
 ## 快速使用
 
-唯一主脚本 `scripts/convert.py`，三种输入皆可：
+唯一主脚本 `../scripts/htmlpdf/convert.py`，三种输入皆可：
 
 ```bash
 # 单文件
-python scripts/convert.py page.html out.pdf
+python ../scripts/htmlpdf/convert.py page.html out.pdf
 
 # 目录（自动识别 slides/ 子目录并按序合并）
-python scripts/convert.py slides/ presentation.pdf
+python ../scripts/htmlpdf/convert.py slides/ presentation.pdf
 
 # 通配符
-python scripts/convert.py "drafts/ch*.html" out.pdf
+python ../scripts/htmlpdf/convert.py "drafts/ch*.html" out.pdf
 ```
 
 **默认即可正确工作**：脚本会自动从 HTML 的 `body{width;height}` 读出像素尺寸，
@@ -46,9 +42,9 @@ python scripts/convert.py "drafts/ch*.html" out.pdf
 
 | 场景 | 命令 |
 |------|------|
-| 幻灯片演示文稿（16:9 设计） | `python scripts/convert.py slides/ out.pdf`（自动推断，无需指定比例）|
-| 普通文档转 A4 | `python scripts/convert.py report.html out.pdf --page-size A4` |
-| 仅合并已有 PDF（不经 Chrome） | `python scripts/merge.py out.pdf a.pdf b.pdf c.pdf` |
+| 幻灯片演示文稿（16:9 设计） | `python ../scripts/htmlpdf/convert.py slides/ out.pdf`（自动推断，无需指定比例）|
+| 普通文档转 A4 | `python ../scripts/htmlpdf/convert.py report.html out.pdf --page-size A4` |
+| 仅合并已有 PDF（不经 Chrome） | `python ../scripts/htmlpdf/merge.py out.pdf a.pdf b.pdf c.pdf` |
 
 ## 工作原理
 
@@ -103,4 +99,4 @@ python scripts/convert.py "drafts/ch*.html" out.pdf
 
 ## 输出位置
 
-遵循所在项目约定。本仓库默认输出到 `output/exports/`（见项目 CLAUDE.md）。
+遵循所在项目约定，未约定时输出到当前工作目录。

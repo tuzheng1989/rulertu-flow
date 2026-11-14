@@ -96,15 +96,18 @@ def merge_pdfs(
 
 def main():
     """命令行入口"""
-    if len(sys.argv) < 3:
-        print("用法: python merge.py <output.pdf> <pdf1> <pdf2> ...")
-        print("示例: python merge.py output.pdf temp1.pdf temp2.pdf temp3.pdf")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description="合并多个 PDF 文件（PyPDF2）")
+    parser.add_argument("output_pdf", help="输出 PDF 路径")
+    parser.add_argument("pdf_files", nargs="+", help="输入 PDF 路径列表")
+    parser.add_argument(
+        "--delete-temp",
+        action="store_true",
+        help="合并成功后删除输入 PDF（默认保留——输入可能是用户的存量文件）",
+    )
+    args = parser.parse_args()
 
-    output_pdf = sys.argv[1]
-    pdf_files = sys.argv[2:]
-
-    success = merge_pdfs(pdf_files, output_pdf, delete_temp=True)
+    success = merge_pdfs(args.pdf_files, args.output_pdf, delete_temp=args.delete_temp)
     sys.exit(0 if success else 1)
 
 

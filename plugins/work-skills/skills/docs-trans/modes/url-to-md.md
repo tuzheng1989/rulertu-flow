@@ -1,14 +1,4 @@
----
-name: url-to-md
-description: URL 转 Markdown 技能。抓取网页内容并转换为干净的 Markdown，使用 Chrome CDP 渲染页面，支持 Defuddle 和 Legacy 双管道转换，支持 YouTube 字幕提取。工具型技能，输出位置由调用方（项目指令）决定。当用户提供链接并要求转为 Markdown / 保存网页内容时使用。
-version: 1.1.0
-metadata:
-  openclaw:
-    requires:
-      anyBins:
-        - bun
-        - npx
----
+> 本文件为 docs-trans 的 url-to-md mode（2026-11-14 组建）。执行入口与 mode 路由见 SKILL.md。脚本路径相对本文件所在目录（modes/）解析。
 
 # URL to Markdown
 
@@ -17,28 +7,28 @@ metadata:
 ## 用法
 
 ```
-${BUN_X} {baseDir}/scripts/main.ts <url> -o <输出路径>.md
+${BUN_X} ../scripts/url/main.ts <url> -o <输出路径>.md
 ```
 
 ### Agent 执行步骤
 
-1. 确定 SKILL.md 文件所在目录为 `{baseDir}`
-2. 脚本路径 = `{baseDir}/scripts/<script-name>.ts`
+1. 本文档位于 docs-trans 技能的 `modes/` 子目录，脚本树位于技能根的 `scripts/url/`
+2. 脚本路径 = `../scripts/url/<script-name>.ts`（相对本文档所在目录解析）
 3. 解析 `${BUN_X}`：已安装 `bun` → `bun`；否则 `npx -y bun`
-4. 首次使用时：若 `{baseDir}/scripts/node_modules` 不存在，先在 `{baseDir}/scripts` 目录执行 `bun install` 安装依赖（依赖清单见 `package.json` 与 `bun.lock`）
-5. 将文档中所有 `{baseDir}` 和 `${BUN_X}` 替换为实际值
+4. 首次使用时：若 `../scripts/url/node_modules` 不存在，先在 `../scripts/url` 目录执行 `bun install` 安装依赖（依赖清单见该目录下的 `package.json` 与 `bun.lock`）
+5. 将命令中的 `${BUN_X}` 替换为实际值后执行
 
 ### 脚本参考
 
 | 脚本 | 用途 |
 |------|------|
-| `scripts/main.ts` | CLI 入口，抓取 URL |
-| `scripts/html-to-markdown.ts` | Markdown 转换协调 |
-| `scripts/defuddle-converter.ts` | Defuddle 转换 |
-| `scripts/legacy-converter.ts` | Legacy 回退提取和转换 |
-| `scripts/markdown-conversion-shared.ts` | 共享元数据解析和文档工具 |
-| `scripts/media-localizer.ts` | 媒体下载和本地化 |
-| `scripts/cdp.ts` | Chrome CDP 连接管理 |
+| `../scripts/url/main.ts` | CLI 入口，抓取 URL |
+| `../scripts/url/html-to-markdown.ts` | Markdown 转换协调 |
+| `../scripts/url/defuddle-converter.ts` | Defuddle 转换 |
+| `../scripts/url/legacy-converter.ts` | Legacy 回退提取和转换 |
+| `../scripts/url/markdown-conversion-shared.ts` | 共享元数据解析和文档工具 |
+| `../scripts/url/media-localizer.ts` | 媒体下载和本地化 |
+| `../scripts/url/cdp.ts` | Chrome CDP 连接管理 |
 
 ## 功能
 

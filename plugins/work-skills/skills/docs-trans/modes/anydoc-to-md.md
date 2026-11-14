@@ -1,15 +1,6 @@
----
-name: anydoc-to-md
-description: EvoCenter 专用本地文档转 Markdown 技能。文本型文档（Word/PowerPoint/Excel/ODF/RTF/EPUB/CSV/PDF）用 anydoc 引擎（纯 Rust，亚 5ms/文档）；扫描版 PDF 自动路由到最佳 OCR 引擎（route_ocr.py 采样评分：现代横排印刷→Windows OCR 秒级/页；古籍竖排繁体/复杂版面→DeepSeek-OCR+llama.cpp；短文档≤8页→Claude 视觉直读），含循环检测/幻觉八形态清洗（clean_hallucinations.py）/断点续传/版式整理。当用户说"把 docx/pdf/pptx/xlsx 转成 markdown"、"文档转 md"、"anydoc"、"转换文档"、"转成 md"、"扫描版 pdf 转文字"、"OCR 这本书/文档"时触发。默认输出位置由调用决定（工具型）；用于知识库导入时输出到 inbox/ 并加 frontmatter。
-version: 3.1.0
-metadata:
-  openclaw:
-    requires:
-      anyBins:
-        - anydoc
----
+> 本文件为 docs-trans 的 anydoc-to-md mode（2026-11-14 组建）。执行入口与 mode 路由见 SKILL.md。脚本路径相对本文件所在目录（modes/）解析。
 
-# anydoc to Markdown（EvoCenter 专用）
+# anydoc to Markdown（任意文档 → Markdown）
 
 **多引擎路由**，按文档特征自动匹配最佳方法：
 
@@ -17,10 +8,10 @@ metadata:
 |---------|------|------|------|
 | 有文本层（Word/PPT/Excel/ODF/RTF/EPUB/CSV/文本型 PDF） | [anydoc](https://github.com/firecrawl/anydoc)（纯 Rust，14 种格式） | 亚 5ms/文档 | 完美 |
 | 扫描版，页数 ≤ 8 | Claude 视觉逐页读图 | 即时 | 极高 |
-| 扫描版，现代横排印刷（路由评分 ≥ 70） | Windows OCR（系统自带，`winocr.ps1`） | ~2s/页 | 正文高；美术字标题差 |
+| 扫描版，现代横排印刷（路由评分 ≥ 70） | Windows OCR（系统自带，`../scripts/anydoc/winocr.ps1`） | ~2s/页 | 正文高；美术字标题差 |
 | 扫描版，古籍/竖排/繁体/复杂版面（评分 < 70） | DeepSeek-OCR + llama.cpp（`ocr_pdf.py`） | ~30s/页 | 最高（版面理解） |
 
-扫描版 PDF **第一步先跑路由**：`python .claude/skills/anydoc-to-md/scripts/route_ocr.py "<PDF>"`，按输出的引擎建议走对应管线（详见 C 节）。
+扫描版 PDF **第一步先跑路由**：`python ../scripts/anydoc/route_ocr.py "<PDF>"`，按输出的引擎建议走对应管线（详见 C 节）。
 
 ## 支持格式
 
@@ -61,6 +52,8 @@ curl -s https://example.com/paper.pdf | anydoc -
 ```
 
 ### B. inbox 导入型（可选，用于知识库素材）
+
+> 历史环境工作流：本节依赖旧项目的 inbox/ 与 CLAUDE.md「素材处理」约定，当前环境未部署时可跳过本节。
 
 把外部文档导入知识库时，输出到 `inbox/` 并注入 frontmatter。遵守 CLAUDE.md「素材处理」规则。**两条管线通用此节。**
 
@@ -110,15 +103,17 @@ anydoc - [options] < file      从 stdin 读取
 
 ### 第一步：路由决策（route_ocr.py）
 
+> 优先级：条件同时命中多条路由时，按表中自上而下第一条执行（Windows OCR 优先于 DeepSeek-OCR，"≤8 页短文档"优先于页数阈值规则）。
+
 ```bash
-python .claude/skills/anydoc-to-md/scripts/route_ocr.py "<扫描版.pdf>"
+python ../scripts/anydoc/route_ocr.py "<扫描版.pdf>"
 ```
 
 自动完成：文本层检测（有则提示改用 anydoc）→ 中段采样 3 页渲染 → Windows OCR 试跑 → 质量评分（字符密度/竖排碎行/同字连击/Latin 异常占比）→ 输出引擎建议与预估耗时。
 
 - **评分 ≥ 70**（现代横排印刷）→ Windows OCR 引擎，加 `--run -o <输出.md>` 一键全书：
   ```bash
-  python .claude/skills/anydoc-to-md/scripts/route_ocr.py "<书.pdf>" --run -o inbox/<书名>.md
+  python ../scripts/anydoc/route_ocr.py "<书.pdf>" --run -o inbox/<书名>.md
   ```
 - **评分 < 70**（古籍/竖排/繁体/复杂版面）→ DeepSeek-OCR 管线（下方 C2 节）
 - **页数 ≤ 8** → 直接由 Claude 会话逐页读图转写，无需脚本（渲染出 pages/*.png 后逐张 Read）
@@ -158,7 +153,7 @@ curl -sL -C - "https://hf-mirror.com/ggml-org/DeepSeek-OCR-GGUF/resolve/main/mmp
 ### 标准用法
 
 ```bash
-python .claude/skills/anydoc-to-md/scripts/ocr_pdf.py "<扫描版.pdf>" -o "<输出.md>"
+python ../scripts/anydoc/ocr_pdf.py "<扫描版.pdf>" -o "<输出.md>"
 ```
 
 脚本自动完成：文本层检测 → 逐页渲染 → 拉起 llama-server（复用已运行的）→ 串行 OCR → 合并清理（页眉/页码/半角标点/段落重建/标题去重）→ 质量报告。
@@ -166,7 +161,7 @@ python .claude/skills/anydoc-to-md/scripts/ocr_pdf.py "<扫描版.pdf>" -o "<输
 **有页眉或侧边栏的书**（最高频故障源，见下方经验）加裁剪参数：
 
 ```bash
-python .claude/skills/anydoc-to-md/scripts/ocr_pdf.py "<书.pdf>" -o inbox/<书名>.md \
+python ../scripts/anydoc/ocr_pdf.py "<书.pdf>" -o inbox/<书名>.md \
   --crop-top 148 --crop-side "100,1390" --header-pattern "中医临床必读丛书"
 ```
 
@@ -203,8 +198,8 @@ python .claude/skills/anydoc-to-md/scripts/ocr_pdf.py "<书.pdf>" -o inbox/<书�
 DeepSeek-OCR 在**插图页/密集表格页**会把图内标注或表头「无限复读」或「编造模板」。这些输出能通过循环检测（不是逐行重复、不超长），必须成书后专项清洗：
 
 ```bash
-python .claude/skills/anydoc-to-md/scripts/clean_hallucinations.py <成书.md 或 pages-md/ 目录> --check   # 先检测
-python .claude/skills/anydoc-to-md/scripts/clean_hallucinations.py <同目标>                             # 清洗（1-7 类自动，8 类报告待人工）
+python ../scripts/anydoc/clean_hallucinations.py <成书.md 或 pages-md/ 目录> --check   # 先检测
+python ../scripts/anydoc/clean_hallucinations.py <同目标>                             # 清洗（1-7 类自动，8 类报告待人工）
 ```
 
 八种已确认形态（脚本覆盖前 7 类自动清 + 第 8 类检测报告）：

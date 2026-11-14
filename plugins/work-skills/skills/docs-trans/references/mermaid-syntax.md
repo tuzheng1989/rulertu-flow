@@ -294,7 +294,7 @@ body {
 增加渲染超时时间：
 
 ```bash
-python scripts/md_to_pdf.py input.md --timeout 120000
+python scripts/mdpdf/md_to_pdf.py input.md --timeout 120000
 ```
 
 ## 参考资源
