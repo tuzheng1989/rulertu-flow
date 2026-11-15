@@ -33,6 +33,16 @@ result = run_flow(
 
 要精确控制就绕开语法糖直调 `plan_flow`。
 
+## 知识 loader 三段式编排（skillref，0.3.0）
+
+资源菜单含渐进式知识 loader（`kind=tool` 且 `output_schema` 含 `selected`/
+`degraded`/`selection_trace` 的条目，实现前缀 `skillref/`，见
+[[flow-definition.md]]）且任务需要参考知识时，planner 按三段式范式编排：先
+`type=tool` 步调 loader（`inputs.task` 绑定任务描述），后继 `type=llm` 步以
+`{ref: step_output, step: <loader步id>, path: /selected}` 绑定命中知识正文数组，
+prompt 只在正文基础上作答（禁止绑定 loader 输出根或臆造字段）。无需参考知识的
+任务不编 loader 步。
+
 ## `plan_flow` 直调
 
 ```python

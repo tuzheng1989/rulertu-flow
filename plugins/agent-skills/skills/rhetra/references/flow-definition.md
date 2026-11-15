@@ -135,6 +135,20 @@ Step 选择器在 preflight 时对快照解析，**执行期不再变更**（冻
 - 真实模型快照可用 CLI 生成：`rhetra import-models <models.json目录> -o snapshot.json`
   （已存在则合并导入，支持 `--provider` / `--model` 过滤）。
 
+## `skillref/` 实现前缀（渐进式知识 loader，0.3.0）
+
+快照 `kind=tool` 条目的 `implementation` 以 `skillref/<key>` 开头时，装配路由
+到 skillref 注册表而非普通 tool adapter——条目是渐进式披露知识 loader
+（`SkillRefLoaderTool`，tool 步协议同构，返回体含 `selected`/`degraded`/
+`selection_trace`）。内置键：`skillref/scripted`（离线替身，config 可带
+script）、`skillref/typesafe`（真实 TypeSafe Jev 判定通道，凭据 fail closed）。
+
+**lane 差异**：`mode="auto"` 全表可见；`mode="offline"` 只认 `scripted` 键——
+offline 承诺零外呼，`typesafe` 条目在 offline 下不装配，运行期 adapter 缺失
+明确失败（不静默真调）。自定义 key 经 `register_loader_factory`
+（`rhetra.skillref.registry`）注册，同键覆盖。skillref 公开面未进顶层 `__all__`
+兼容承诺，manifest 与判定阈值细节以源码 `rhetra/skillref/` 为准。
+
 ## 校验闭环（写 flow 的标准动作）
 
 ```bash

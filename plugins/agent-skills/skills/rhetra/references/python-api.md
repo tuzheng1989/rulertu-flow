@@ -4,7 +4,7 @@
 
 ## 1. 执行入口
 
-### `run_flow(flow=None, *, task=None, input=None, resources=None, work_dir="evidence", mode="auto", retriever=None) -> RunResult`
+### `run_flow(flow=None, *, task=None, input=None, resources=None, work_dir="evidence", mode="auto", retriever=None, transforms=None) -> RunResult`
 
 顶层便捷入口，固定走全流程、不跳审查：归一化 → `build_frozen_execution` →
 `InvocationRunner.run`。
@@ -19,6 +19,11 @@
   替身）。mode 在任何资源装配前校验。
 - `retriever`：`ResourceRetriever | None`，仅 `task` 形态生效——规划期资源菜单
   检索（缺省全量）；显式 flow 形态传入 → `UsageError`。
+- `transforms`：`dict[str, Callable[[dict], dict]] | None`，implementation 键 →
+  transform 函数注入表：mode 装配产出后逐键注册进 TransformRegistry，**注入键
+  覆盖包内同名键**（消费方显式意图优先）；transform 函数不进冻结体，
+  `frozen_execution_hash` 与注入无关（证据账本不含函数体的延伸）。形状非法
+  （非 dict / 键非 str / 值不可调用）在装配前拦截，`UsageError` 外显。
 
 异常面见 [[quickstart.md]]：准入失败异常外显，不进 RunResult。
 

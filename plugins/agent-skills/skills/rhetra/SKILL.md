@@ -9,7 +9,7 @@ description: Rhetra-Harness Python 包使用指南（调用级 Agent Harness：�
 编排 LLM 与 Tool 调用：版本化 Flow 固定流程，每次执行映射回图中的步骤，并提供
 冻结执行契约与逐调用证据。
 
-**版本锚点**：本文档基于 rhetra 0.2.0（2026-11）。
+**版本锚点**：本文档基于 rhetra 0.3.0（2026-11）。
 源码与可运行样例在 GitHub 仓库 `tuzheng1989/rhetra-harness`（安装渠道见
 [[references/quickstart.md]]）；API 以其 `rhetra/__init__.py` 的 `__all__`
 （27 符号）为 0.x 兼容承诺。若包行为与本文档冲突，以源码为准并更新本技能。

@@ -1,6 +1,6 @@
 # Quickstart — 安装、CLI 与最小闭环
 
-> 版本锚点：rhetra 0.2.0（2026-11）。源码：GitHub 仓库 `tuzheng1989/rhetra-harness`。
+> 版本锚点：rhetra 0.3.0（2026-11）。源码：GitHub 仓库 `tuzheng1989/rhetra-harness`。
 
 ## 安装来源与导入（导入方必读）
 
@@ -24,10 +24,10 @@ pip install git+ssh://git@github.com/tuzheng1989/rhetra-harness.git
 pip install "rhetra[live] @ git+ssh://git@github.com/tuzheng1989/rhetra-harness.git"
 
 # 锁定到发布 tag（消费方推荐，保证可复现）
-pip install "rhetra[live] @ git+ssh://git@github.com/tuzheng1989/rhetra-harness.git@v0.2.0"
+pip install "rhetra[live] @ git+ssh://git@github.com/tuzheng1989/rhetra-harness.git@v0.3.0"
 ```
 
-- 等价渠道：GitHub Release 附件 wheel——`pip install <路径>/rhetra-0.2.0-py3-none-any.whl`。
+- 等价渠道：GitHub Release 附件 wheel——`pip install <路径>/rhetra-0.3.0-py3-none-any.whl`。
 
 - extras `live` = `openai` + `langchain-openai` + `httpx`（真实 adapter 的全部重依赖）。
 - base 安装下 `mode="auto"` 会 fail closed：`ImportError` 提示装 `rhetra[live]` 或改 offline。
@@ -44,7 +44,7 @@ pip install -e "./rhetra-harness[live]"      # editable + 真实栈
 ```
 
 本机消费者（如 EvoMAV）联调时用 editable 最省事；交付前切换到 git 渠道
-锁定 tag（如 v0.2.0）。
+锁定 tag（如 v0.3.0）。
 
 ### 环境要求
 
