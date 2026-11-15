@@ -94,7 +94,7 @@ write-report 是报告成稿后处理与长文档创作的单一入口。上层�
 | Analyzer | 导入模式：分析文档元信息、章节层级、内容特征与语言风格，产出结构分析（JSON） |
 | Converter | 导入模式：按结构分析将原始文档转换为引擎范式的 chapter-*.md 章节文件 |
 
-协作关系：Writer 产出 → Reviewer 审查 → 不通过则 Writer 修改（循环最多 3 次，超过报告用户请求人工介入）；导入模式先由 Analyzer 结构分析，Converter 按分析结果切章。四个 Subagent 定义随技能分发于 `.claude/agents/`。
+协作关系：Writer 产出 → Reviewer 审查 → 不通过则 Writer 修改（循环最多 3 次，超过报告用户请求人工介入）；导入模式先由 Analyzer 结构分析，Converter 按分析结果切章。四个 Subagent 定义随技能分发于 `.claude/agents/`；宿主无自定义子代理类型时，用 Agent 工具 general-purpose + 对应定义文件正文作提示词替身（各模式手册已内建此回退）。
 
 > 术语：引擎源自合并前的 long-text 技能，下述文件中出现的 "Long-Text 范式 / Long-Text 系统 / long-text 工作区" 字样均指本引擎，同义。
 
@@ -118,5 +118,5 @@ write-report 是报告成稿后处理与长文档创作的单一入口。上层�
 | `scripts/merge.py` | 章节整合脚本（所有模式） |
 | `scripts/parse-pdf.py` / `scripts/parse-docx.py` | PDF / DOCX 解析（分别需要 PyMuPDF / python-docx） |
 | `examples/import-example/` | 导入示例 |
-| `.claude/agents/` | Writer / Reviewer / Analyzer / Converter 四个 Subagent 定义 |
+| `.claude/agents/` | Writer / Reviewer / Analyzer / Converter 四个 Subagent 定义（提示词资产：宿主不支持自定义类型时作 general-purpose 替身提示词） |
 | `LICENSE.txt` | MIT 许可证 |

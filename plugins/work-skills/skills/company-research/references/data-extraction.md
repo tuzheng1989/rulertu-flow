@@ -366,7 +366,7 @@ const validatedData = validateData({
   ...businessModel
 });
 
-// Return to Claude
+// Return to agent
 return JSON.stringify(validatedData, null, 2);
 ```
 

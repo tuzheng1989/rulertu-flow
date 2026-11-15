@@ -13,7 +13,7 @@ Automated company information collection, sitemap generation, and research repor
 **Directory layout:**
 ```
 ./company-research/
-├── data/                           # Persistent JSON data (for Claude reference)
+├── data/                           # Persistent JSON data (for agent reference)
 │   ├── index.json                 # Master index of all researched companies
 │   └── {company_slug}/            # Company-specific data
 │       ├── basic_info.json        # Company basic information
@@ -655,8 +655,8 @@ For each visited page, save extracted data:
 ```
 
 **JSON storage benefits:**
-- ✅ Claude can quickly read with Read tool
-- ✅ Searchable with Grep tool
+- ✅ 当前会话可用 Read 工具直接读取
+- ✅ 可用文本搜索（grep）直接检索
 - ✅ Version control friendly
 - ✅ Reusable across sessions
 - ✅ Easy to update incrementally
@@ -743,7 +743,7 @@ Keep user informed during extraction:
 
 User: "字节跳动最近怎么样？"
 
-Claude:
+Agent:
 1. Detects "字节跳动" in message
 2. Checks ./company-research/data/index.json
 3. Finds match: slug="bytedance", last_researched="2025-02-10"
@@ -753,7 +753,7 @@ Claude:
 
 User: "我想做短视频竞品分析"
 
-Claude:
+Agent:
 1. Asks: "目标竞争对手是哪家公司？"
 2. User: "抖音"
 3. Checks for "抖音" → finds "bytedance" with alias "抖音"
@@ -763,7 +763,7 @@ Claude:
 
 User: "帮我研究一下 Anthropic"
 
-Claude:
+Agent:
 1. Checks index.json → no match
 2. Proceeds with fresh research
 3. Creates new entry in index.json
@@ -925,7 +925,7 @@ Four complete report templates (one per scenario) with:
 
 **New in v2.0:**
 - ✅ Automatic sitemap generation (2-3 layers, 10-50 pages)
-- ✅ JSON persistent storage for Claude reference
+- ✅ JSON persistent storage for agent reference
 - ✅ Auto-detection of previously researched companies
 - ✅ Incremental update support with comparison
 - ✅ Company name normalization and alias matching

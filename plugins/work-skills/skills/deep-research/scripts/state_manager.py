@@ -10,11 +10,24 @@ Deep Research Skill - State Manager
 
 import json
 import hashlib
+import os
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional, Set
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+
+
+def default_data_dir() -> Path:
+    """deep-research 数据根目录（跨宿主通用，不写死任何宿主配置目录）。
+
+    Windows 用 %LOCALAPPDATA%，POSIX 用 $XDG_DATA_HOME 或 ~/.local/share。
+    """
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "deep-research"
 
 
 @dataclass
@@ -61,8 +74,8 @@ class ResearchState:
     def save(self, filepath: Optional[str] = None):
         """保存到文件"""
         if filepath is None:
-            # 默认保存到用户目录下的 .claude/deep-research/checkpoints/
-            checkpoint_dir = Path.home() / ".claude" / "deep-research" / "checkpoints"
+            # 默认保存到跨平台数据目录的 checkpoints/（见 default_data_dir）
+            checkpoint_dir = default_data_dir() / "checkpoints"
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             filepath = str(checkpoint_dir / f"{self.session_id}.json")
 
@@ -237,7 +250,7 @@ def save_checkpoint(state: ResearchState) -> str:
 
 def load_latest_checkpoint() -> Optional[ResearchState]:
     """加载最新的检查点"""
-    checkpoint_dir = Path.home() / ".claude" / "deep-research" / "checkpoints"
+    checkpoint_dir = default_data_dir() / "checkpoints"
     if not checkpoint_dir.exists():
         return None
 
@@ -252,7 +265,7 @@ def load_latest_checkpoint() -> Optional[ResearchState]:
 
 def list_checkpoints() -> List[Dict]:
     """列出所有检查点"""
-    checkpoint_dir = Path.home() / ".claude" / "deep-research" / "checkpoints"
+    checkpoint_dir = default_data_dir() / "checkpoints"
     if not checkpoint_dir.exists():
         return []
 
@@ -307,7 +320,7 @@ if __name__ == "__main__":
 
         elif cmd == "clean":
             # 清理所有检查点
-            checkpoint_dir = Path.home() / ".claude" / "deep-research" / "checkpoints"
+            checkpoint_dir = default_data_dir() / "checkpoints"
             if checkpoint_dir.exists():
                 for filepath in checkpoint_dir.glob("*.json"):
                     filepath.unlink()

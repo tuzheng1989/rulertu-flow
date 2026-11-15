@@ -53,7 +53,7 @@ author: Claude Code
 启动 **clarifier** subagent 判断主题是否需要澄清：
 
 ```yaml
-使用 Task 工具启动 subagent:
+使用 Agent 工具启动 subagent:
   description: 判断研究主题是否需澄清
   subagent_type: general-purpose
   prompt: |
@@ -78,7 +78,7 @@ author: Claude Code
 启动 **brief-writer** subagent，产出贯穿全程的研究简报：
 
 ```yaml
-使用 Task 工具启动 subagent:
+使用 Agent 工具启动 subagent:
   description: 生成研究简报
   subagent_type: general-purpose
   prompt: |
@@ -113,7 +113,7 @@ author: Claude Code
 启动 **query-generator** subagent：
 
 ```yaml
-使用 Task 工具启动 subagent:
+使用 Agent 工具启动 subagent:
   description: 生成深度研究搜索查询 (第 {loop_count} 轮)
   subagent_type: general-purpose
   prompt: |
@@ -217,7 +217,7 @@ curl -sL "https://www.alphaxiv.org/abs/{arxiv_id}.md" | head -c 20000   # 按需
 启动 **summarizer** subagent，对**本轮**搜索结果生成结构化小结：
 
 ```yaml
-使用 Task 工具启动 subagent:
+使用 Agent 工具启动 subagent:
   description: 整合本轮搜索结果 (第 {loop_count} 轮)
   subagent_type: general-purpose
   prompt: |
@@ -248,7 +248,7 @@ if len(running_summary) > compress_threshold_chars and loop_count > 1:
 ```
 
 ```yaml
-使用 Task 工具启动 subagent（仅当超阈值时）:
+使用 Agent 工具启动 subagent（仅当超阈值时）:
   description: 压缩研究摘要
   subagent_type: general-purpose
   prompt: |
@@ -265,7 +265,7 @@ if len(running_summary) > compress_threshold_chars and loop_count > 1:
 启动 **reflector** subagent，**评分维度由 research_brief 动态驱动**：
 
 ```yaml
-使用 Task 工具启动 subagent:
+使用 Agent 工具启动 subagent:
   description: 反思研究进展 (第 {loop_count} 轮)
   subagent_type: general-purpose
   prompt: |
@@ -298,7 +298,7 @@ if not reflect_result["should_continue"]:
 启动 **reporter** subagent，**报告分段/受众/格式引用 research_brief**，并**自动保存到文件**：
 
 ```yaml
-使用 Task 工具启动 subagent:
+使用 Agent 工具启动 subagent:
   description: 生成最终研究报告并自动保存
   subagent_type: general-purpose
   prompt: |

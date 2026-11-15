@@ -2,7 +2,6 @@
 name: converter
 description: "文档转换专家。将原始文档内容转换为 Long-Text 范式的章节文件。保留格式、代码块、表格和引用。"
 tools: Read, Write
-model: sonnet
 ---
 
 # Converter Subagent - 文档转换专家

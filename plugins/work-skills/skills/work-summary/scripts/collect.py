@@ -37,6 +37,7 @@ CLAUDE_HISTORY = Path.home() / ".claude" / "history.jsonl"
 CODEX_HISTORY = Path.home() / ".codex" / "history.jsonl"
 CODEX_SESSION_INDEX = Path.home() / ".codex" / "session_index.jsonl"
 CODEX_PROJECTS = Path.home() / ".codex" / "sessions"
+ZCODE_ROLLOUT = Path.home() / ".zcode" / "cli" / "rollout"
 DEFAULT_REPOS_ROOT = Path("D:/runspace")
 
 CONTENT_MAX_CHARS = 300   # 会话输入截断长度，足够 Agent 理解意图
@@ -209,6 +210,37 @@ def collect_codex(start_dt, end_dt):
         if titles_in:
             result[key + "#meta"] = [{"title": titles_in[0]}]
     return result, full_sids
+
+
+# ============================================================
+# 数据源 2b：ZCode 会话（最小接入）
+# ============================================================
+
+def collect_zcode(start_dt, end_dt):
+    """~/.zcode/cli/rollout/model-io-sess_*.jsonl：宿主模型 IO 诊断文件。
+
+    最小接入：mtime 落在窗口内的会话各计一条「会话活跃」，不做内容解析——
+    请求体是宿主私有诊断格式且含完整 system prompt，解析脆弱且无意义。
+    深度摘要待宿主提供会话级导出格式后再接入。
+    """
+    if not ZCODE_ROLLOUT.exists():
+        log(f"ZCode 会话目录不存在: {ZCODE_ROLLOUT}")
+        return {}
+
+    start_ts, end_ts = start_dt.timestamp(), end_dt.timestamp()
+    entries = []
+    for path in sorted(ZCODE_ROLLOUT.glob("model-io-sess_*.jsonl")):
+        mtime = path.stat().st_mtime
+        if not (start_ts <= mtime < end_ts):
+            continue
+        sid = path.stem.removeprefix("model-io-")
+        dt = datetime.fromtimestamp(mtime)
+        entries.append({
+            "date": dt.strftime("%Y-%m-%d"),
+            "time": dt.strftime("%H:%M"),
+            "content": f"ZCode 会话活跃（{sid[:13]}…，内容未解析：宿主诊断格式）",
+        })
+    return {"zcode": entries} if entries else {}
 
 
 # ============================================================
@@ -475,6 +507,7 @@ def main():
 
     claude, claude_sessions = collect_claude(start_dt, end_dt)
     codex, codex_full_sids = collect_codex(start_dt, end_dt)
+    zcode = collect_zcode(start_dt, end_dt)
     git = collect_git(start_dt, end_dt, args.repos)
 
     if args.summarize:
@@ -492,11 +525,13 @@ def main():
 
     total_claude = sum(group_len(v) for v in claude.values())
     total_codex = sum(group_len(v) for v in codex.values())
+    total_zcode = sum(len(v) for v in zcode.values())
     total_git = sum(len(v) for v in git.values())
     all_projects = sorted(set(list(claude.keys()) + list(git.keys())))
 
     log(f"Claude Code 会话: {total_claude} 条 / {len(claude)} 项目")
     log(f"Codex 会话: {total_codex} 条")
+    log(f"ZCode 会话: {total_zcode} 条（仅活跃计数，内容未解析）")
     log(f"Git 提交: {total_git} 条 / {len(git)} 项目")
 
     output = {
@@ -508,13 +543,15 @@ def main():
         "stats": {
             "total_claude_sessions": total_claude,
             "total_codex_sessions": total_codex,
+            "total_zcode_sessions": total_zcode,
             "total_git_commits": total_git,
             "active_projects": all_projects,
         },
         "claude_code_sessions": claude,
         "codex_sessions": codex,
+        "zcode_sessions": zcode,
         "git_commits": git,
-        "_notes": "时间窗口左闭右开；深度摘要来自整个会话，可能含窗口外内容，须核验时间；hermes_sessions 需 Agent 用 session_search 补充；codex 项目归属需结合内容判断",
+        "_notes": "时间窗口左闭右开；深度摘要来自整个会话，可能含窗口外内容，须核验时间；hermes_sessions 需 Agent 用 session_search 补充；codex 项目归属需结合内容判断；zcode 仅会话活跃计数（宿主诊断格式未解析）",
     }
 
     text = json.dumps(output, ensure_ascii=False, indent=2)

@@ -2,7 +2,6 @@
 name: analyzer
 description: "文档结构分析专家。用于导入模式，分析文档并提取结构信息、元数据和风格特征。"
 tools: Read
-model: sonnet
 ---
 
 # Analyzer Subagent - 文档结构分析专家

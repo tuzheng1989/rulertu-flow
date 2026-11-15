@@ -80,9 +80,10 @@
   },
 
   "paths": {
-    "checkpoints": "~/.claude/deep-research/checkpoints",
-    "reports": "~/.claude/deep-research/reports",
-    "logs": "~/.claude/deep-research/logs"
+    "_note": "实际路径由 scripts/state_manager.py 的 default_data_dir() 决定：Windows 为 %LOCALAPPDATA%/deep-research，POSIX 为 $XDG_DATA_HOME/deep-research 或 ~/.local/share/deep-research。以下为 POSIX 形态示例。",
+    "checkpoints": "~/.local/share/deep-research/checkpoints",
+    "reports": "~/.local/share/deep-research/reports",
+    "logs": "~/.local/share/deep-research/logs"
   },
 
   "prompts": {

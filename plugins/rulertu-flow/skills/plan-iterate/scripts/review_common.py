@@ -7,10 +7,11 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
-from normalize import ReviewError, atomic_write_json
+from normalize import ReviewError, atomic_write_json, normalize_file
 
 EXIT_INPUT, EXIT_PROCESS, EXIT_PROTOCOL = 2, 3, 4
 ROUND_PATTERN = re.compile(r"review-R(\d+)\.json$")
@@ -166,3 +167,33 @@ def write_state(
     legacy = output.parent / "session.txt"
     if legacy.exists():
         legacy.unlink()
+
+
+def main(argv: list[str]) -> int:
+    """子代理评审通道的落盘入口：归一化校验与 state 写入。
+
+    用法：
+      review_common.py normalize <review.json>
+      review_common.py state <plan> <round> <review.json>
+    """
+    args = argv[1:]
+    if len(args) == 2 and args[0] == "normalize":
+        try:
+            normalize_file(Path(args[1]))
+        except ReviewError as exc:
+            print(f"protocol error: {exc}", file=sys.stderr)
+            return EXIT_PROTOCOL
+        return 0
+    if len(args) == 4 and args[0] == "state":
+        plan, round_number, output = Path(args[1]), int(args[2]), Path(args[3])
+        write_state(output, plan, round_number, "subagent-auditor", "auditor", "subagent")
+        return 0
+    print(
+        "usage: review_common.py normalize <review.json> | state <plan> <round> <review.json>",
+        file=sys.stderr,
+    )
+    return EXIT_INPUT
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

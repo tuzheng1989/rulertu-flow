@@ -1,6 +1,6 @@
 # Rulertu Flow 2.0
 
-面向 Claude Code 与 Codex 双宿主的个人插件市场（marketplace），包含六个互相独立的插件：从 T0–T3 风险分级的工作流引擎，到 Agent 工程、知识产权申报、前端开发与日常工作技能。按需选装，互不依赖。
+面向 ZCode 与 Codex 双宿主的个人插件市场（marketplace），包含六个互相独立的插件：从 T0–T3 风险分级的工作流引擎，到 Agent 工程、知识产权申报、前端开发与日常工作技能。按需选装，互不依赖。
 
 ## 插件一览
 
@@ -16,8 +16,8 @@
 ## 特色
 
 - **T0–T3 风险分级**：方案按风险定级决定验证强度——低风险批次定向测试即可收口，高风险批次触发全量回归；`optimization-plan` 写方案、`implement-plan` 执行、`plan-iterate` 独立评审，三者构成完整闭环。
-- **四角色模型路由**：主控协调之下，Executor / Auditor / Advisor 各绑定固定模型与上下文策略（Claude Code 与 Codex 各自独立配置），固定模型不可用时阻断而非静默降级。
-- **双宿主**：同一 marketplace 同时服务 Claude Code 与 Codex，插件双 manifest 分发；`plan-iterate` 评审甚至跨模型对称互调——Claude Code 宿主外调 Codex CLI，反之亦然。
+- **四角色模型路由**：主控协调之下，Executor / Auditor / Advisor 各绑定固定模型与上下文策略（ZCode 与 Codex 各自独立配置），固定模型不可用时阻断而非静默降级。
+- **双宿主**：同一 marketplace 同时服务 ZCode 与 Codex；`plan-iterate` 评审默认由插件 auditor 子代理做只读独立评审，宿主无子代理能力或需跨模型第二意见时外调 Codex CLI。
 - **commit/PR 文案路由**：会话内任何提交与 PR 文案先经 `commit` / `pr` 技能起草，PreToolUse 守卫（`hooks/commit-router.js`）在技能未加载时向模型提醒一次，不拦截提交。
 - **流程可视化**：`flow-deck` 以 mod 形式对工作流零侵入地可视化——评审进度横条、批次边界守卫（`flow_batch`）、波次依赖 DAG、git 改动面板与子代理监控。
 
@@ -31,22 +31,22 @@ codex plugin add rulertu-flow@rulertu-flow
 codex plugin list
 ```
 
-Claude Code：
+ZCode（CLI 或桌面端 Settings → Plugin Management 的 Discover 页）：
 
 ```sh
-/plugin marketplace add tuzheng1989/rulertu-flow
-/plugin install rulertu-flow@rulertu-flow
+zcode plugins marketplace add tuzheng1989/rulertu-flow
+zcode plugins install rulertu-flow@rulertu-flow
 ```
 
 ## 选择性与安装范围
 
 六个插件互相独立，按需单独安装，同时支持用户全局与项目级两种范围。
 
-Claude Code：安装时用 `--scope` 指定范围——`user`（写入 `~/.claude/settings.json`，所有项目可用，默认）、`project`（写入项目 `.claude/settings.json`，随仓库共享给团队）、`local`（写入 `.claude/settings.local.json`，仅本机本项目）：
+ZCode：安装时用 `-s` 指定范围——`user`（本用户全局，默认）、`project`（随当前项目）：
 
 ```sh
-claude plugin install work-skills@rulertu-flow --scope user    # 全局
-claude plugin install agent-skills@rulertu-flow --scope project # 项目级共享
+zcode plugins install work-skills@rulertu-flow              # 用户全局（默认）
+zcode plugins install agent-skills@rulertu-flow -s project  # 项目级
 ```
 
 Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/marketplace.json` 随仓库分发（项目级，克隆即得）；把本仓库加到 `~/.agents/plugins/` 则为个人全局。所有条目均为 `policy.installation: "AVAILABLE"` 按需选装，装后可在 `~/.codex/config.toml` 逐插件启停。
@@ -60,13 +60,13 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 - `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
 - `commit`：依据实际改动起草或改写提交说明，标题写具体变化，正文按需解释原因与约束。
 - `pr`：依据最终 diff 起草或改写 PR 标题与正文，说明问题、行为变化和实际验证结果。
-- `update`：更新本机 Claude Code 工具链的外部组件。
+- `update`：更新本机 ZCode 工具链的外部组件。
 
 `commit` 和 `pr` 默认用中文面向项目维护者写作，用户与目标仓库的明确要求优先。二者专注于文案，实际提交、推送或创建与更新 PR 沿用会话中已有授权。可直接要求"为暂存改动写 commit message"或"为当前分支写 PR 标题和正文"。
 
 两个技能同时承担会话内的文案路由：任何 `git commit`、PR 创建或更新的文案先经对应技能起草，完成其他任务需要提交时主动提醒。插件附带 PreToolUse 守卫（`hooks/commit-router.js`），在 transcript 未见技能加载时向模型提醒一次，不拦截提交。
 
-`plan-iterate` 使用对称的跨模型后端：Claude Code 宿主外调 Codex CLI，Codex 宿主外调 Claude Code `opus/high`。两个方向都使用相同 schema、8.5 分门槛、最多三轮状态机和可续接 session；真实外部调用需要用户明确授权且目标 CLI 已登录。
+`plan-iterate` 评审按宿主能力选通道：默认由插件 `auditor` 子代理做只读独立评审（每轮独立派发）；宿主无子代理能力或用户要求跨模型第二意见时，外调 Codex CLI 只读沙箱。两种通道使用相同 schema、8.5 分门槛、最多五轮状态机；Codex 外调需要用户明确授权且 codex CLI 已登录。
 
 ## work-skills：日常工作技能
 
@@ -94,7 +94,7 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 - `model-info`：模型参数查询
 - `rhetra`：调用级 Flow Harness 使用指南
 
-Claude Code 可用 `/agent-skills:proactive-agent-design` 调用，例如"设计一个持续发现项目风险的助手"或"评审现有 Agent 为什么反复打扰用户"。技能通过九问逐步形成决策，缺失信息保留待定；论文校准与【导读】【共创】来源分开标注。
+会话内可用 `/agent-skills:proactive-agent-design` 调用，例如"设计一个持续发现项目风险的助手"或"评审现有 Agent 为什么反复打扰用户"。技能通过九问逐步形成决策，缺失信息保留待定；论文校准与【导读】【共创】来源分开标注。
 
 ## copyright-skills：知识产权申报
 
@@ -116,13 +116,13 @@ python -m pytest plugins/copyright-skills/tests -q
 
 ## rulertu-frontend：前端开发
 
-前端开发工程师插件：`frontend-dev` 代理（在现有项目中完成界面开发、前端排障、性能优化与浏览器验收，Claude Code 侧经 `rulertu-frontend:frontend-dev` 调用）加 7 个配套技能——`build-web-interface-cn`（网页界面开发）、`troubleshoot-frontend-functionality-cn`（前端问题排查与修复）、`optimize-web-performance-cn`（网页性能优化）、`test-browser-experience-cn`（网页功能与兼容性测试）、`interface-requirement-contract-cn`（前端需求与验收设计）、`interaction-state-implementation-cn`（页面交互与状态开发）、`agent-frontend-cn`（Agent 对话前端方法论）。
+前端开发工程师插件：`frontend-dev` 代理（在现有项目中完成界面开发、前端排障、性能优化与浏览器验收，经 `rulertu-frontend:frontend-dev` 子代理调用）加 7 个配套技能——`build-web-interface-cn`（网页界面开发）、`troubleshoot-frontend-functionality-cn`（前端问题排查与修复）、`optimize-web-performance-cn`（网页性能优化）、`test-browser-experience-cn`（网页功能与兼容性测试）、`interface-requirement-contract-cn`（前端需求与验收设计）、`interaction-state-implementation-cn`（页面交互与状态开发）、`agent-frontend-cn`（Agent 对话前端方法论）。
 
 技能来自 z.ai 官方技能包（Apache-2.0），各技能目录保留 LICENSE 与 NOTICE。
 
 ## flow-deck：工作流仪表盘
 
-对 rulertu-flow 工作流零侵入的可视化（mod 形态，仅 Claude Code 生效）：
+对 rulertu-flow 工作流零侵入的可视化（Claude Code mod 形态；ZCode 下不加载——ZCode 面板形态改造暂缓，待评估原生会话面板能力）：
 
 - `/flow` 面板：评审轮次与评分趋势、执行阶段进度、波次依赖 DAG（按批三态着色）、git 改动面板、子代理运行状态
 - 批次边界守卫：每批派单后经 `flow_batch` 声明允许改动的文件集合，越界 Edit/Write 按 `guardMode` 提醒或拦截

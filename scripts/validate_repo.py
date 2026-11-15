@@ -41,14 +41,19 @@ def validate() -> list[str]:
     require((PLUGIN / codex_manifest["skills"].removeprefix("./")).is_dir(), "skills path is missing", errors)
     require(set(review_schema["required"]) == {"overall_quality", "score", "issues", "suggestions"}, "review schema fields differ", errors)
     review_scripts = PLUGIN / "skills" / "plan-iterate" / "scripts"
-    for script in ("review_common.py", "codex_review.py", "claude_review.py", "codex-review.sh", "claude-review.sh"):
+    for script in ("review_common.py", "codex_review.py", "codex-review.sh"):
         require((review_scripts / script).is_file(), f"review backend file missing: {script}", errors)
-    claude_backend = (review_scripts / "claude_review.py").read_text(encoding="utf-8")
-    for fragment in ('"--model",\n        "opus"', '"--effort",\n        "high"', '"--permission-mode",\n        "plan"', '"Read,Glob,Grep"'):
-        require(fragment in claude_backend, f"Claude read-only route differs: {fragment}", errors)
-    require("shell=True" not in claude_backend, "Claude backend must not use a shell", errors)
-    require("Codex 宿主：运行 `scripts/claude_review.py" in plan_iterate, "Codex host must route to Claude", errors)
-    require("Claude Code 宿主：运行 `scripts/codex_review.py" in plan_iterate, "Claude host must route to Codex", errors)
+    require(not (review_scripts / "claude_review.py").exists(), "claude backend must stay deleted", errors)
+    require(not (review_scripts / "claude-review.sh").exists(), "claude sh wrapper must stay deleted", errors)
+    subagent_cli = (review_scripts / "review_common.py").read_text(encoding="utf-8")
+    for fragment in ('"subagent-auditor"', '"auditor"', "def main(", "shell=True"):
+        if fragment == "shell=True":
+            require(fragment not in subagent_cli, "review entry must not use a shell", errors)
+        else:
+            require(fragment in subagent_cli, f"subagent review entry differs: {fragment}", errors)
+    require("宿主有子代理工具且 `rulertu-flow:auditor` 可用" in plan_iterate, "subagent review route missing", errors)
+    require("scripts/codex_review.py <plan> <output> [session-id]" in plan_iterate, "Codex route differs", errors)
+    require("claude_review" not in plan_iterate, "plan-iterate still routes to claude backend", errors)
     require("不回退为同宿主自评" in plan_iterate, "cross-model fallback guard missing", errors)
 
     for skill in (PLUGIN / "skills").glob("*/SKILL.md"):
@@ -79,10 +84,13 @@ def validate() -> list[str]:
             if front:
                 require("name:" in front.group(1) and "description:" in front.group(1), f"incomplete frontmatter: {skill}", errors)
 
-    role_models = {"auditor": "opus", "advisor": "opus"}
-    for role, model in role_models.items():
+    AGENT_MODEL = "account:bigmodel-individual-coding-plan/GLM-5.3"
+    for role in ("auditor", "advisor"):
         wrapper = (PLUGIN / "agents" / f"{role}.md").read_text(encoding="utf-8")
-        require(f"model: {model}" in wrapper, f"{role} wrapper model must be {model}", errors)
+        require(f"model: {AGENT_MODEL}" in wrapper, f"{role} wrapper model must be {AGENT_MODEL}", errors)
+        require("thoughtLevel: max" in wrapper, f"{role} wrapper must pin max thought level", errors)
+        require("tools: [Read, Bash]" in wrapper, f"{role} wrapper tools must be Read+Bash", errors)
+        require("Glob" not in wrapper and "Grep" not in wrapper, f"{role} wrapper must not pin host-only tools", errors)
         require(f"references/roles/{role}.md" in wrapper, f"{role} wrapper lacks role pointer", errors)
         require(len(wrapper.splitlines()) <= 10, f"{role} wrapper is not thin", errors)
         require((PLUGIN / "references" / "roles" / f"{role}.md").is_file(), f"{role} body missing", errors)

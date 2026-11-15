@@ -5,12 +5,13 @@ Deep Research Skill - Main Orchestrator
 深度研究主控流程，负责：
 1. 协调各研究节点的执行
 2. 管理研究状态
-3. 通过 Claude Code CLI 调用 skills
+3. 通过 zcode CLI（headless）调用 skills
 4. 生成最终报告
 
-注意：本脚本是命令行端到端编排（独立路径），其搜索（见 _search_with_skill）
-仍通过 Claude CLI 调用 meta-search skill，未随 SKILL.md 迁移到 MCP 工具。
-Claude 会话内的技能运行时以 SKILL.md 为准，使用 mcp__web-search-prime__
+注意：本脚本是命令行端到端编排（独立路径，实验性），其搜索（见 _search_with_skill）
+仍通过 zcode CLI（headless `zcode -p`）调用 meta-search skill，未随 SKILL.md
+迁移到 MCP 工具；headless 模式对斜杠技能的展开行为待验证。
+会话内的技能运行时以 SKILL.md 为准，使用 mcp__web-search-prime__
 web_search_prime 与 mcp__web-reader__webReader。两条路径暂时并存，
 新功能开发请优先遵循 SKILL.md 的 MCP 流程。
 
@@ -34,16 +35,26 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 # 导入状态管理
-from state_manager import ResearchState, create_state, save_checkpoint, load_latest_checkpoint, list_checkpoints
+from state_manager import (
+    ResearchState,
+    create_state,
+    save_checkpoint,
+    load_latest_checkpoint,
+    list_checkpoints,
+    default_data_dir,
+)
+
+# 宿主 CLI（headless）。zcode 不在 PATH 时需自行加入或改此常量。
+HOST_CLI = ["zcode"]
 
 
-class ClaudeCLI:
-    """Claude Code CLI 封装"""
+class HostCLI:
+    """zcode CLI headless 封装（实验性：斜杠技能展开行为以 zcode 实测为准）"""
 
     @staticmethod
     def call_skill(skill_name: str, input_text: str, timeout: int = 120) -> str:
         """
-        调用 Claude Code skill
+        调用 zcode skill（headless）为
 
         Args:
             skill_name: skill 名称 (如 "meta-search")
@@ -53,11 +64,11 @@ class ClaudeCLI:
         Returns:
             skill 的输出结果
         """
-        # 构建命令
+        # 构建命令：headless 模式经斜杠命令调用技能（展开行为待实测验证）
         cmd = [
-            "claude",
-            skill_name,
-            input_text
+            *HOST_CLI,
+            "-p",
+            f"/{skill_name} {input_text}",
         ]
 
         try:
@@ -74,20 +85,21 @@ class ClaudeCLI:
                 return result.stdout
             else:
                 error_msg = result.stderr or result.stdout
-                raise RuntimeError(f"Claude CLI 调用失败: {error_msg}")
+                raise RuntimeError(f"zcode CLI 调用失败: {error_msg}")
 
         except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Claude CLI 调用超时 ({timeout}秒)")
+            raise RuntimeError(f"zcode CLI 调用超时 ({timeout}秒)")
         except FileNotFoundError:
             raise RuntimeError(
-                "Claude CLI 未找到。请确保 claude 命令在 PATH 中，"
-                "或使用 Claude Code 环境运行此脚本。"
+                "zcode CLI 未找到。请确保 zcode 命令在 PATH 中"
+                "（桌面版默认不注册 PATH，可用 node 执行安装目录下"
+                " resources/glm/zcode.cjs）。"
             )
 
     @staticmethod
     def call_subagent(task_description: str, prompt: str, timeout: int = 120) -> str:
         """
-        通过 Claude Code 启动 subagent
+        通过 zcode CLI（headless）启动子代理
 
         Args:
             task_description: 任务描述
@@ -97,15 +109,12 @@ class ClaudeCLI:
         Returns:
             subagent 的输出结果
         """
-        # 注意：这需要在 Claude Code 会话中使用 Task 工具
-        # 命令行模式下，我们使用简化的实现
+        # 注意：会话内应使用 Agent 工具派发子代理；
+        # 命令行模式下用 zcode headless 起独立进程（每次新会话，无跨轮复用）
         cmd = [
-            "claude",
-            "run",
-            "--prompt",
+            *HOST_CLI,
+            "-p",
             f"{task_description}\n\n{prompt}",
-            "--timeout",
-            str(timeout)
         ]
 
         try:
@@ -126,7 +135,7 @@ class ClaudeCLI:
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Subagent 调用超时 ({timeout}秒)")
         except FileNotFoundError:
-            raise RuntimeError("Claude CLI 未找到")
+            raise RuntimeError("zcode CLI 未找到")
 
 
 class ResearchOrchestrator:
@@ -142,7 +151,7 @@ class ResearchOrchestrator:
         self.research_topic = research_topic
         self.max_loops = max_loops
         self.output_path = output_path
-        self.claude = ClaudeCLI()
+        self.host = HostCLI()
 
         # 初始化状态
         if resume_session:
@@ -154,7 +163,7 @@ class ResearchOrchestrator:
 
     def _load_session(self, session_id: str) -> ResearchState:
         """加载指定会话"""
-        checkpoint_dir = Path.home() / ".claude" / "deep-research" / "checkpoints"
+        checkpoint_dir = default_data_dir() / "checkpoints"
         filepath = checkpoint_dir / f"{session_id}.json"
 
         if not filepath.exists():
@@ -235,7 +244,7 @@ class ResearchOrchestrator:
 
         # 保存报告
         if not self.output_path:
-            output_dir = Path.home() / ".claude" / "deep-research" / "reports"
+            output_dir = default_data_dir() / "reports"
             output_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.output_path = str(output_dir / f"{self.state.session_id}_{timestamp}.md")
@@ -263,7 +272,7 @@ class ResearchOrchestrator:
         """Node 2: 使用 meta-search skill 执行搜索"""
         try:
             # 调用 meta-search skill
-            result = self.claude.call_skill("meta-search", query, timeout=60)
+            result = self.host.call_skill("meta-search", query, timeout=60)
 
             # 解析搜索结果
             # meta-search 返回的结果格式需要根据实际情况调整

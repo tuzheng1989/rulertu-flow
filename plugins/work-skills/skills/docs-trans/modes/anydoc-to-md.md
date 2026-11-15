@@ -7,7 +7,7 @@
 | 文档特征 | 引擎 | 速度 | 质量 |
 |---------|------|------|------|
 | 有文本层（Word/PPT/Excel/ODF/RTF/EPUB/CSV/文本型 PDF） | [anydoc](https://github.com/firecrawl/anydoc)（纯 Rust，14 种格式） | 亚 5ms/文档 | 完美 |
-| 扫描版，页数 ≤ 8 | Claude 视觉逐页读图 | 即时 | 极高 |
+| 扫描版，页数 ≤ 8 | 会话视觉逐页读图 | 即时 | 极高 |
 | 扫描版，现代横排印刷（路由评分 ≥ 70） | Windows OCR（系统自带，`../scripts/anydoc/winocr.ps1`） | ~2s/页 | 正文高；美术字标题差 |
 | 扫描版，古籍/竖排/繁体/复杂版面（评分 < 70） | DeepSeek-OCR + llama.cpp（`ocr_pdf.py`） | ~30s/页 | 最高（版面理解） |
 
@@ -53,9 +53,9 @@ curl -s https://example.com/paper.pdf | anydoc -
 
 ### B. inbox 导入型（可选，用于知识库素材）
 
-> 历史环境工作流：本节依赖旧项目的 inbox/ 与 CLAUDE.md「素材处理」约定，当前环境未部署时可跳过本节。
+> 历史环境工作流：本节依赖旧项目的 inbox/ 与项目指令文件（AGENT.md 等）「素材处理」约定，当前环境未部署时可跳过本节。
 
-把外部文档导入知识库时，输出到 `inbox/` 并注入 frontmatter。遵守 CLAUDE.md「素材处理」规则。**两条管线通用此节。**
+把外部文档导入知识库时，输出到 `inbox/` 并注入 frontmatter。遵守项目指令文件（AGENT.md 等）「素材处理」规则。**两条管线通用此节。**
 
 ```bash
 anydoc "<源文件>" -o "inbox/<文件名>.md"
@@ -116,12 +116,12 @@ python ../scripts/anydoc/route_ocr.py "<扫描版.pdf>"
   python ../scripts/anydoc/route_ocr.py "<书.pdf>" --run -o inbox/<书名>.md
   ```
 - **评分 < 70**（古籍/竖排/繁体/复杂版面）→ DeepSeek-OCR 管线（下方 C2 节）
-- **页数 ≤ 8** → 直接由 Claude 会话逐页读图转写，无需脚本（渲染出 pages/*.png 后逐张 Read）
+- **页数 ≤ 8** → 直接由当前会话逐页读图转写，无需脚本（渲染出 pages/*.png 后逐张 Read）
 
 **Windows OCR 引擎特性**（实战验证：189 页育儿手册，零失败，约 3 分钟）：
 - ✅ 正文印刷体准确率高（专有名词/数字/标点均对），已内建 CJK 字间空格/书名号/小数点清理
 - ✅ 零依赖零下载（系统自带，zh-Hans 语言包），断点续传与 DeepSeek 管线同语义
-- ⚠️ **书法/美术字标题必崩**（如"常见病"→"常 见 柄"），封面/荐词页同理——此类页交给 Claude 视觉兜底：读 `*.ocr/pages/pageNNNN.png` 人工转写后替换对应 `pages-md/pageNNNN.md`，重跑合并
+- ⚠️ **书法/美术字标题必崩**（如"常见病"→"常 见 柄"），封面/荐词页同理——此类页交给 会话视觉兜底：读 `*.ocr/pages/pageNNNN.png` 人工转写后替换对应 `pages-md/pageNNNN.md`，重跑合并
 - ⚠️ 输出为纯文本流（换行保留），无 Markdown 标题/表格结构化；需要结构化成书时选 DeepSeek 管线
 
 ### C2. DeepSeek-OCR 管线（llama.cpp）
@@ -190,7 +190,7 @@ python ../scripts/anydoc/ocr_pdf.py "<书.pdf>" -o inbox/<书名>.md \
 | OCR 逐行输出导致段落碎片化 | ✅ 段落重建（非句末行并入下文，标题/目录条目/论名行保护） |
 | pypdf 渲染 JBIG2 编码内嵌图失败（缺 jbig2dec） | ❌ 用 pypdfium2 整页渲染替代（内建 JBIG2），渲染时顺带裁水印/地脚 |
 | 温度 0 下重试无意义（同输入必同输出） | ❌ 失败页必须**改变输入**：切半/旋转/缩放/换 prompt/人工，纯重试是浪费时间 |
-| 长任务随 Claude 会话死掉 | ❌ Windows 下用 `powershell Start-Process` 独立进程跑（断点续传保底），双 llama-server 并行实测无收益（瓶颈在内存带宽） |
+| 长任务随当前会话死掉 | ❌ Windows 下用 `powershell Start-Process` 独立进程跑（断点续传保底），双 llama-server 并行实测无收益（瓶颈在内存带宽） |
 | llama-server 线程默认 8 不满载 | ❌ 12 核机器手动拉 `--threads 12`（实测比 8 快 34%），脚本会复用已运行的 server |
 
 ### 幻觉清洗（成书必做，《赤脚医生手册》766 页八轮实战）

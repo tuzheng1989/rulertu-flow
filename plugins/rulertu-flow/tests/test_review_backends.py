@@ -21,7 +21,6 @@ def load_module(name: str):
 
 
 codex_review = load_module("codex_review")
-claude_review = load_module("claude_review")
 review_common = load_module("review_common")
 from normalize import ReviewError, normalize_review
 
@@ -99,11 +98,11 @@ class SharedProtocolTests(unittest.TestCase):
             json.dumps({"backend": "external-codex", "session_id": "codex-id"}), encoding="utf-8"
         )
         self.assertEqual(review_common.load_session(output, "external-codex", None, allow_legacy=True), "codex-id")
-        self.assertIsNone(review_common.load_session(output, "external-claude", None, allow_legacy=False))
+        self.assertIsNone(review_common.load_session(output, "subagent-auditor", None, allow_legacy=False))
         (RUNTIME / "state.json").unlink()
         (RUNTIME / "session.txt").write_text("legacy-id\n", encoding="utf-8")
         self.assertEqual(review_common.load_session(output, "external-codex", None, allow_legacy=True), "legacy-id")
-        self.assertIsNone(review_common.load_session(output, "external-claude", None, allow_legacy=False))
+        self.assertIsNone(review_common.load_session(output, "subagent-auditor", None, allow_legacy=False))
 
     def test_new_backend_prompt_includes_previous_review(self):
         output = RUNTIME / "review-R2.json"
@@ -191,101 +190,43 @@ class CodexBackendTests(unittest.TestCase):
         self.assertEqual(codex_review.run(["codex_review.py"]), 2)
 
 
-class ClaudeBackendTests(unittest.TestCase):
-    def invoke(self, mode: str, round_number: int = 1, session: str | None = None, preserve: bool = False):
-        cleanup = Cleanup()
-        if not preserve:
-            cleanup.cleanup()
+class SubagentCliTests(unittest.TestCase):
+    """子代理评审通道的落盘入口（review_common.py normalize|state）。"""
+
+    def setUp(self):
+        Cleanup().cleanup()
+
+    def tearDown(self):
+        Cleanup().cleanup()
+
+    def test_normalize_accepts_valid_and_rejects_protocol_error(self):
+        review = RUNTIME / "review-R1.json"
+        review.write_text(json.dumps({**VALID, "extra": 1}), encoding="utf-8")
+        self.assertEqual(review_common.main(["review_common.py", "normalize", str(review)]), 0)
+        self.assertEqual(json.loads(review.read_text(encoding="utf-8")), VALID)
+        review.write_text("{broken", encoding="utf-8")
+        self.assertEqual(review_common.main(["review_common.py", "normalize", str(review)]), review_common.EXIT_PROTOCOL)
+
+    def test_state_writes_subagent_identity_and_removes_legacy_session(self):
         plan = RUNTIME / "plan.md"
         plan.write_text("# Plan\n", encoding="utf-8")
-        output = RUNTIME / f"review-R{round_number}.json"
-        captured: list[list[str]] = []
-
-        def fake_run(command, **kwargs):
-            captured.append(command)
-            if mode == "timeout":
-                raise claude_review.subprocess.TimeoutExpired(command, 1)
-            if mode == "failure":
-                return SimpleNamespace(returncode=9)
-            if mode == "corrupt":
-                text = "not-json"
-            else:
-                payload = {
-                    "type": "result",
-                    "is_error": False,
-                    "structured_output": {**VALID, **({"score": True} if mode == "invalid-review" else {})},
-                }
-                if mode != "missing-session":
-                    payload["session_id"] = "claude-new"
-                text = json.dumps(payload)
-            kwargs["stdout"].write(text + "\n")
-            kwargs["stdout"].flush()
-            return SimpleNamespace(returncode=0)
-
-        args = ["claude_review.py", str(plan), str(output)] + ([session] if session else [])
-        with mock.patch.object(claude_review, "repository_for", return_value=RUNTIME), mock.patch.object(
-            claude_review, "resolve_cli", return_value=["claude"]
-        ), mock.patch.object(claude_review.subprocess, "run", side_effect=fake_run):
-            result = claude_review.run(args, timeout=0.01)
-        return cleanup, output, result, captured
-
-    def test_command_is_read_only_structured_and_resumable(self):
-        schema = review_common.validate_schema()
-        first = claude_review.build_command(["claude"], schema, None, "new-id", "prompt")
-        self.assertEqual(first[:6], ["claude", "-p", "--model", "opus", "--effort", "high"])
-        self.assertIn("plan", first)
-        self.assertIn("Read,Glob,Grep", first)
-        self.assertIn("--json-schema", first)
-        self.assertEqual(first[-3:-1], ["--session-id", "new-id"])
-        resumed = claude_review.build_command(["claude"], schema, "old-id", "unused", "prompt")
-        self.assertEqual(resumed[-3:-1], ["--resume", "old-id"])
-
-    def test_result_string_is_normalized(self):
-        payload = json.dumps({"session_id": "sid", "result": json.dumps(VALID)})
-        self.assertEqual(claude_review.extract_result(payload), ("sid", VALID))
-
-    def test_success_state_artifacts_and_resume(self):
-        cleanup, output, result, _ = self.invoke("success")
-        self.addCleanup(cleanup.cleanup)
-        self.assertEqual(result, 0)
-        self.assertEqual(json.loads(output.read_text(encoding="utf-8")), VALID)
+        output = RUNTIME / "review-R2.json"
+        (RUNTIME / "session.txt").write_text("legacy-id\n", encoding="utf-8")
+        self.assertEqual(review_common.main(["review_common.py", "state", str(plan), "2", str(output)]), 0)
         state = json.loads((RUNTIME / "state.json").read_text(encoding="utf-8"))
-        self.assertEqual((state["backend"], state["reviewer"], state["session_id"]),
-                         ("external-claude", "claude-code", "claude-new"))
-        self.assertTrue(Path(str(output.with_suffix("")) + ".events.jsonl").is_file())
-        temporary, _, actual, captured = self.invoke("success", round_number=2, session="claude-old")
-        temporary.cleanup()
-        self.assertEqual(actual, 0)
-        self.assertIn("--resume", captured[0])
-        self.assertIn("claude-old", captured[0])
+        self.assertEqual(state["backend"], "subagent-auditor")
+        self.assertEqual(state["reviewer"], "auditor")
+        self.assertEqual(state["session_id"], "subagent")
+        self.assertEqual(state["round"], 2)
+        self.assertEqual(state["plan_path"], str(plan))
+        import hashlib
 
-    def test_failure_timeout_and_protocol_errors(self):
-        for mode, expected in (
-            ("failure", 3),
-            ("timeout", 3),
-            ("corrupt", 4),
-            ("invalid-review", 4),
-            ("missing-session", 4),
-        ):
-            with self.subTest(mode=mode):
-                temporary, _, actual, _ = self.invoke(mode)
-                temporary.cleanup()
-                self.assertEqual(actual, expected)
+        self.assertEqual(state["plan_sha256"], hashlib.sha256(plan.read_bytes()).hexdigest())
+        self.assertFalse((RUNTIME / "session.txt").exists())
 
-    def test_backend_switch_starts_new_session_with_previous_json(self):
-        Cleanup().cleanup()
-        (RUNTIME / "review-R1.json").write_text(json.dumps(VALID), encoding="utf-8")
-        (RUNTIME / "state.json").write_text(
-            json.dumps({"backend": "external-codex", "session_id": "codex-id"}), encoding="utf-8"
-        )
-        cleanup, _, result, captured = self.invoke("success", round_number=2, preserve=True)
-        self.addCleanup(cleanup.cleanup)
-        self.assertEqual(result, 0)
-        self.assertNotIn("--resume", captured[0])
-        self.assertIn("上一轮 JSON", captured[0][-1])
-
-    def test_input_exit_code(self):
-        self.assertEqual(claude_review.run(["claude_review.py"]), 2)
+    def test_usage_error_exit_code(self):
+        self.assertEqual(review_common.main(["review_common.py"]), review_common.EXIT_INPUT)
+        self.assertEqual(review_common.main(["review_common.py", "unknown"]), review_common.EXIT_INPUT)
 
 
 if __name__ == "__main__":

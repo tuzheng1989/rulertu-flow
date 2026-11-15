@@ -30,7 +30,7 @@ description: 执行含 T0-T3 定级的分批实施计划。当用户要求执行
   | Advisor | `gpt-5.6-sol` | `xhigh` | `"none"` |
 
   `fork_turns="all"` 会强制继承主控模型，不用于这三个角色。Auditor/Advisor 的独立上下文所需事实全部由证据包注入。
-- Claude Code：调用 `rulertu-flow:executor`、`rulertu-flow:auditor`、`rulertu-flow:advisor` 薄封装。模型路由由 wrapper frontmatter 固定：Executor 使用 `sonnet`，Auditor 与 Advisor 使用 `opus`。
+- 宿主有子代理工具（ZCode 等）：调用 `rulertu-flow:executor`、`rulertu-flow:auditor`、`rulertu-flow:advisor` 薄封装。Executor 继承会话模型；Auditor 与 Advisor 的模型路由由 wrapper frontmatter 固定（GLM-5.3 + 最高推理档），不继承主控、不随会话降档。
 - Advisor 由主控或 Executor 派发：技术歧义类 Executor 可直连，条件与输入要件见角色文档，意见原文落盘证据目录；边界与范围类必须上报主控。主控验收回报时复核落盘意见是否越界、输入是否为具体选择题。
 - Codex 侧 Executor 无嵌套代理能力时，上报触发条件与完整试错清单，由主控按同规格派发；输入要件不降。
 

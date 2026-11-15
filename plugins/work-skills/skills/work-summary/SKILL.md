@@ -35,7 +35,7 @@ sources: ["来源路径或标识"]
 
 ## 采集和判断
 
-用户提供的材料优先；需要本地记录时，可运行 `scripts/collect.py` 采集 Claude Code、Codex 历史和指定根目录下直接子目录中的 Git 仓库。脚本默认周窗口及仓库根 `D:/runspace`；只在数据源与任务相关且可访问时使用。Hermes 可用时通过 session_search 补充；不可用或缺失的来源须注明，不能据此认定没有工作。
+用户提供的材料优先；需要本地记录时，可运行 `scripts/collect.py` 采集 Claude Code、Codex 历史和指定根目录下直接子目录中的 Git 仓库（ZCode 侧仅会话活跃计数，宿主诊断格式暂不解析内容）。脚本默认周窗口及仓库根 `D:/runspace`；只在数据源与任务相关且可访问时使用。Hermes 可用时通过 session_search 补充；不可用或缺失的来源须注明，不能据此认定没有工作。
 
 ```bash
 python {baseDir}/scripts/collect.py --start 2026-01-01 --end 2026-02-01 --summarize -o data.json

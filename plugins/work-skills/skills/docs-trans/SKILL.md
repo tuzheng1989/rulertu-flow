@@ -11,7 +11,7 @@ description: 文档转换单一入口，四个 mode 按转换方向分流——�
 
 | 输入 | 输出 | mode | 一句话定位 |
 |------|------|------|-----------|
-| 已有文档文件（Word/PPT/Excel/ODF/RTF/EPUB/CSV/PDF） | Markdown | `modes/anydoc-to-md.md` | anydoc 引擎（纯 Rust）亚 5ms 转文本型文档；扫描版 PDF 三级 OCR 路由（Windows OCR / DeepSeek-OCR / Claude 视觉）+ 幻觉清洗 + 断点续传 |
+| 已有文档文件（Word/PPT/Excel/ODF/RTF/EPUB/CSV/PDF） | Markdown | `modes/anydoc-to-md.md` | anydoc 引擎（纯 Rust）亚 5ms 转文本型文档；扫描版 PDF 三级 OCR 路由（Windows OCR / DeepSeek-OCR / 会话视觉）+ 幻觉清洗 + 断点续传 |
 | URL / 网页 | Markdown | `modes/url-to-md.md` | Chrome CDP 渲染抓取，Defuddle/Legacy 双转换管道，YouTube 字幕提取，媒体可本地化 |
 | Markdown 文件 | PDF | `modes/md-to-pdf.md` | Mermaid/PlantUML/HTML 图表/SVG 预渲染为 PNG 嵌入，中英文混排、目录、内部锚链 |
 | HTML（单文件/目录/通配符，含幻灯片） | PDF | `modes/html-to-pdf.md` | 从设计尺寸自动推断纸张比例，保持布局与背景色，多文件按序合并 |

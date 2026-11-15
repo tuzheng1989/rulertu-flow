@@ -1,7 +1,7 @@
 # 路由决策器：扫描版 PDF 采样试跑 Windows OCR，评分后推荐最佳引擎
 # 决策矩阵:
 #   有文本层           → anydoc（直接提示，不代跑）
-#   扫描·页数<=8       → 建议 Claude 视觉逐页（会话内行为，打印建议）
+#   扫描·页数<=8       → 建议会话内视觉逐页直读（打印建议）
 #   扫描·评分>=70      → Windows OCR 批量（winocr.ps1，~2s/页，现代横排印刷）
 #   扫描·评分<70       → DeepSeek-OCR 管线（ocr_pdf.py，古籍/竖排/繁体/复杂版面）
 # 用法:
@@ -21,7 +21,7 @@ from ocr_pdf import has_text_layer, render_pages  # noqa: E402
 
 REP_RE = re.compile(r'(.)\1{5,}')          # 同字连击>=6：乱码/循环信号
 WINOCR_THRESHOLD = 70
-CLAUDE_VISION_MAX_PAGES = 8
+SESSION_VISION_MAX_PAGES = 8
 
 
 def sample_pages(total: int, k: int = 3) -> list[int]:
@@ -95,10 +95,10 @@ def probe(pdf_path: str, k: int) -> dict:
             results.append({'page': p, **score_text(text)})
         score = int(sum(r['score'] for r in results) / len(results)) if results else 0
 
-    if total <= CLAUDE_VISION_MAX_PAGES:
-        return {'engine': 'claude-vision', 'pages': total, 'score': score,
+    if total <= SESSION_VISION_MAX_PAGES:
+        return {'engine': 'session-vision', 'pages': total, 'score': score,
                 'samples': results,
-                'reason': f'仅 {total} 页，Claude 视觉逐页转写最快最准'}
+                'reason': f'仅 {total} 页，会话内视觉逐页转写最快最准'}
     engine = 'winocr' if score >= WINOCR_THRESHOLD else 'deepseek'
     reason = ('Windows OCR 采样质量良好（现代横排印刷），'
               f'~2s/页' if engine == 'winocr' else
@@ -143,8 +143,8 @@ def main() -> int:
     if args.run:
         if r['engine'] == 'anydoc':
             print(f'\n执行: anydoc "{args.pdf}" -o "{args.output or "<输出.md>"}"')
-        elif r['engine'] == 'claude-vision':
-            print('\n由 Claude 会话直接逐页读图转写（无需脚本）。')
+        elif r['engine'] == 'session-vision':
+            print('\n由当前会话直接逐页读图转写（无需脚本）。')
         elif r['engine'] == 'deepseek':
             print(f'\n执行: python "{os.path.join(HERE, "ocr_pdf.py")}" "{args.pdf}" -o "{args.output or "<输出.md>"}"')
             print('（古籍建议先 --pages 小范围试跑并调 --crop-top/--crop-side，见 SKILL.md C 节）')

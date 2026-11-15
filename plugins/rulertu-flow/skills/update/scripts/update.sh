@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# update.sh — 一键更新本机 Claude Code 工具链的外部组件
+# update.sh — 一键更新本机 ZCode 工具链的外部组件
 #
-# 注意：Claude Code 本体（claude update）不在本技能范围内——它无法在运行中
-#       自我更新（会话内进程无法替换自身）。如需升级本体，请退出会话后手动
-#       `claude update`。
+# 注意：ZCode 本体不在本技能范围内——桌面版经应用内更新（electron-updater）
+#       分发新版，CLI 没有 `zcode update` 自更新子命令（已实测确认）。
+#       升级本体请在 ZCode 桌面端检查更新或重启应用获取新版。
 #
 # 覆盖 7 类更新：
-#   1. 所有 marketplaces       : claude plugin marketplace update
-#   2. 已安装 plugins          : 逐个 claude plugin update <id> --scope <scope>
-#                                （CLI 无原生 update-all；必须按每个插件的实际 scope 调用，
-#                                 否则默认 user scope 会报 "Plugin not found"）
+#   1. 所有 marketplaces       : zcode plugins marketplace update（无参 = 全部）
+#   2. 已安装 plugins          : 逐个 zcode plugins update <id>
+#                                （CLI 无原生 update-all；list --json 不回显 scope，
+#                                 默认 user scope 失败时自动补试 -s project）
 #   3. openwiki (npm 全局)     : npm install -g openwiki@latest
 #   4. codegraph (npm 全局)    : npm install -g @colbymchenry/codegraph@latest
 #   5. open-code-review(npm)   : npm install -g @alibaba-group/open-code-review@latest
@@ -17,8 +17,8 @@
 #   6. deepeval (pip + skills) : pip install --upgrade deepeval
 #                                + npx skills update deepeval（skill 本体走 skills CLI）
 #   7. agent-skills (git 仓库) : 逐个 git -C ~/share/agent-skills/<name> pull --ff-only
-#                                （skill 单一源目录；~/.claude/skills、~/.agents/skills 里的
-#                                 junction 指向这里，pull 后链接处自动生效）
+#                                （skill 单一源目录；~/.zcode/skills 里的符号链接指向这里，
+#                                 pull 后链接处自动生效）
 #
 # 未安装组件的安装闸门：
 #   npm/pip 组件的「更新」命令对未安装的包会直接装上。默认对未安装组件跳过并
@@ -36,13 +36,36 @@
 # 注意事项（已实测）：
 #   - codegraph CLI *没有* `upgrade` 子命令（报 unknown command 'upgrade'），
 #     它是 npm 全局包 @colbymchenry/codegraph，更新走 npm。
-#   - plugins 更新仅「暂存」新版本，需重启 Claude Code 才生效。
+#   - plugins 更新仅「暂存」新版本，需重启 ZCode 会话才生效。
 #   - codegraph 更新后，若其 MCP server 已在运行，可能需重跑 `codegraph install`。
+#   - zcode CLI 不在 PATH（桌面版不注册）：优先 PATH，降级已知安装位置以 node 跑
+#     zcode.cjs（见 resolve_zcode）。
 
 set -o pipefail
 
 # 脚本自身位置：所有路径均相对技能目录解析，不写死安装位置
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---------- zcode CLI 解析 ----------
+# 桌面版默认不把 zcode 注册进 PATH；优先 PATH，降级已知安装位置（node 跑 zcode.cjs）。
+ZCODE_CMD=()
+resolve_zcode() {
+  if command -v zcode >/dev/null 2>&1; then
+    ZCODE_CMD=(zcode)
+    return 0
+  fi
+  local cand
+  for cand in \
+    "/c/Program Files (x86)/ZCode/resources/glm/zcode.cjs" \
+    "/c/Program Files/ZCode/resources/glm/zcode.cjs" \
+    "${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/ZCode/resources/glm/zcode.cjs"; do
+    if [ -f "$cand" ]; then
+      ZCODE_CMD=(node "$cand")
+      return 0
+    fi
+  done
+  return 1
+}
 
 # ---------- 颜色与输出 ----------
 RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
@@ -178,9 +201,14 @@ preflight_proxy() {
 update_marketplaces() {
   section "1/7" "所有 marketplaces"
   local count err
-  count=$(claude plugin marketplace list 2>/dev/null | grep -c '❯' || true)
+  if ! resolve_zcode; then
+    bad "未找到 zcode CLI（PATH 与已知安装位置均无）"
+    sum_fail "Marketplaces（zcode CLI 未找到）"
+    return
+  fi
+  count=$("${ZCODE_CMD[@]}" plugins marketplace list 2>/dev/null | grep -c '^- ' || true)
   info "已配置市场数: ${count:-?}"
-  if err=$(claude plugin marketplace update 2>&1); then
+  if err=$("${ZCODE_CMD[@]}" plugins marketplace update 2>&1); then
     good "全部市场已更新"
     sum_ok "Marketplaces ×${count:-?} 已更新"
   else
@@ -189,54 +217,72 @@ update_marketplaces() {
   fi
 }
 
-# ---------- 2. 已安装 plugins（按 scope 逐个） ----------
-update_plugins() {
-  section "2/7" "已安装 plugins（按 scope 逐个）"
-  local rows err
-  # 同时取 id 与 scope（scope 不传会默认 user → Plugin not found）
-  # 注意：Windows 上 Python stdout 是文本模式，会把 \n 翻译成 \r\n，
-  #       污染行尾的 scope 字段（变成 "local\r"），导致 --scope 校验失败。
-  #       故末尾接 tr -d '\r' 去掉回车。
-  if ! rows=$(claude plugin list --json 2>/dev/null \
-        | python -c "import sys,json
+# ---------- 2. 已安装 plugins（逐个更新） ----------
+# list --json 提供 id 与 version，不回显 scope；update 默认 user scope，
+# 失败时自动补试 -s project。版本「前→后」由更新前后两次 list --json 对比得出。
+plugin_versions() {
+  "${ZCODE_CMD[@]}" plugins list --json 2>/dev/null \
+    | python -c "import sys,json
 for p in json.load(sys.stdin):
-    print(p['id']+'\t'+p.get('scope','user'))" 2>/dev/null | tr -d '\r'); then
-    bad "无法解析 claude plugin list --json"
-    sum_fail "Plugins 列表解析失败"
+    print(p['id']+'\t'+p.get('version',''))" 2>/dev/null | tr -d '\r'
+}
+map_ver() { awk -F'\t' -v i="$2" '$1==i{print $2; exit}' <<< "$1"; }
+
+update_plugins() {
+  section "2/7" "已安装 plugins（逐个）"
+  local before after ids id out results r_id r_st b a okn failn
+  if ! resolve_zcode; then
+    bad "未找到 zcode CLI（PATH 与已知安装位置均无）"
+    sum_fail "Plugins（zcode CLI 未找到）"
     return
   fi
-
-  local total okn failn
-  total=$(printf '%s\n' "$rows" | grep -c . || true)
-  [ -z "$rows" ] && { warn "无已安装插件"; sum_skip "Plugins（无）"; return; }
-  info "待更新插件数: $total"
-
-  okn=0; failn=0
-  while IFS=$'\t' read -r id scope; do
-    [ -z "$id" ] && continue
-    local out
-    if out=$(claude plugin update "$id" --scope "$scope" 2>&1); then
-      # 从输出里抽 "updated from X to Y"；抽不到就显示原行首
-      local delta
-      delta=$(printf '%s' "$out" | grep -oiE 'updated from [^ ]+ to [^ ]+（[需重启]*）?' \
-              | sed -E 's/updated from /前:/; s/ to / → 后:/I' | head -1)
-      if [ -n "$delta" ]; then
-        good "$id [$scope]：$delta（重启后生效）"
-      else
-        good "$id [$scope]：已是最新或已暂存（重启后生效）"
-      fi
-      okn=$((okn+1))
+  before=$(plugin_versions)
+  if [ -z "$before" ]; then
+    # 区分「无插件」与「CLI 不可用」
+    if ! "${ZCODE_CMD[@]}" plugins list --json >/dev/null 2>&1; then
+      bad "无法解析 zcode plugins list --json"
+      sum_fail "Plugins 列表解析失败"
     else
-      bad "$id [$scope] 更新失败" "$out"
+      warn "无已安装插件"
+      sum_skip "Plugins（无）"
+    fi
+    return
+  fi
+  ids=$(printf '%s\n' "$before" | cut -f1)
+  info "待更新插件数: $(printf '%s\n' "$ids" | grep -c . || true)"
+
+  okn=0; failn=0; results=""
+  while IFS= read -r id; do
+    [ -z "$id" ] && continue
+    if out=$("${ZCODE_CMD[@]}" plugins update "$id" 2>&1); then
+      results+="$id"$'\t'"ok"$'\n'
+    elif out=$("${ZCODE_CMD[@]}" plugins update "$id" -s project 2>&1); then
+      results+="$id"$'\t'"ok"$'\n'
+    else
+      bad "$id 更新失败" "$out"
+      results+="$id"$'\t'"fail"$'\n'
       failn=$((failn+1))
     fi
-  done <<< "$rows"
+  done <<< "$ids"
 
-  warn "plugins 更新需重启 Claude Code 才生效（CLI: restart required to apply）"
+  after=$(plugin_versions)
+  while IFS=$'\t' read -r r_id r_st; do
+    [ -z "$r_id" ] && continue
+    [ "$r_st" = "fail" ] && continue   # 失败已在循环内输出
+    b=$(map_ver "$before" "$r_id"); a=$(map_ver "$after" "$r_id")
+    if [ -n "$b" ] && [ -n "$a" ] && [ "$b" != "$a" ]; then
+      good "$r_id：$b → $a（重启 ZCode 会话后生效）"
+    else
+      good "$r_id：已是最新（${a:-未知}）"
+    fi
+    okn=$((okn+1))
+  done <<< "$results"
+
+  warn "plugins 更新需重启 ZCode 会话才生效"
   if [ "$failn" -gt 0 ]; then
-    sum_ok "Plugins: $okn 成功 / $failn 失败（共 $total，重启后生效）"
+    sum_ok "Plugins: $okn 成功 / $failn 失败（重启会话后生效）"
   else
-    sum_ok "Plugins: $okn 成功（共 $total，重启后生效）"
+    sum_ok "Plugins: $okn 成功（重启会话后生效）"
   fi
 }
 
@@ -263,7 +309,7 @@ update_openwiki() {
 
 # 释放 codegraph 二进制文件锁：精确杀掉占用 node.exe 的 codegraph 进程。
 # 为何这么做：codegraph MCP server 运行时持有 node.exe，npm 无法替换（EBUSY）。
-#   - claude mcp 无 disable/enable 子命令，改配置也不会杀正在运行的进程；
+#   - 宿主 CLI 无 disable/enable MCP 子命令，改配置也不会杀正在运行的进程；
 #   - 按 ExecutablePath 含 'codegraph' 精确匹配，不误伤其他 node.exe；
 #   - codegraph 自带 watchdog（卡死自重启），被杀重启是其设计的正常路径。
 # 授权：用户已明确同意在更新 codegraph 时终止这些进程。
@@ -299,7 +345,7 @@ update_codegraph() {
   if err=$(npm install -g @colbymchenry/codegraph@latest 2>&1); then
     after=$(codegraph_ver)
     good "更新后: ${after:-未知}  ( $(delta_label "$before" "$after") )"
-    warn "codegraph MCP 进程已在本步终止以释放文件锁；配置未改，重启 Claude Code 会话即自动恢复。"
+    warn "codegraph MCP 进程已在本步终止以释放文件锁；配置未改，重启 ZCode 会话即自动恢复。"
     sum_ok "codegraph: $(delta_label "$before" "$after")"
   else
     bad "npm install codegraph 失败" "$err"
@@ -373,7 +419,7 @@ update_deepeval() {
 }
 
 # ---------- 7. agent-skills（~/share/agent-skills 下的 git 仓库） ----------
-# skill 单一源目录，~/.claude/skills、~/.agents/skills 的 junction 都指向这里，
+# skill 单一源目录，~/.zcode/skills 的符号链接都指向这里，
 # pull 后链接处自动生效。--ff-only 拒绝非快进合并：本地有改动/分叉时报错跳过，
 # 不自动 stash、不产生合并提交（更新工具不应碰用户工作区）。
 update_agent_skills() {
@@ -382,7 +428,7 @@ update_agent_skills() {
   if [ ! -d "$root" ]; then
     warn "目录不存在: $root，跳过"
     info "手动安装（详见各 skill README）：git clone <仓库URL> $root/<name>"
-    info "  再 mklink /J 到 %USERPROFILE%\\.claude\\skills\\<name> 与 %USERPROFILE%\\.agents\\skills\\<name>"
+    info "  再 mklink /J 到 %USERPROFILE%\\.zcode\\skills\\<name>"
     sum_skip "agent-skills（目录不存在）"
     return
   fi
@@ -391,7 +437,7 @@ update_agent_skills() {
   for d in "$root"/*/; do
     [ -e "${d}.git" ] && repos+=("${d%/}")
   done
-  [ "${#repos[@]}" -eq 0 ] && { warn "目录下无 git 仓库，跳过（手动安装：git clone <仓库URL> $root/<name>，再 mklink /J 到 ~/.claude/skills/<name> 与 ~/.agents/skills/<name>）"; sum_skip "agent-skills（无仓库）"; return; }
+  [ "${#repos[@]}" -eq 0 ] && { warn "目录下无 git 仓库，跳过（手动安装：git clone <仓库URL> $root/<name>，再 mklink /J 到 ~/.zcode/skills/<name>）"; sum_skip "agent-skills（无仓库）"; return; }
 
   local total=${#repos[@]} okn=0 failn=0 repo name before after err
   info "待更新仓库数: $total"
@@ -421,8 +467,8 @@ update_agent_skills() {
 
 # ---------- 主流程 ----------
 echo "${BOLD}================================================${RESET}"
-echo "${BOLD} Claude Code 工具链外部组件一键更新${RESET}"
-echo "${BOLD} （本体 claude update 不在内：无法在运行中自我更新）${RESET}"
+echo "${BOLD} ZCode 工具链外部组件一键更新${RESET}"
+echo "${BOLD} （ZCode 本体不在内：桌面版经应用内更新分发新版）${RESET}"
 echo "${BOLD}================================================${RESET}"
 
 # 代理预检（不可用则提示并退出，不继续）
@@ -445,5 +491,5 @@ for line in "${SUMMARY[@]}"; do
   echo "  - $line"
 done
 echo ""
-warn "收尾提示：plugins 更新需重启 Claude Code 生效；codegraph 进程已被终止释放文件锁，重启会话即自动恢复。"
+warn "收尾提示：plugins 更新需重启 ZCode 会话生效；codegraph 进程已被终止释放文件锁，重启会话即自动恢复。"
 echo "${BOLD}================================================${RESET}"

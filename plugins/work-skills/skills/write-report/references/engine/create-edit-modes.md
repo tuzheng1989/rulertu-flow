@@ -88,6 +88,8 @@
 
 ### Step 4: 逐章创建内容（调用 Writer Subagent）
 
+> 本文件各 Step 的 writer/reviewer subagent 调用同 import-mode 口径：优先调用随技能分发的 `.claude/agents` 定义（插件 agent 形式）；宿主不支持自定义类型时，用 Agent 工具 general-purpose + 定义文件正文作提示词替身。
+
 **调用 writer subagent** 生成每个章节：
 
 ```markdown

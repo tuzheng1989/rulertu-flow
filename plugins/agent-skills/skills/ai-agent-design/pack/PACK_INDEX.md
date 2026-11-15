@@ -4,10 +4,10 @@
 来源：[bojieli/ai-agent-book](https://github.com/bojieli/ai-agent-book)（Apache-2.0）。
 核心公式：**Agent = LLM + 上下文 + 工具**。
 
-> Pack 根目录仅用于交付与审计，**不是一个可安装 skill**。安装时复制 `skills/` 下的叶子目录到宿主 skills 目录（如 `.claude/skills/`）。
+> Pack 根目录仅用于交付与审计，**不是一个可安装 skill**。安装时复制 `skills/` 下的叶子目录到宿主 skills 目录（ZCode 为 `~/.zcode/skills/`，其他宿主同理取其技能目录）。
 
 ## 顶层入口（推荐日常使用）
-`ai-agent-design`（位于 `.claude/skills/ai-agent-design/SKILL.md`）是统一路由 skill，已被 Claude Code 自动发现。它按用户意图（查询理解 / 核对原文 / 执行方法 / 现实参考）索引到下方四组件，**日常直接用这个入口即可**，无需手动定位 pack 内文件。
+`ai-agent-design`（位于宿主 skills 目录下 `ai-agent-design/SKILL.md`）是统一路由 skill，安装后由宿主自动发现。它按用户意图（查询理解 / 核对原文 / 执行方法 / 现实参考）索引到下方四组件，**日常直接用这个入口即可**，无需手动定位 pack 内文件。
 
 ## 四组件
 
@@ -47,9 +47,9 @@ knowledge / source / methods 三组件全部内容仅来自这一本书，不包
 
 ## 安装
 ```bash
-# 复制叶子 skill 到项目 skills 目录
-cp -r skills/ai-agent-design-source     .claude/skills/
-cp -r skills/ai-agent-design-knowledge  .claude/skills/
-cp -r skills/methods/skills/ai-agent-design-*  .claude/skills/
-cp -r skills/ai-agent-design-examples   .claude/skills/
+# 复制叶子 skill 到宿主 skills 目录（ZCode: ~/.zcode/skills/）
+cp -r skills/ai-agent-design-source     ~/.zcode/skills/
+cp -r skills/ai-agent-design-knowledge  ~/.zcode/skills/
+cp -r skills/methods/skills/ai-agent-design-*  ~/.zcode/skills/
+cp -r skills/ai-agent-design-examples   ~/.zcode/skills/
 ```
