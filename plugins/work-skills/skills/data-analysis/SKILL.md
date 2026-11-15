@@ -2,26 +2,22 @@
 name: data-analysis
 description: |
   数据分析统一入口：按输入类型路由到三个 mode 与一个大文件引擎档——
-  excel（Excel/CSV 多步分析编排，含 44 个 capability 子技能）、document（Word/PDF/PPT
-  解析与数据提取，含 3 个 doc-capability 子技能）、image（图片视觉直读与数据提取）、
-  large-file-engine（≥10k 行大文件 Parquet/流式引擎档，由 excel mode 的行数门触发）。
-  **遇到以下任一情况就主动使用本 skill**：
-  ①Excel 触发词：Excel 分析 / 表格分析 / 数据分析 / 数据清洗 / 数据统计 / 数据筛选 /
-  数据可视化 / 数据导出 / 汇总统计 / 透视表 / 分组统计 / 交叉分析 / 趋势分析 / 对比分析 /
-  异常值检测 / 去重 / 缺失值处理 / Excel 报告 / 生成报表 / analyze Excel / data analysis /
-  data cleaning / pivot table；
-  ②文档触发词：Word分析 / PDF解析 / PPT提取 / 文档分析 / 报告解析 / 幻灯片分析 /
-  发票提取 / 合同分析 / 文档统计 / 错别字 / 语病 / 字号检查 / 简历分析 / 多文档对比；
-  ③图片触发词：图片分析 / 图表提取 / 表格识别 / OCR / 图片描述 / 截图分析 / 图表数据 /
-  提取图片中的数据 / 图片转表格 / 识别图片 / extract data from image / chart analysis /
-  table OCR；
-  ④大文件触发词：大文件 / 大数据量 / 性能优化 / 内存不足 / OOM / 百万行 / 十万行 /
-  流式读取 / Parquet / 分块处理 / large file / big data / streaming read / chunked processing；
-  ⑤用户上传或指定了 .xlsx / .xls / .csv / .docx / .doc / .pdf / .pptx / .ppt /
-  .png / .jpg / .jpeg / .gif / .webp / .bmp 文件并要求分析、提取、统计或可视化。
-  仅不用于：图片编辑（裁剪、滤镜、缩放）与图片生成；文档格式转换（那归
-  docs-trans——本技能管分析不管转换）；报告成稿与改写（那归 write-report）；
-  不涉及表格数据的纯文本处理；单个公式计算的简单问答。
+  excel（Excel/CSV 多步分析编排）、document（Word/PDF/PPT 解析与数据提取）、
+  image（图片视觉直读与数据提取）、large-file-engine（≥10k 行大文件 Parquet/流式引擎档，
+  由 excel mode 的行数门触发）。**遇到以下任一情况就主动使用本 skill**：
+  ①Excel 触发词：Excel 分析、表格分析、数据分析、数据清洗、数据统计、数据筛选、数据可视化、
+  数据导出、汇总统计、透视表、分组统计、交叉分析、趋势分析、对比分析、异常值检测、去重、
+  缺失值处理、Excel 报告、生成报表、analyze Excel、data analysis、data cleaning、pivot table；
+  ②文档触发词：Word分析、PDF解析、PPT提取、文档分析、报告解析、幻灯片分析、发票提取、
+  合同分析、文档统计、错别字、语病、字号检查、简历分析、多文档对比；
+  ③图片触发词：图片分析、图表提取、表格识别、OCR、图片描述、截图分析、图表数据、
+  提取图片中的数据、图片转表格、识别图片、extract data from image、chart analysis、table OCR；
+  ④大文件触发词：大文件、大数据量、性能优化、内存不足、OOM、百万行、十万行、流式读取、Parquet、
+  分块处理、large file、big data、streaming read、chunked processing；
+  ⑤用户上传或指定了 .xlsx .xls .csv .docx .doc .pdf .pptx .ppt .png .jpg .jpeg .gif .webp .bmp
+  文件并要求分析、提取、统计或可视化。
+  仅不用于：图片编辑（裁剪、滤镜、缩放）与图片生成；文档格式转换（归 docs-trans——本技能管分析不管转换）；
+  报告成稿与改写（归 write-report）；不涉及表格数据的纯文本处理；单个公式计算的简单问答。
 ---
 
 # Data Analysis — 数据分析统一入口
