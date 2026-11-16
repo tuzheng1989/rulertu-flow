@@ -1,8 +1,20 @@
 # flow-deck
 
-Claude Code 的工作流、Git 与子代理状态面板。Codex manifest 仅提供占位元数据。
+Claude Code 的工作流、Git 与子代理状态面板。ZCode 下经 `ui.surfaces` 提供 GitHub Issues 常驻侧边面板（见下节）；Codex manifest 仅提供占位元数据。
 
 安装：`/plugin install flow-deck --marketplace tuzheng1989/rulertu-flow`。
+
+## ZCode：Issues 侧边面板
+
+Claude Code 的 mod 面板机制（`hooks.json` 的 TSX 模块）ZCode 不加载；ZCode 侧以插件面板通道提供 Issues 看板：
+
+- manifest `ui.surfaces` 声明 `issues` 面板（`resourceUri: ui://flow-deck/panel.html`），HTML 与数据由 `mcp/server.mjs`（零依赖 stdio MCP server）经 `resources/read` 供给——机制与官方 PDF/Sites 面板一致（`ui.surfaces` 为官方在用但指南未记载的扩展点，宿主版本变更时需复核）。
+- 数据源与 Claude Code 版工作面板尾部的 GitHub Issues 区块同口径：`gh issue list --state open --limit 20 --json number,title,url,labels`，解析校验同 `parseGhIssues`；显示 #号、标题、标签，点标题经 `ui/open-link` 直达 issue 页。
+- 面板内「认领」按钮经 `ui/message` 把"认领并开始处理 issue #N"回传为会话跟进消息（宿主能力未开启时按钮自动隐藏）；「刷新」按钮调 `refresh_issues` 工具强制重拉。
+- 刷新口径：宿主不轮询面板；server 端 60 秒 TTL 缓存（对齐 Claude Code 版 60s 轮询节奏），打开面板读缓存、点刷新强制重查。gh 不可用/未登录/非 GitHub 仓库时面板内显示原因（Claude Code 版为静默隐藏区块）。
+- server 随会话启动（`availability: session`），`cwd` 为当前项目目录，issues 作用于当前仓库；改动需 `zcode plugins update` 后在新会话生效。
+
+验证：`node --test plugins/flow-deck/mcp/server.test.mjs`（协议路由、解析校验、TTL 缓存、子进程 stdio 冒烟）；面板实际渲染需在 ZCode 桌面端侧栏查看。
 
 - `/deck` 统一入口：打开唯一面板（顶部 `1 工作面板 · 2 文件树 · 3 文件查看器` 页签行，数字热键切换，Esc 回输入框）；`/deck flow`、`/deck tree`、`/deck doc <相对路径>` 直达对应页签。无参 `/deck` 开关面板并保持上次所在页签。
 - 工作面板页签：方案迭代时显示当前方案的评分（十格条内嵌 `▏` 8.5 达标线）、分差与 P0/P1/P2（达标方案折叠为一行）；实施时显示极简阶段进度条、验证进度、批次边界和执行 DAG（节点+连线流水线总览条，连线按下游状态着色 + 依赖树）。实施上报超 30 分钟未续报时显示"疑似停滞"提示。无任务时显示跨会话恢复的上次执行摘要。标题、当前执行与评审卡的方案名可点击（下划线标示），点击切到文件查看器装载方案文档——优先评审目录 state.json 记录的路径，无评审目录时按 `plans/<插件>/<方案名>.md` 约定查找，找不到 toast 说明。面板内按 `r` 重取全部数据。工作面板尾部（含通关后的空态）显示 GitHub Issues 区块——`gh issue list` 的 open 条目（#号、标题、标签，链接可点击直达 issue），便于通关后挑选下一步任务；gh 不可用或非 GitHub 仓库时区块静默隐藏，无 open issue 时显示绿灯行。

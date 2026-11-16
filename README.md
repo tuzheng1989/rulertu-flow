@@ -123,7 +123,7 @@ python -m pytest plugins/copyright-skills/tests -q
 
 ## flow-deck：工作流仪表盘
 
-对 rulertu-flow 工作流零侵入的可视化（Claude Code mod 形态；ZCode 下不加载——ZCode 面板形态改造暂缓，待评估原生会话面板能力）：
+对 rulertu-flow 工作流零侵入的可视化（Claude Code 为 mod 全量面板；ZCode 下经 `ui.surfaces` 提供 GitHub Issues 常驻侧边面板，工作流面板改造仍暂缓）：
 
 - `/flow` 面板：评审轮次与评分趋势、执行阶段进度、波次依赖 DAG（按批三态着色）、git 改动面板、子代理运行状态
 - 批次边界守卫：每批派单后经 `flow_batch` 声明允许改动的文件集合，越界 Edit/Write 按 `guardMode` 提醒或拦截
