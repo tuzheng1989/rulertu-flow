@@ -9,7 +9,9 @@
 #   1. 所有 marketplaces       : zcode plugins marketplace update（无参 = 全部）
 #   2. 已安装 plugins          : 逐个 zcode plugins update <id>
 #                                （CLI 无原生 update-all；list --json 不回显 scope，
-#                                 默认 user scope 失败时自动补试 -s project）
+#                                 默认 user scope 失败时自动补试 -s project；
+#                                 zcode-plugins-official 市场整市场跳过——未安装条目
+#                                 必报 not installed 噪音，已装项随桌面版应用更新分发）
 #   3. openwiki (npm 全局)     : npm install -g openwiki@latest
 #   4. codegraph (npm 全局)    : npm install -g @colbymchenry/codegraph@latest
 #   5. open-code-review(npm)   : npm install -g @alibaba-group/open-code-review@latest
@@ -230,7 +232,7 @@ map_ver() { awk -F'\t' -v i="$2" '$1==i{print $2; exit}' <<< "$1"; }
 
 update_plugins() {
   section "2/7" "已安装 plugins（逐个）"
-  local before after ids id out results r_id r_st b a okn failn
+  local before after ids id out results r_id r_st b a okn failn skipn skip_note official_ids
   if ! resolve_zcode; then
     bad "未找到 zcode CLI（PATH 与已知安装位置均无）"
     sum_fail "Plugins（zcode CLI 未找到）"
@@ -249,6 +251,15 @@ update_plugins() {
     return
   fi
   ids=$(printf '%s\n' "$before" | cut -f1)
+  # zcode-plugins-official 整市场跳过：未安装条目 update 必报 "Plugin not
+  # installed"（17 条噪音的来源）；已装条目随桌面版应用更新分发，不走 CLI。
+  official_ids=$(printf '%s\n' "$ids" | grep '@zcode-plugins-official$' || true)
+  skipn=0
+  if [ -n "$official_ids" ]; then
+    skipn=$(printf '%s\n' "$official_ids" | grep -c . || true)
+    ids=$(printf '%s\n' "$ids" | grep -v '@zcode-plugins-official$' || true)
+    info "跳过 zcode-plugins-official 市场 $skipn 项（未安装项无可更新，已装项随桌面版分发）"
+  fi
   info "待更新插件数: $(printf '%s\n' "$ids" | grep -c . || true)"
 
   okn=0; failn=0; results=""
@@ -279,10 +290,12 @@ update_plugins() {
   done <<< "$results"
 
   warn "plugins 更新需重启 ZCode 会话才生效"
+  skip_note=""
+  [ "$skipn" -gt 0 ] && skip_note=" / $skipn 跳过官方市场"
   if [ "$failn" -gt 0 ]; then
-    sum_ok "Plugins: $okn 成功 / $failn 失败（重启会话后生效）"
+    sum_ok "Plugins: $okn 成功 / $failn 失败$skip_note（重启会话后生效）"
   else
-    sum_ok "Plugins: $okn 成功（重启会话后生效）"
+    sum_ok "Plugins: $okn 成功$skip_note（重启会话后生效）"
   fi
 }
 
