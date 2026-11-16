@@ -55,6 +55,15 @@ def validate() -> list[str]:
     require("scripts/codex_review.py <plan> <output> [session-id]" in plan_iterate, "Codex route differs", errors)
     require("claude_review" not in plan_iterate, "plan-iterate still routes to claude backend", errors)
     require("不回退为同宿主自评" in plan_iterate, "cross-model fallback guard missing", errors)
+    require("codex-consult" in plan_iterate, "plan-iterate must cite codex-consult exec layer", errors)
+
+    require((PLUGIN / "scripts" / "codex_exec.py").is_file(), "shared codex exec layer missing", errors)
+    codex_consult_path = PLUGIN / "skills" / "codex-consult" / "SKILL.md"
+    require(codex_consult_path.is_file(), "codex-consult skill missing", errors)
+    if codex_consult_path.is_file():
+        codex_consult = codex_consult_path.read_text(encoding="utf-8")
+        require("codex_exec.py" in codex_consult, "codex-consult must route to codex_exec.py", errors)
+        require("CODEX_PROFILE" in codex_consult, "codex-consult profile variable missing", errors)
 
     for skill in (PLUGIN / "skills").glob("*/SKILL.md"):
         text = skill.read_text(encoding="utf-8")
@@ -101,6 +110,23 @@ def validate() -> list[str]:
     require(len(executor_wrapper.splitlines()) <= 10, "executor wrapper is not thin", errors)
     require((PLUGIN / "references" / "roles" / "executor.md").is_file(), "executor role body missing", errors)
 
+    planner_wrapper = (PLUGIN / "agents" / "planner.md").read_text(encoding="utf-8")
+    require(f"model: {AGENT_MODEL}" in planner_wrapper, f"planner wrapper model must be {AGENT_MODEL}", errors)
+    require("thoughtLevel: max" in planner_wrapper, "planner wrapper must pin max thought level", errors)
+    require("tools: [Read, Edit, Write, Bash]" in planner_wrapper, "planner wrapper tools must be Read+Edit+Write+Bash", errors)
+    require("references/roles/planner.md" in planner_wrapper, "planner wrapper lacks role pointer", errors)
+    require(len(planner_wrapper.splitlines()) <= 10, "planner wrapper is not thin", errors)
+    require((PLUGIN / "references" / "roles" / "planner.md").is_file(), "planner role body missing", errors)
+
+    optimization = (PLUGIN / "skills" / "optimization-plan" / "SKILL.md").read_text(encoding="utf-8")
+    require("rulertu-flow:planner" in optimization, "planner dispatch route missing", errors)
+    require(
+        (PLUGIN / "skills" / "optimization-plan" / "references" / "writing-standard.md").is_file(),
+        "writing standard missing",
+        errors,
+    )
+    require("| Planner | `gpt-6.1-sol` | `high` | `\"none\"` |" in optimization, "Codex route differs for Planner", errors)
+
     executor = (PLUGIN / "references" / "roles" / "executor.md").read_text(encoding="utf-8")
     implement = (PLUGIN / "skills" / "implement-plan" / "SKILL.md").read_text(encoding="utf-8")
     codex_routes = (
@@ -118,6 +144,7 @@ def validate() -> list[str]:
     require("普通子任务不扩大为全仓测试" in executor, "Executor directed-test policy missing", errors)
     require("需主控裁决" in executor, "Executor escalation marker missing", errors)
     require("直连" in implement, "Advisor direct-dispatch policy missing", errors)
+    require("codex-consult" in implement, "T3 second-opinion route missing", errors)
     require("收尾时跑一次全量测试" not in executor + implement, "legacy full-suite rule remains", errors)
     require(implement.count("仅有以下情况运行全量测试") == 1, "full-suite exceptions must have one policy source", errors)
     for stale in (ROOT / "skills", ROOT / "agents", ROOT / ".codex-plugin"):

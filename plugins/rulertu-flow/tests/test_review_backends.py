@@ -111,23 +111,6 @@ class SharedProtocolTests(unittest.TestCase):
         self.assertIn("上一轮 JSON", prompt)
         self.assertIn('"score": 9', prompt)
 
-    def test_shell_free_cli_resolution(self):
-        with mock.patch.object(review_common.shutil, "which", return_value="/usr/bin/claude"):
-            self.assertEqual(review_common.resolve_cli("claude", platform_name="posix"), ["/usr/bin/claude"])
-        paths = {
-            "codex.exe": None,
-            "codex.com": None,
-            "codex.cmd": "C:/npm/codex.cmd",
-            "node.exe": "C:/node/node.exe",
-        }
-        with mock.patch.object(review_common.shutil, "which", side_effect=lambda name: paths.get(name)), mock.patch.object(
-            review_common.Path, "is_file", return_value=True
-        ):
-            self.assertEqual(
-                review_common.resolve_cli("codex", platform_name="nt"),
-                ["C:/node/node.exe", "C:\\npm\\node_modules\\@openai\\codex\\bin\\codex.js"],
-            )
-
 
 class CodexBackendTests(unittest.TestCase):
     def invoke(self, mode: str, round_number: int = 1, session: str | None = None, preserve: bool = False):
@@ -156,16 +139,6 @@ class CodexBackendTests(unittest.TestCase):
         ), mock.patch.object(codex_review.subprocess, "run", side_effect=fake_run):
             result = codex_review.run(args, timeout=0.01)
         return cleanup, output, result
-
-    def test_commands_first_resume_and_thread_event(self):
-        repo, output = Path("C:/repo"), Path("C:/out/review-R1.json")
-        first = codex_review.build_command(["codex"], repo, output, None, "prompt")
-        self.assertEqual(first[:7], ["codex", "exec", "-s", "read-only", "-C", str(repo), "--json"])
-        resumed = codex_review.build_command(["codex"], repo, output, "id", "prompt")
-        self.assertEqual(resumed[:4], ["codex", "exec", "resume", "id"])
-        self.assertEqual(
-            codex_review.extract_thread_id('{"type":"thread.started","thread_id":"tid"}\n'), "tid"
-        )
 
     def test_success_errors_and_legacy_migration(self):
         cleanup, output, result = self.invoke("success")

@@ -12,7 +12,7 @@ description: 独立评审并迭代方案文档。当用户要求方案迭代、�
 按宿主能力选择，优先级从上到下：
 
 - 子代理通道（默认，宿主有子代理工具且 `rulertu-flow:auditor` 可用）：派 auditor 只读评审，随任务注入方案路径、[review schema](scripts/review-schema.json) 与「仅输出一个符合 schema 的 JSON 对象」要求；把返回的 JSON 原样存为 `review-RN.json` 后，运行 `python scripts/review_common.py normalize <review-RN.json>` 做归一化与严格校验（退出码 `2` 为协议错误），再运行 `python scripts/review_common.py state <plan> <轮次> <review-RN.json>` 写 `state.json`。子代理每轮独立派发、不跨轮复用会话，复审时注入上一轮 JSON。
-- Codex 外调通道（宿主无子代理，或用户要求跨模型第二意见时）：运行 `scripts/codex_review.py <plan> <output> [session-id]`，外调 Codex CLI 的只读沙箱做跨模型评审。Windows 直接使用 Python；POSIX 可使用 `codex-review.sh` 转发。
+- Codex 外调通道（宿主无子代理，或用户要求跨模型第二意见时）：运行 `scripts/codex_review.py <plan> <output> [session-id]`，外调 Codex CLI 的只读沙箱做跨模型评审。Windows 直接使用 Python；POSIX 可使用 `codex-review.sh` 转发。执行层由 `rulertu-flow:codex-consult` 技能提供（插件级 `../../scripts/codex_exec.py`，授权与退出码协议随该技能），评审协议封装（schema 归一化、轮次状态机）保留在本技能。
 
 Codex 外调通道只在用户明确授权且目标 CLI 可用时运行；可用性以首轮评审调用本身作为冒烟，失败按进程失败处理，不回退为同宿主自评。原会话无法恢复时，新建目标评审会话并注入上一轮 JSON。
 

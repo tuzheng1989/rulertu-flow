@@ -16,7 +16,7 @@
 ## 特色
 
 - **T0–T3 风险分级**：方案按风险定级决定验证强度——低风险批次定向测试即可收口，高风险批次触发全量回归；`optimization-plan` 写方案、`implement-plan` 执行、`plan-iterate` 独立评审，三者构成完整闭环。
-- **四角色模型路由**：主控协调之下，Executor / Auditor / Advisor 各绑定固定模型与上下文策略（ZCode 与 Codex 各自独立配置），固定模型不可用时阻断而非静默降级。
+- **五角色模型路由**：主控协调之下，Planner / Executor / Auditor / Advisor 各绑定固定模型与上下文策略（ZCode 与 Codex 各自独立配置），固定模型不可用时阻断而非静默降级。
 - **双宿主**：同一 marketplace 同时服务 ZCode 与 Codex；`plan-iterate` 评审默认由插件 auditor 子代理做只读独立评审，宿主无子代理能力或需跨模型第二意见时外调 Codex CLI。
 - **commit/PR 文案路由**：会话内任何提交与 PR 文案先经 `commit` / `pr` 技能起草，PreToolUse 守卫（`hooks/commit-router.js`）在技能未加载时向模型提醒一次，不拦截提交。
 - **流程可视化**：`flow-deck` 以 mod 形式对工作流零侵入地可视化——评审进度横条、批次边界守卫（`flow_batch`）、波次依赖 DAG、git 改动面板与子代理监控。
@@ -53,11 +53,12 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 ## rulertu-flow：工作流引擎
 
-六个技能：
+七个技能：
 
-- `optimization-plan`：需求需要至少两个有依赖关系的批次时，编写并定级方案。
+- `optimization-plan`：需求需要至少两个有依赖关系的批次时，主控调研澄清后派 planner 代理成稿并定级。
 - `implement-plan`：执行一份已有 T0–T3 定级的分批方案。
 - `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
+- `codex-consult`：外调 Codex CLI 只读沙箱获取跨模型第二意见；任意任务 prompt，plan-iterate 评审通道与 implement-plan T3 复用同一执行层。
 - `commit`：依据实际改动起草或改写提交说明，标题写具体变化，正文按需解释原因与约束。
 - `pr`：依据最终 diff 起草或改写 PR 标题与正文，说明问题、行为变化和实际验证结果。
 - `update`：更新本机 ZCode 工具链的外部组件。

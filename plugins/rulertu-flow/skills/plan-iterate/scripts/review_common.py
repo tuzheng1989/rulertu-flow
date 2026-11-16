@@ -1,43 +1,23 @@
-"""Shared protocol and artifact handling for plan-review backends."""
+"""Shared protocol handling for the plan-review subagent channel."""
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from normalize import ReviewError, atomic_write_json, normalize_file
 
-EXIT_INPUT, EXIT_PROCESS, EXIT_PROTOCOL = 2, 3, 4
+_PLUGIN_SCRIPTS = str(Path(__file__).resolve().parents[3] / "scripts")
+if _PLUGIN_SCRIPTS not in sys.path:
+    sys.path.insert(0, _PLUGIN_SCRIPTS)
+from codex_exec import EXIT_INPUT, EXIT_PROCESS, EXIT_PROTOCOL
+
 ROUND_PATTERN = re.compile(r"review-R(\d+)\.json$")
 SCHEMA_PATH = Path(__file__).with_name("review-schema.json")
 REQUIRED_FIELDS = {"overall_quality", "score", "issues", "suggestions"}
-
-
-def resolve_cli(name: str, *, platform_name: str | None = None) -> list[str]:
-    """Return a shell-free executable prefix, including npm's Windows wrapper case."""
-    platform_name = platform_name or os.name
-    if platform_name != "nt":
-        executable = shutil.which(name)
-        if executable:
-            return [executable]
-        raise ReviewError(f"CLI is not installed: {name}")
-    for extension in (".exe", ".com"):
-        executable = shutil.which(f"{name}{extension}")
-        if executable:
-            return [executable]
-    wrapper = shutil.which(f"{name}.cmd")
-    if wrapper and name == "codex":
-        node = shutil.which("node.exe") or shutil.which("node")
-        entrypoint = Path(wrapper).parent / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
-        if node and entrypoint.is_file():
-            return [node, str(entrypoint)]
-    raise ReviewError(f"no shell-free Windows executable found for: {name}")
 
 
 def validate_schema() -> dict[str, Any]:
@@ -50,19 +30,6 @@ def validate_schema() -> dict[str, Any]:
     ):
         raise ReviewError("review schema required fields differ from protocol")
     return schema
-
-
-def repository_for(plan: Path) -> Path:
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=plan.parent,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-    )
-    return Path(result.stdout.strip()).resolve()
 
 
 def parse_inputs(argv: list[str]) -> tuple[Path, Path, int, str | None]:
@@ -122,22 +89,6 @@ def prompt_for(plan: Path, session: str | None, previous: str | None) -> str:
         "severity 取值只能是 P0、P1 或 P2。"
         "达到 8.5 分且无 P0/P1 才算通过。"
     )
-
-
-def artifact_paths(output: Path) -> tuple[Path, Path, Path]:
-    stem = output.with_suffix("")
-    return Path(f"{stem}.events.jsonl"), Path(f"{stem}.stderr.log"), Path(f"{stem}.log")
-
-
-def write_log(log: Path, returncode: int, events: Path, stderr: Path) -> tuple[str, str]:
-    events_text = events.read_text(encoding="utf-8")
-    stderr_text = stderr.read_text(encoding="utf-8")
-    log.write_text(
-        f"exit_code={returncode}\nevents={events.name}\nstderr={stderr.name}\n"
-        f"\n[events]\n{events_text}\n[stderr]\n{stderr_text}",
-        encoding="utf-8",
-    )
-    return events_text, stderr_text
 
 
 def append_protocol_error(log: Path, error: Exception) -> None:
