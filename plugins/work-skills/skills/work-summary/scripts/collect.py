@@ -6,8 +6,9 @@
 数据来源：
   1. Claude Code 会话记录 (~/.claude/history.jsonl)
   2. Codex 会话记录 (~/.codex/history.jsonl + session_index.jsonl)
-  3. Git 提交记录 (--repos 指定的目录树，默认 D:/runspace)
-  4. 统计信息（条数、项目列表）
+  3. ZCode 会话记录 (~/.zcode/cli/rollout/model-io-sess_*.jsonl)
+  4. Git 提交记录 (--repos 指定的目录树，默认 D:/runspace)
+  5. 统计信息（条数、项目列表）
 
 Hermes 会话（session_search）无法脚本化，由 Agent 侧补充。
 
@@ -24,6 +25,7 @@ Hermes 会话（session_search）无法脚本化，由 Agent 侧补充。
 import argparse
 import glob
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -38,6 +40,7 @@ CODEX_HISTORY = Path.home() / ".codex" / "history.jsonl"
 CODEX_SESSION_INDEX = Path.home() / ".codex" / "session_index.jsonl"
 CODEX_PROJECTS = Path.home() / ".codex" / "sessions"
 ZCODE_ROLLOUT = Path.home() / ".zcode" / "cli" / "rollout"
+ZCODE_CWD_RE = re.compile(r"Primary working directory: (.+)")
 DEFAULT_REPOS_ROOT = Path("D:/runspace")
 
 CONTENT_MAX_CHARS = 300   # 会话输入截断长度，足够 Agent 理解意图
@@ -213,34 +216,103 @@ def collect_codex(start_dt, end_dt):
 
 
 # ============================================================
-# 数据源 2b：ZCode 会话（最小接入）
+# 数据源 2b：ZCode 会话
 # ============================================================
 
-def collect_zcode(start_dt, end_dt):
+def collect_zcode(start_dt, end_dt, summarize=False):
     """~/.zcode/cli/rollout/model-io-sess_*.jsonl：宿主模型 IO 诊断文件。
 
-    最小接入：mtime 落在窗口内的会话各计一条「会话活跃」，不做内容解析——
-    请求体是宿主私有诊断格式且含完整 system prompt，解析脆弱且无意义。
-    深度摘要待宿主提供会话级导出格式后再接入。
+    每行一次模型请求：request.messages 是该轮增量消息（role=user 含用户
+    输入与 <system-reminder> 注入），response.text 是 assistant 输出，
+    response.usage 是该轮 token 用量。只取 querySource=main_turn；
+    attempt 重试会重复携带增量消息，同会话按内容去重。
+    项目归属取用户消息里的 "Primary working directory:"（会话内首个命中，
+    取不到归入 zcode 组）。
+
+    返回 {项目名: {items, session_summaries}}，与 Claude 普通项目同构。
+    assistant 文本随行即可得，摘要直接在此组装，不走 attach_deep_summaries。
     """
     if not ZCODE_ROLLOUT.exists():
         log(f"ZCode 会话目录不存在: {ZCODE_ROLLOUT}")
         return {}
 
     start_ts, end_ts = start_dt.timestamp(), end_dt.timestamp()
-    entries = []
+    sessions = {}  # "sess_xxx" -> {inputs: [(dt, text)], texts, cwd, tokens, turns}
     for path in sorted(ZCODE_ROLLOUT.glob("model-io-sess_*.jsonl")):
-        mtime = path.stat().st_mtime
-        if not (start_ts <= mtime < end_ts):
-            continue
         sid = path.stem.removeprefix("model-io-")
-        dt = datetime.fromtimestamp(mtime)
-        entries.append({
-            "date": dt.strftime("%Y-%m-%d"),
-            "time": dt.strftime("%H:%M"),
-            "content": f"ZCode 会话活跃（{sid[:13]}…，内容未解析：宿主诊断格式）",
-        })
-    return {"zcode": entries} if entries else {}
+        try:
+            sess = sessions.setdefault(sid, {"inputs": [], "texts": [], "cwd": None,
+                                             "tokens": 0, "turns": 0})
+            seen_inputs = set()
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        d = json.loads(line)
+                    except Exception:
+                        continue
+                    if d.get("querySource") != "main_turn":
+                        continue
+                    started = d.get("startedAt")
+                    if not started:
+                        continue
+                    ts = datetime.fromisoformat(started.replace("Z", "+00:00")).timestamp()
+                    if not (start_ts <= ts < end_ts):
+                        continue
+                    dt = datetime.fromtimestamp(ts)
+                    for m in d.get("request", {}).get("messages") or []:
+                        c = m.get("content")
+                        if isinstance(c, list):
+                            c = "\n".join(b.get("text", "") for b in c
+                                          if isinstance(b, dict) and b.get("type") == "text")
+                        text = (c or "").strip()
+                        if not text:
+                            continue
+                        # cwd 也在 role=system 的 Environment 注入里，故不分角色搜索
+                        if sess["cwd"] is None:
+                            m2 = ZCODE_CWD_RE.search(text)
+                            if m2:
+                                sess["cwd"] = m2.group(1).strip()
+                        if m.get("role") != "user":
+                            continue
+                        if text.startswith("<system-reminder>"):
+                            continue
+                        if len(text) <= 5 or text in TRIVIAL_INPUTS or text in seen_inputs:
+                            continue
+                        seen_inputs.add(text)
+                        sess["inputs"].append((dt, text[:CONTENT_MAX_CHARS]))
+                    resp = d.get("response") or {}
+                    t = (resp.get("text") or "").strip()
+                    if t:
+                        sess["texts"].append(t)
+                    usage = resp.get("usage") or {}
+                    tok = usage.get("inputTokens", 0) + usage.get("outputTokens", 0)
+                    if tok:
+                        sess["tokens"] += tok
+                        sess["turns"] += 1
+        except Exception as e:
+            log(f"读取 ZCode 会话 {sid[:16]} 失败: {e}")
+            sessions.pop(sid, None)
+            continue
+
+    result = {}
+    for sid, sess in sessions.items():
+        pname = Path(sess["cwd"]).name if sess["cwd"] else "zcode"
+        group = result.setdefault(pname, {"items": []})
+        for dt, text in sess["inputs"]:
+            group["items"].append({
+                "date": dt.strftime("%Y-%m-%d"),
+                "time": dt.strftime("%H:%M"),
+                "content": text,
+            })
+        if summarize and sess["texts"]:
+            extra = {"total_tokens": sess["tokens"], "turns": sess["turns"]} if sess["turns"] else None
+            summaries = group.setdefault("session_summaries", {})
+            summaries[sid.removeprefix("sess_")[:8]] = _make_summary(
+                sess["texts"][0], _first_longest(sess["texts"], DEEP_TAIL_COUNT),
+                _pick_midstones(sess["texts"], DEEP_MID_COUNT), extra)
+    return {k: v for k, v in result.items() if v["items"] or v.get("session_summaries")}
 
 
 # ============================================================
@@ -507,7 +579,7 @@ def main():
 
     claude, claude_sessions = collect_claude(start_dt, end_dt)
     codex, codex_full_sids = collect_codex(start_dt, end_dt)
-    zcode = collect_zcode(start_dt, end_dt)
+    zcode = collect_zcode(start_dt, end_dt, args.summarize)
     git = collect_git(start_dt, end_dt, args.repos)
 
     if args.summarize:
@@ -531,7 +603,7 @@ def main():
 
     log(f"Claude Code 会话: {total_claude} 条 / {len(claude)} 项目")
     log(f"Codex 会话: {total_codex} 条")
-    log(f"ZCode 会话: {total_zcode} 条（仅活跃计数，内容未解析）")
+    log(f"ZCode 会话: {total_zcode} 条 / {len(zcode)} 项目")
     log(f"Git 提交: {total_git} 条 / {len(git)} 项目")
 
     output = {
@@ -551,7 +623,7 @@ def main():
         "codex_sessions": codex,
         "zcode_sessions": zcode,
         "git_commits": git,
-        "_notes": "时间窗口左闭右开；深度摘要来自整个会话，可能含窗口外内容，须核验时间；hermes_sessions 需 Agent 用 session_search 补充；codex 项目归属需结合内容判断；zcode 仅会话活跃计数（宿主诊断格式未解析）",
+        "_notes": "时间窗口左闭右开；深度摘要来自整个会话，可能含窗口外内容，须核验时间；hermes_sessions 需 Agent 用 session_search 补充；codex 项目归属需结合内容判断；zcode 项目归属取会话首个 Primary working directory，取不到归入 zcode 组",
     }
 
     text = json.dumps(output, ensure_ascii=False, indent=2)

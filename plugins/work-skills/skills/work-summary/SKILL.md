@@ -2,7 +2,7 @@
 name: work-summary
 description: 生成个人或团队工作总结，汇总指定期间的会话、Git 提交、成员总结或用户提供的记录。适用于日报、周报、月报、季度、半年度、年度及自定义时间范围。
 metadata:
-  version: 2.1.0
+  version: 2.3.0
   author: rulertu
   work-skills:
     category: 工作总结
@@ -35,7 +35,7 @@ sources: ["来源路径或标识"]
 
 ## 采集和判断
 
-用户提供的材料优先；需要本地记录时，可运行 `scripts/collect.py` 采集 Claude Code、Codex 历史和指定根目录下直接子目录中的 Git 仓库（ZCode 侧仅会话活跃计数，宿主诊断格式暂不解析内容）。脚本默认周窗口及仓库根 `D:/runspace`；只在数据源与任务相关且可访问时使用。Hermes 可用时通过 session_search 补充；不可用或缺失的来源须注明，不能据此认定没有工作。
+用户提供的材料优先；需要本地记录时，可运行 `scripts/collect.py` 采集 Claude Code、Codex、ZCode 历史和指定根目录下直接子目录中的 Git 仓库。脚本默认周窗口及仓库根 `D:/runspace`；只在数据源与任务相关且可访问时使用。Hermes 可用时通过 session_search 补充；不可用或缺失的来源须注明，不能据此认定没有工作。
 
 ```bash
 python {baseDir}/scripts/collect.py --start 2026-01-01 --end 2026-02-01 --summarize -o data.json
@@ -48,7 +48,14 @@ python {baseDir}/scripts/collect.py --days 7 --repos D:/work -o data.json
 python {baseDir}/scripts/pull_repos.py --json pull_result.json   # --force 强制全量，--timeout 40 单仓超时
 ```
 
-`--start` 和 `--end` 接受本地 ISO 日期或日期时间，终点不含；`--days` 是截至现在的 N 个 24 小时。`--summarize` 从完整会话抽取首段、成果候选和里程碑，能减少上下文，但它不是经过验证的总结：首段未必是复述，最长尾段未必是成果，完整会话还可能跨越窗口。对重要结论、日期和状态回查原始会话或其他证据，不能把窗口外成果算入本期。Git 记录按作者时间筛选，默认包含各作者；个人贡献须结合证据判断。Codex 项目归属可查 rollout 的 `session_meta.cwd`；工作台项目 `evoCenter` 按会话拆分，文档工作保留文档名。同一项目的不同目录名称需辨认后合并。
+需要检查重点仓推送状态时（如每日推送守护定时任务），运行 `scripts/push_watchdog.py`：检查 FOCUS_REPOS（复用 pull_repos.py 的重点关注清单）是否有「已提交但未推送」，有则自动推送——默认→代理→直连双通道重试，push 被拒不自动合并、只报告；未提交的工作区更改不感知不处理。stdout 只在有推送动作或异常时输出 ✅/❌/⚠️ 报告，全部干净时 stdout 为空、退出码 0；过程日志走 stderr，判定只看 stdout。调用方约定：stdout 为空即全部干净，静默结束不投递；非空时将 stdout 原文（保留换行）转交指定接收人；退出码 1 表示存在推送失败或检查异常，须如实注明而非略过。
+
+```bash
+python {baseDir}/scripts/push_watchdog.py            # stdout 人类可读报告（干净时为空）
+python {baseDir}/scripts/push_watchdog.py --json out.json   # 结果另存 JSON
+```
+
+`--start` 和 `--end` 接受本地 ISO 日期或日期时间，终点不含；`--days` 是截至现在的 N 个 24 小时。`--summarize` 从完整会话抽取首段、成果候选和里程碑，能减少上下文，但它不是经过验证的总结：首段未必是复述，最长尾段未必是成果，完整会话还可能跨越窗口。对重要结论、日期和状态回查原始会话或其他证据，不能把窗口外成果算入本期。Git 记录按作者时间筛选，默认包含各作者；个人贡献须结合证据判断。Codex 项目归属可查 rollout 的 `session_meta.cwd`；ZCode 项目归属取会话首个 `Primary working directory`，取不到归入 `zcode` 组。工作台项目 `evoCenter` 按会话拆分，文档工作保留文档名。同一项目的不同目录名称需辨认后合并。
 
 对于月度及更长周期、或资料无法舒适放入上下文时，读取 [分尺度融合](references/multiscale.md)，按子窗口逐层处理；不要直接把全部采集 JSON 一次放入上下文。短周期也可在资料量大时使用该流程。
 
