@@ -39,12 +39,9 @@ MARKET = "rulertu-flow"
 
 # validate_repo.py 的存量基线（family-skills / secret-skills 本地目录未登记
 # marketplace 所致，长期存在且与本技能无关；见 memory 与 CHANGELOG 2.10.1 条目）
-GATE_BASELINE = {
-    "ERROR: Claude marketplace entries and plugin dirs differ",
-    "ERROR: Codex marketplace entries and plugin dirs differ",
-    "ERROR: manifest missing: family-skills",
-    "ERROR: manifest missing: secret-skills",
-}
+# 历史：曾收录 family-skills / secret-skills 本地未上架目录的 4 条报错，
+# 2026-11 两目录已删、报错消失，基线清空；再出现过时项时脚本会 WARN 提示。
+GATE_BASELINE: set[str] = set()
 
 FAILS: list[str] = []
 WARNS: list[str] = []
@@ -103,7 +100,7 @@ def check_gate() -> None:
         for ln in new:
             fail(f"门禁新增报错: {ln}")
     else:
-        ok(f"存量 {len(lines)} 条基线报错之外零新增")
+        ok("门禁零报错" if not GATE_BASELINE else f"存量 {len(lines)} 条基线报错之外零新增")
     if gone:
         warn(f"基线报错消失（基线可能过时，考虑更新 GATE_BASELINE）: {gone}")
 
