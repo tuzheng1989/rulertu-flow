@@ -38,10 +38,16 @@ CACHE = Path.home() / ".zcode" / "cli" / "plugins" / "cache" / "rulertu-flow"
 MARKET = "rulertu-flow"
 
 # validate_repo.py 的存量基线（family-skills / secret-skills 本地目录未登记
-# marketplace 所致，长期存在且与本技能无关；见 memory 与 CHANGELOG 2.10.1 条目）
-# 历史：曾收录 family-skills / secret-skills 本地未上架目录的 4 条报错，
-# 2026-11 两目录已删、报错消失，基线清空；再出现过时项时脚本会 WARN 提示。
-GATE_BASELINE: set[str] = set()
+# marketplace 所致，长期存在且与本技能无关；见 memory 与 CHANGELOG 2.10.1 条目）。
+# 两目录为 .gitignore 本地目录、不随 git 同步：主工作站仍在，4 条报错为存量；
+# 2026-11-17 另一机器删目录后曾清空基线（6cb29bf），致主工作站把存量误判为
+# 新增，现恢复。目录已删的机器会得到"基线报错消失"WARN，属预期而非 FAIL。
+GATE_BASELINE: set[str] = {
+    "ERROR: Claude marketplace entries and plugin dirs differ",
+    "ERROR: Codex marketplace entries and plugin dirs differ",
+    "ERROR: manifest missing: family-skills",
+    "ERROR: manifest missing: secret-skills",
+}
 
 FAILS: list[str] = []
 WARNS: list[str] = []
