@@ -1,0 +1,103 @@
+{
+  "skill_name": "dsh",
+  "evals": [
+    {
+      "id": 1,
+      "name": "install-and-run",
+      "prompt": "我想在本机把 DeepSeek Harness 跑起来看看效果，最快的方式是什么？",
+      "expected_output": "应给出 npx @deepseek-ai/dsh web，说明默认在 http://127.0.0.1:3080 启动 Web UI，并提示在 Settings → Models 配置 DeepSeek API key、选择 workspace 后才能发会话",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "headless-one-shot",
+      "prompt": "用 dsh 在 CI 里无界面跑一个一次性任务，输出最终答案后退出，怎么做？",
+      "expected_output": "应给出 dsh headless \"任务\"（或 dsh --profile headless \"任务\"），说明其一次性运行语义：新建持久会话、打印最终答案、退出；需要 DEEPSEEK_API_KEY",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "first-plugin",
+      "prompt": "我想为 dsh 写一个最简单的插件加载到 Web UI 里，应该怎么写、怎么加载？",
+      "expected_output": "应给出导出 name 与 apply(ctx) 的 TypeScript 模块，写 cordis.yml 的 insert 行（绝对路径），并用 dsh web --patch ./cordis.yml 启动验证",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "custom-tool",
+      "prompt": "如何给 dsh 加一个模型可以调用的自定义工具？比如查询天气。",
+      "expected_output": "应给出 inject: ['tools'] 插件内 ctx.tools.register(defineTool({...})) 的完整示例，说明 parameters 推断校验 args、execute 返回规范值、output.render 转模型可见内容",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "gateway-compat",
+      "prompt": "我的 OpenAI 兼容网关地址和 key 都正确，但 dsh 里每个请求都被拒绝，怎么排查？",
+      "expected_output": "应指出网关请求形状差异是最常见原因，给出 compat.supportsDeveloperRole: false 与 compat.maxTokensField: max_tokens 两个开关（写在 cordis.patch.yml 的 llm-pi-ai provider 路由上），并说明推理模型不停思考时加 compat.thinkingFormat: deepseek",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "patch-override-semantics",
+      "prompt": "我想在 dsh 里改某个插件的一行配置，只写我要改的那个键行不行？",
+      "expected_output": "应说明 patch 按 id 替换该行的完整 config、不深合并，必须复述该行需要的所有键；并解释四层组合顺序（bundles → profile patch → home patch → --patch，后层按行胜出）",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "python-sdk-embed",
+      "prompt": "我想在 Python 程序里调用 DeepSeek Harness 完成任务并拿到最终回答，怎么写？",
+      "expected_output": "应给出 pip install deepseek-harness-sdk 与 DeepSeekHarness(profile=..., cwd=..., dsh_home=...) 上下文管理器 + harness.run(prompt, session_id=...) 取 result.final_response 的示例，强调 SDK 不静默读 ~/.dsh、sdk-minimal 锁定 danger-full-access 应使用一次性目录",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "ts-sdk-approval",
+      "prompt": "TypeScript SDK 嵌入 dsh 时，如何由我的程序接管工具审批？",
+      "expected_output": "应说明 DeepSeekHarness 传 approvalRequests: true、先 harness.client.start() 并安装 onRequest 处理 approval/request 返回 { outcome: 'allowed-once' | 'rejected' | 'cancelled' }，缺 handler 时审批关死",
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "three-role-capability",
+      "prompt": "dsh 里我想做一个可替换实现的系统能力（类似 Bash 执行），应该怎么组织包？",
+      "expected_output": "应介绍三角色设计：Service Definition（定义服务与 Request/Result 类型）、Service Provider（实现）、Consumer（暴露为工具），Provider 与 Consumer 互不依赖，并提醒不预先拆包、简单能力一个插件即可",
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "waterfall-next-contract",
+      "prompt": "我在 dsh 插件里监听了一个 waterfall 事件但下游好像没执行，可能是什么问题？",
+      "expected_output": "应指出 waterfall 监听器必须调用 next() 委托下游，省略即按设计短路；说明短路与拦截是设计使然，类型化事件经 declaration merging 声明",
+      "files": []
+    },
+    {
+      "id": 11,
+      "name": "publish-bundle",
+      "prompt": "怎么把我的 dsh 插件打包成可安装的 bundle 给别人用？",
+      "expected_output": "应给出 package.json 的 dsh.bundle.patch 清单、cordis.patch.yml 按包名引用插件行、engines.dsh 版本范围声明、dsh plugin --profile <name> add 安装方式；提 GitHub 直装需自包含 prepare 脚本 + 用户 allowBuilds 放行，或改发 npm/tarball 制品",
+      "files": []
+    },
+    {
+      "id": 12,
+      "name": "safety-boundary",
+      "prompt": "dsh 的沙箱和审批能保证安全隔离吗？部署前要注意什么？",
+      "expected_output": "应明确：沙箱/审批只降低风险不保证隔离，dsh 未经安全审计不得视为生产就绪，不得作为不可信负载的唯一安全控制；建议最小权限、一次性容器/虚拟机、备份可访问文件、审查插件与待批命令；sdk-minimal 锁定 danger-full-access",
+      "files": []
+    },
+    {
+      "id": 13,
+      "name": "profile-inspect",
+      "prompt": "dsh 启动时到底加载了哪些插件和配置？我想看最终的组合结果。",
+      "expected_output": "应给出 dsh --profile <name> --dump-config（完整树+每行来源注释）、--dump-default-config（仅 bundle 层）、--dump-config-schema（JSON Schema）三命令，并说明打印的每一行都可被自己的 patch 替换",
+      "files": []
+    },
+    {
+      "id": 14,
+      "name": "mcp-integration",
+      "prompt": "我想让 dsh 会话里能用我自己的 MCP 服务器工具，怎么配置？",
+      "expected_output": "应说明 Web Creator 模式下可用一句 prompt 经 Plugin Manager 配置 MCP 服务器（config-only bundle 插入 dsh-mcp-client，HMR 下同会话生效），或手动在 profile patch 插入 MCP 客户端行；base-backed profile 挂载 MCP 资源一次，配置了客户端才有 MCP 工具",
+      "files": []
+    }
+  ]
+}

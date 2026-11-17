@@ -1,6 +1,8 @@
 {
   "name": "rulertu-flow",
-  "owner": { "name": "rulertu" },
+  "owner": {
+    "name": "rulertu"
+  },
   "description": "面向 ZCode 与 Codex 的分级规划、执行和验证工作流。",
   "plugins": [
     {
@@ -16,7 +18,7 @@
     {
       "name": "agent-skills",
       "source": "./plugins/agent-skills",
-      "description": "Agent 设计与评测技能：AI Agent 设计知识包、Jev Agent 社区实践、主动型 Agent 6A 架构、Agent 评测、DeepAgents 文档、agent-retrieval 检索指南与模型查询"
+      "description": "Agent 设计与评测技能：AI Agent 设计知识包、Jev Agent 社区实践、主动型 Agent 6A 架构、Agent 评测、DeepAgents 文档、agent-retrieval 检索指南与模型查询、dsh（DeepSeek Harness）Agent 底座指南与插件开发"
     },
     {
       "name": "copyright-skills",

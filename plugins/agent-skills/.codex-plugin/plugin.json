@@ -1,7 +1,7 @@
 {
   "name": "agent-skills",
-  "version": "1.6.2",
-  "description": "Agent 设计与评测技能：AI Agent 设计知识包、Jev Agent 社区实践、主动型 Agent 6A 架构、Agent 评测、DeepAgents 文档、agent-retrieval 检索指南与模型查询",
+  "version": "1.7.0",
+  "description": "Agent 设计与评测技能：AI Agent 设计知识包、Jev Agent 社区实践、主动型 Agent 6A 架构、Agent 评测、DeepAgents 文档、agent-retrieval 检索指南与模型查询、dsh（DeepSeek Harness）Agent 底座指南与插件开发",
   "author": {
     "name": "rulertu",
     "url": "https://github.com/tuzheng1989"
@@ -11,8 +11,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Agent Skills",
-    "shortDescription": "AI Agent 设计、主动型 Agent 6A 架构、评测与模型查询",
-    "longDescription": "面向 Agent 工程的技能：ai-agent-design 统一路由（《深入理解 AI Agent》知识包）、jev-agent-design 社区案例与 Jev Agent 设计、proactive-agent-design 主动型 Agent 6A 架构设计与评审、agent-evaluator 评测 Harness 构建、deepagents 使用指南与文档同步、agent-retrieval 检索指南、model-info 模型参数查询。",
+    "shortDescription": "AI Agent 设计、主动型 Agent 6A 架构、评测、DeepSeek Harness 底座与模型查询",
+    "longDescription": "面向 Agent 工程的技能：ai-agent-design 统一路由（《深入理解 AI Agent》知识包）、jev-agent-design 社区案例与 Jev Agent 设计、proactive-agent-design 主动型 Agent 6A 架构设计与评审、agent-evaluator 评测 Harness 构建、deepagents 使用指南与文档同步、agent-retrieval 检索指南、model-info 模型参数查询、dsh DeepSeek Harness 底座指南（运行部署 / SDK 应用集成 / 插件开发 / Profile 调优）。",
     "developerName": "rulertu",
     "category": "Productivity",
     "capabilities": [
@@ -26,7 +26,8 @@
       "用 proactive-agent-design 设计一个持续发现待办的助手。",
       "为我的 agent 构建一套评测方案。",
       "用 agent-retrieval 给我的工具列表加自然语言检索。",
-      "对比几个主流模型的参数和价格。"
+      "对比几个主流模型的参数和价格。",
+      "用 dsh 指南把 DeepSeek Harness 跑起来并写一个自定义工具插件。"
     ]
   }
 }
