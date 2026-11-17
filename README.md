@@ -53,12 +53,13 @@ Codex：marketplace 位置决定可见范围——仓库内 `.agents/plugins/mar
 
 ## rulertu-flow：工作流引擎
 
-七个技能：
+八个技能：
 
 - `optimization-plan`：需求需要至少两个有依赖关系的批次时，主控调研澄清后派 planner 代理成稿并定级。
 - `implement-plan`：执行一份已有 T0–T3 定级的分批方案。
 - `plan-iterate`：独立评审与迭代方案文档；不用于代码 diff review。
 - `codex-consult`：外调 Codex CLI 只读沙箱获取跨模型第二意见；任意任务 prompt，plan-iterate 评审通道与 implement-plan T3 复用同一执行层。
+- `codex-cli`：直接驱动 Codex CLI 的通用指南——写任务、指定模型与思考档、会话保持与管理、profile 与环境诊断；只读意见通道覆盖不了的场景归此。
 - `commit`：依据实际改动起草或改写提交说明，标题写具体变化，正文按需解释原因与约束。
 - `pr`：依据最终 diff 起草或改写 PR 标题与正文，说明问题、行为变化和实际验证结果。
 - `update`：更新本机 ZCode 工具链的外部组件。
