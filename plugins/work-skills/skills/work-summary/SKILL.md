@@ -42,7 +42,7 @@ python {baseDir}/scripts/collect.py --start 2026-01-01 --end 2026-02-01 --summar
 python {baseDir}/scripts/collect.py --days 7 --repos D:/work -o data.json
 ```
 
-总结前需要拉取最新代码时，运行 `scripts/pull_repos.py` 批量拉取自研仓库。脚本从 `D:/runspace/evoCenter/研发项目简介.md` 的「自研项目」分组读清单（参考仓库不拉），单仓独立超时、失败自动重试、代理/直连双通道、24h 缓存跳过已最新仓库；只拉不推（ff-only 合并，分叉显式报错）。结果 JSON 含 updated/unchanged/local_ahead/diverged/failed 分类，失败仓库须如实注明而非略过。
+总结前需要拉取最新代码时，运行 `scripts/pull_repos.py` 批量拉取自研仓库。脚本从 `D:/runspace/evoCenter/研发项目简介.md` 的分级章节读自研清单（特级/一级/二级/三级；参考仓库与纯本地仓不拉），单仓独立超时、失败自动重试、代理/直连双通道、24h 缓存跳过已最新仓库；只拉不推（ff-only 合并，分叉显式报错）。结果 JSON 含 updated/unchanged/local_ahead/diverged/failed 分类，失败仓库须如实注明而非略过。
 
 ```bash
 python {baseDir}/scripts/pull_repos.py --json pull_result.json   # --force 强制全量，--timeout 40 单仓超时

@@ -13,8 +13,9 @@
   python pull_repos.py --timeout 40        # 单仓 fetch 超时秒数（默认 40）
   python pull_repos.py --json out.json     # 结果同时写 JSON 文件
 
-清单权威来源：D:/runspace/evoCenter/研发项目简介.md 的「自研项目」表格（参考仓库分组一律不拉）。
-解析方式：抓取「## 自研项目」到下一个「## 」之间的表格行，取每行第一列目录名。
+清单权威来源：D:/runspace/evoCenter/研发项目简介.md 的分级章节（2026-11-19 起分级制：特级/一级/二级/三级；
+参考仓库与工具目录分组一律不拉）。
+解析方式：抓取「## 特级项目」到「## 参考仓库」之间的表格行，取每行首个反引号目录名（特级表目录在第二列）。
 
 重点关注机制（2026-11-12 用户定）：
   FOCUS_REPOS 是重点仓库清单（本文件内置，随 rulertu-flow 仓库双机同步）：
@@ -58,21 +59,23 @@ def is_focus(repo: str) -> bool:
 
 
 def read_repo_list() -> list:
-    """从《研发项目简介.md》解析自研项目目录清单（自研项目两个分组 + evoCenter 自身）。
+    """从《研发项目简介.md》解析自研项目目录清单（特级/一级/二级/三级 + evoCenter 自身）。
 
-    说明列含「纯本地仓」的仓库跳过（2026-11-06 用户指示：xd 移出待更新清单）。
+    参考仓库与工具目录分组不拉；说明列含「纯本地仓」的仓库跳过（2026-11-06 用户指示：xd 移出待更新清单）。
     """
     with open(INTRO_DOC, encoding="utf-8") as f:
         text = f.read()
-    m = re.search(r"## 自研项目(.*?)(?=\n## )", text, re.S)
+    m = re.search(r"## 特级项目(.*?)\n## 参考仓库", text, re.S)
     if not m:
-        raise SystemExit(f"未能在 {INTRO_DOC} 中找到「## 自研项目」分组")
+        raise SystemExit(f"未能在 {INTRO_DOC} 中找到「## 特级项目」分级章节")
     section = m.group(1)
     repos = []
     for line in section.splitlines():
         line = line.strip()
-        # 表格行形如 | `EvoSim/` | EvoSim | ... 或 | `evoCenter/` | ...
-        mm = re.match(r"^\|\s*`([^`|]+?)/?`\s*\|", line)
+        if not line.startswith("|"):
+            continue
+        # 表格行形如 | `EvoSim/` | EvoSim | ... 或特级表 | 主仓库 | `evochat/` | ...，取首个反引号目录
+        mm = re.search(r"`([^`|]+?)/?`", line)
         if mm:
             repo = mm.group(1).strip()
             if "纯本地仓" in line:  # 远端失效/无远端，不参与批量拉取
