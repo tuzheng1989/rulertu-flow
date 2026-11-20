@@ -29,7 +29,10 @@ def directory(value):
 def get_workspace():
     config = config_path()
     if not config.exists():
-        raise FileNotFoundError(f"Workspace not configured: {config}")
+        raise FileNotFoundError(
+            f"Workspace not configured: {config}; run 'set <directory>' on first use, "
+            "or ignore if the output directory is specified for this run"
+        )
     data = json.loads(config.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Invalid workspace configuration: {config}")
