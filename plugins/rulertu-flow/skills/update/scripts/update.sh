@@ -1,24 +1,40 @@
 #!/usr/bin/env bash
-# update.sh — 一键更新本机 ZCode 工具链的外部组件
+# update.sh — 一键更新本机 AI 工具链的外部组件
 #
-# 注意：ZCode 本体不在本技能范围内——桌面版经应用内更新（electron-updater）
-#       分发新版，CLI 没有 `zcode update` 自更新子命令（已实测确认）。
-#       升级本体请在 ZCode 桌面端检查更新或重启应用获取新版。
+# 宿主段按「检测到对应 CLI 才运行」编排：zcode / claude / codex 三段各自独立，
+# 缺哪个宿主就跳过哪段，步骤编号按实际将执行的段动态计算。
+# 新增宿主 = 新增一组 update_<host>_* 函数并挂进 PLAN（见「宿主检测」段）。
 #
-# 覆盖 7 类更新：
-#   1. 所有 marketplaces       : zcode plugins marketplace update（无参 = 全部）
-#   2. 已安装 plugins          : 逐个 zcode plugins update <id>
-#                                （CLI 无原生 update-all；list --json 不回显 scope，
-#                                 默认 user scope 失败时自动补试 -s project；
-#                                 zcode-plugins-official 市场整市场跳过——未安装条目
-#                                 必报 not installed 噪音，已装项随桌面版应用更新分发）
-#   3. openwiki (npm 全局)     : npm install -g openwiki@latest
-#   4. codegraph (npm 全局)    : npm install -g @colbymchenry/codegraph@latest
-#   5. open-code-review(npm)   : npm install -g @alibaba-group/open-code-review@latest
+# 各宿主本体（CLI/应用自更新）不在范围内，逐个说明：
+#   - ZCode 本体：桌面版经应用内更新（electron-updater）分发新版，CLI 没有
+#     `zcode update` 自更新子命令（已实测确认）。
+#   - Claude Code 本体：沿用 claude-code 留档分支的判断——会话内运行时进程
+#     无法自替换；且 Claude Code 自带 auto-update，无需此处代劳。
+#   - Codex 本体：例外，有官方 `codex update` 子命令，作为宿主段一步执行
+#     （在 codex 会话内运行时 exe 被文件锁住会失败，如实报告不中断）。
+#
+# 宿主段做什么：
+#   zcode : marketplaces（plugins marketplace update，无参 = 全部）
+#           + 已装 plugins（逐个 plugins update <id>；CLI 无原生 update-all，
+#             list --json 不回显 scope，默认 user 失败自动补试 -s project；
+#             zcode-plugins-official 市场整市场跳过——未安装条目必报
+#             not installed 噪音，已装项随桌面版应用更新分发）
+#   claude: marketplaces（plugin marketplace update，无参 = 全部）
+#           + 已装 plugins（逐个 plugin update <id> --scope <scope>；
+#             scope 直接取自 list --json，不猜测）
+#   codex : 插件 = plugin marketplace upgrade（刷新 Git 市场快照）。
+#           codex 没有 per-plugin update 命令——已装插件直接从快照路径加载
+#           （list 的 SOURCE 即快照路径，已实测），刷新快照即更新插件；
+#           本体 = codex update
+#
+# 固定段（与宿主无关，始终执行）：
+#   1. openwiki (npm 全局)     : npm install -g openwiki@latest
+#   2. codegraph (npm 全局)    : npm install -g @colbymchenry/codegraph@latest
+#   3. open-code-review(npm)   : npm install -g @alibaba-group/open-code-review@latest
 #                                （CLI 命令为 ocr；纯 CLI 非常驻 MCP，无文件锁问题）
-#   6. deepeval (pip + skills) : pip install --upgrade deepeval
+#   4. deepeval (pip + skills) : pip install --upgrade deepeval
 #                                + npx skills update deepeval（skill 本体走 skills CLI）
-#   7. agent-skills (git 仓库) : 逐个 git -C ~/share/agent-skills/<name> pull --ff-only
+#   5. agent-skills (git 仓库) : 逐个 git -C ~/share/agent-skills/<name> pull --ff-only
 #                                （skill 单一源目录；~/.zcode/skills 里的符号链接指向这里，
 #                                 pull 后链接处自动生效）
 #
@@ -27,6 +43,7 @@
 #   给出安装命令；仅当组件名出现在 UPDATE_INSTALL（逗号分隔，如
 #   UPDATE_INSTALL=openwiki,codegraph,ocr,deepeval）时才允许新装，
 #   汇总中标注「新装」。是否勾选由 SKILL.md 的步骤 0（询问用户）决定。
+#   宿主段不参与此闸门——CLI 不存在即整段跳过，CLI 存在即整段执行。
 #
 # 代理预检：
 #   marketplace/plugins 走 github，npm 包走 npm registry；本机多半直连可用，
@@ -38,10 +55,12 @@
 # 注意事项（已实测）：
 #   - codegraph CLI *没有* `upgrade` 子命令（报 unknown command 'upgrade'），
 #     它是 npm 全局包 @colbymchenry/codegraph，更新走 npm。
-#   - plugins 更新仅「暂存」新版本，需重启 ZCode 会话才生效。
+#   - zcode/claude 的 plugins 更新仅「暂存」新版本，需重启对应宿主会话才生效；
+#     codex 的插件随快照即时生效（新会话读取新版）。
 #   - codegraph 更新后，若其 MCP server 已在运行，可能需重跑 `codegraph install`。
 #   - zcode CLI 不在 PATH（桌面版不注册）：优先 PATH，降级已知安装位置以 node 跑
-#     zcode.cjs（见 resolve_zcode）。
+#     zcode.cjs（见 resolve_zcode）。claude / codex 是 CLI-first 分发，PATH 能
+#     找到即视为已安装。
 
 set -o pipefail
 
@@ -154,7 +173,7 @@ reach_github() {
 }
 
 preflight_proxy() {
-  section "0/7" "代理与连通性预检"
+  section "$1" "代理与连通性预检"
   if [ "${UPDATE_NO_PROXY_GATE:-0}" = "1" ]; then
     warn "已设 UPDATE_NO_PROXY_GATE=1，跳过代理预检（受限网络下 marketplace/plugins 可能失败）"
     return 0
@@ -199,30 +218,25 @@ preflight_proxy() {
   return 1
 }
 
-# ---------- 1. 所有 marketplaces ----------
-update_marketplaces() {
-  section "1/7" "所有 marketplaces"
+# ========== 宿主段：zcode ==========
+update_zcode_marketplaces() {
+  section "$1" "zcode 所有 marketplaces"
   local count err
-  if ! resolve_zcode; then
-    bad "未找到 zcode CLI（PATH 与已知安装位置均无）"
-    sum_fail "Marketplaces（zcode CLI 未找到）"
-    return
-  fi
   count=$("${ZCODE_CMD[@]}" plugins marketplace list 2>/dev/null | grep -c '^- ' || true)
   info "已配置市场数: ${count:-?}"
   if err=$("${ZCODE_CMD[@]}" plugins marketplace update 2>&1); then
     good "全部市场已更新"
-    sum_ok "Marketplaces ×${count:-?} 已更新"
+    sum_ok "ZCode Marketplaces ×${count:-?} 已更新"
   else
     bad "marketplace update 失败" "$err"
-    sum_fail "Marketplaces 更新失败"
+    sum_fail "ZCode Marketplaces 更新失败"
   fi
 }
 
-# ---------- 2. 已安装 plugins（逐个更新） ----------
+# zcode 已装 plugins（逐个更新）
 # list --json 提供 id 与 version，不回显 scope；update 默认 user scope，
 # 失败时自动补试 -s project。版本「前→后」由更新前后两次 list --json 对比得出。
-plugin_versions() {
+zcode_plugin_versions() {
   "${ZCODE_CMD[@]}" plugins list --json 2>/dev/null \
     | python -c "import sys,json
 for p in json.load(sys.stdin):
@@ -230,23 +244,18 @@ for p in json.load(sys.stdin):
 }
 map_ver() { awk -F'\t' -v i="$2" '$1==i{print $2; exit}' <<< "$1"; }
 
-update_plugins() {
-  section "2/7" "已安装 plugins（逐个）"
+update_zcode_plugins() {
+  section "$1" "zcode 已安装 plugins（逐个）"
   local before after ids id out results r_id r_st b a okn failn skipn skip_note official_ids
-  if ! resolve_zcode; then
-    bad "未找到 zcode CLI（PATH 与已知安装位置均无）"
-    sum_fail "Plugins（zcode CLI 未找到）"
-    return
-  fi
-  before=$(plugin_versions)
+  before=$(zcode_plugin_versions)
   if [ -z "$before" ]; then
     # 区分「无插件」与「CLI 不可用」
     if ! "${ZCODE_CMD[@]}" plugins list --json >/dev/null 2>&1; then
       bad "无法解析 zcode plugins list --json"
-      sum_fail "Plugins 列表解析失败"
+      sum_fail "ZCode Plugins 列表解析失败"
     else
       warn "无已安装插件"
-      sum_skip "Plugins（无）"
+      sum_skip "ZCode Plugins（无）"
     fi
     return
   fi
@@ -276,7 +285,7 @@ update_plugins() {
     fi
   done <<< "$ids"
 
-  after=$(plugin_versions)
+  after=$(zcode_plugin_versions)
   while IFS=$'\t' read -r r_id r_st; do
     [ -z "$r_id" ] && continue
     [ "$r_st" = "fail" ] && continue   # 失败已在循环内输出
@@ -293,15 +302,125 @@ update_plugins() {
   skip_note=""
   [ "$skipn" -gt 0 ] && skip_note=" / $skipn 跳过官方市场"
   if [ "$failn" -gt 0 ]; then
-    sum_ok "Plugins: $okn 成功 / $failn 失败$skip_note（重启会话后生效）"
+    sum_ok "ZCode Plugins: $okn 成功 / $failn 失败$skip_note（重启会话后生效）"
   else
-    sum_ok "Plugins: $okn 成功$skip_note（重启会话后生效）"
+    sum_ok "ZCode Plugins: $okn 成功$skip_note（重启会话后生效）"
   fi
 }
 
-# ---------- 3. openwiki (npm) ----------
+# ========== 宿主段：claude ==========
+update_claude_marketplaces() {
+  section "$1" "Claude Code 所有 marketplaces"
+  local count err
+  count=$(claude plugin marketplace list 2>/dev/null | grep -c '❯' || true)
+  info "已配置市场数: ${count:-?}"
+  if err=$(claude plugin marketplace update 2>&1); then
+    good "全部市场已更新"
+    sum_ok "Claude Marketplaces ×${count:-?} 已更新"
+  else
+    bad "claude plugin marketplace update 失败" "$err"
+    sum_fail "Claude Marketplaces 更新失败"
+  fi
+}
+
+# claude 已装 plugins（逐个更新，scope 直接取自 list --json，不猜测）
+# 同一 id 可能有多条安装记录（不同 scope/项目），按 id+scope 去重后逐个更新；
+# 版本「前→后」由更新前后两次 list --json 对比得出。
+claude_plugin_rows() {
+  claude plugin list --json 2>/dev/null \
+    | python -c "import sys,json
+for p in json.load(sys.stdin):
+    print(p['id']+'\t'+p.get('version','')+'\t'+p.get('scope','user'))" 2>/dev/null | tr -d '\r'
+}
+
+update_claude_plugins() {
+  section "$1" "Claude Code 已安装 plugins（逐个，按 scope）"
+  local before rows row id b scope out a okn failn total
+  before=$(claude_plugin_rows)
+  if [ -z "$before" ]; then
+    # 区分「无插件」与「CLI 不可用」
+    if ! claude plugin list --json >/dev/null 2>&1; then
+      bad "无法解析 claude plugin list --json"
+      sum_fail "Claude Plugins 列表解析失败"
+    else
+      warn "无已安装插件"
+      sum_skip "Claude Plugins（无）"
+    fi
+    return
+  fi
+  # 按 id+scope 去重（同一 id 多条安装记录只更新一次）
+  rows=$(printf '%s\n' "$before" | awk -F'\t' '!seen[$1 FS $3]++')
+  total=$(printf '%s\n' "$rows" | grep -c . || true)
+  info "待更新插件数: $total"
+
+  okn=0; failn=0
+  while IFS=$'\t' read -r id b scope; do
+    [ -z "$id" ] && continue
+    if out=$(claude plugin update "$id" --scope "$scope" 2>&1); then
+      a=$(map_ver "$before" "$id")
+      if [ -n "$b" ] && [ -n "$a" ] && [ "$b" != "$a" ]; then
+        good "$id [$scope]：$b → $a（重启 Claude Code 后生效）"
+      else
+        good "$id [$scope]：已是最新（${a:-未知}）"
+      fi
+      okn=$((okn+1))
+    else
+      bad "$id [$scope] 更新失败" "$out"
+      failn=$((failn+1))
+    fi
+  done <<< "$rows"
+
+  warn "plugins 更新需重启 Claude Code 会话才生效（CLI: restart required to apply）"
+  if [ "$failn" -gt 0 ]; then
+    sum_ok "Claude Plugins: $okn 成功 / $failn 失败（共 $total，重启会话后生效）"
+  else
+    sum_ok "Claude Plugins: $okn 成功（共 $total，重启会话后生效）"
+  fi
+}
+
+# ========== 宿主段：codex ==========
+# codex 没有 per-plugin update 子命令：已装插件直接从 marketplace 快照路径
+# 加载（plugin list 的 SOURCE 即快照路径，已实测），因此刷新快照即更新插件，
+# 新会话即时读取新版。版本变化靠刷新前后两次 plugin list 对比展示。
+update_codex_plugins() {
+  section "$1" "Codex 插件（marketplace 快照刷新）"
+  local before after err n changed
+  before=$(codex plugin list 2>/dev/null | grep 'installed,' || true)
+  if ! err=$(codex plugin marketplace upgrade 2>&1); then
+    bad "codex plugin marketplace upgrade 失败" "$err"
+    sum_fail "Codex 插件更新失败"
+    return
+  fi
+  after=$(codex plugin list 2>/dev/null | grep 'installed,' || true)
+  n=$(printf '%s\n' "$after" | grep -c . || true)
+  changed=$(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | grep -E '^[<>]' || true)
+  if [ -n "$changed" ]; then
+    info "快照刷新带来的变化:"
+    printf '%s\n' "$changed" | sed 's/^/      /'
+  fi
+  good "marketplace 快照已刷新，已装插件 ${n:-0} 项随快照生效（新会话读取新版）"
+  sum_ok "Codex 插件: 快照已刷新（已装 ${n:-0} 项）"
+}
+
+# codex 本体例外地纳入更新：有官方 `codex update` 子命令。
+# 在 codex 会话内运行时运行中的 exe 被文件锁住会失败（Windows）——如实报告不中断。
+update_codex_cli() {
+  section "$1" "Codex CLI 本体（codex update）"
+  local err
+  if err=$(codex update 2>&1); then
+    good "codex update 完成（当前 $(codex --version 2>/dev/null | head -1)）"
+    sum_ok "Codex CLI 本体: $(codex --version 2>/dev/null | head -1)"
+  else
+    bad "codex update 失败（若在 codex 会话内运行，多半是 exe 被占用；换宿主会话或裸终端重跑）" "$err"
+    sum_fail "Codex CLI 本体更新失败"
+  fi
+}
+
+# ========== 固定段（与宿主无关） ==========
+
+# ---------- openwiki (npm) ----------
 update_openwiki() {
-  section "3/7" "openwiki (npm 全局包)"
+  section "$1" "openwiki (npm 全局包)"
   local before after err
   before=$(npm_ver openwiki)
   if [ -z "$before" ] && ! want_install openwiki; then
@@ -343,9 +462,9 @@ kill_codegraph_procs() {
   sleep 1   # 留时间给 Windows 释放文件句柄
 }
 
-# ---------- 4. codegraph (npm) ----------
+# ---------- codegraph (npm) ----------
 update_codegraph() {
-  section "4/7" "codegraph (npm 全局包 @colbymchenry/codegraph)"
+  section "$1" "codegraph (npm 全局包 @colbymchenry/codegraph)"
   local before after err
   before=$(codegraph_ver)
   if [ -z "$before" ] && ! want_install codegraph; then
@@ -372,9 +491,9 @@ update_codegraph() {
   fi
 }
 
-# ---------- 5. open-code-review (npm) ----------
+# ---------- open-code-review (npm) ----------
 update_ocr() {
-  section "5/7" "open-code-review (npm 全局包 @alibaba-group/open-code-review)"
+  section "$1" "open-code-review (npm 全局包 @alibaba-group/open-code-review)"
   local before after err
   before=$(npm_ver @alibaba-group/open-code-review)
   if [ -z "$before" ] && ! want_install ocr; then
@@ -393,14 +512,14 @@ update_ocr() {
   fi
 }
 
-# ---------- 6. deepeval (pip 包 + skills CLI 管理的 skill 本体) ----------
+# ---------- deepeval (pip 包 + skills CLI 管理的 skill 本体) ----------
 # deepeval 有两层：pip 包（CLI 与 SDK）和 skill 文档本体（由 npx skills 管理），
 # 分别更新、分别汇总；pip 走 PyPI，npx 走 npm registry，均继承已 export 的代理。
 update_deepeval() {
-  section "6/7" "deepeval (pip 包 + npx skills 管理的 skill)"
+  section "$1" "deepeval (pip 包 + npx skills 管理的 skill)"
   local before after err
 
-  # 6a. Python 包
+  # pip 包
   before=$(deepeval_ver)
   if [ -z "$before" ] && ! want_install deepeval; then
     warn "未安装且未勾选安装，跳过（手动安装：python -m pip install --upgrade deepeval）"
@@ -417,7 +536,7 @@ update_deepeval() {
     sum_fail "deepeval(pip) 更新失败"
   fi
 
-  # 6b. skill 本体（-y 免 npx 首次安装确认）
+  # skill 本体（-y 免 npx 首次安装确认）
   if err=$(npx -y skills update deepeval 2>&1); then
     good "skill 本体: npx skills update 完成"
     # 顺带列出 skill 当前版本行（无输出不算失败，仅展示）
@@ -431,12 +550,12 @@ update_deepeval() {
   fi
 }
 
-# ---------- 7. agent-skills（~/share/agent-skills 下的 git 仓库） ----------
+# ---------- agent-skills（~/share/agent-skills 下的 git 仓库） ----------
 # skill 单一源目录，~/.zcode/skills 的符号链接都指向这里，
 # pull 后链接处自动生效。--ff-only 拒绝非快进合并：本地有改动/分叉时报错跳过，
 # 不自动 stash、不产生合并提交（更新工具不应碰用户工作区）。
 update_agent_skills() {
-  section "7/7" "agent-skills (git 仓库逐个 pull --ff-only)"
+  section "$1" "agent-skills (git 仓库逐个 pull --ff-only)"
   local root="$HOME/share/agent-skills"
   if [ ! -d "$root" ]; then
     warn "目录不存在: $root，跳过"
@@ -478,24 +597,44 @@ update_agent_skills() {
   fi
 }
 
+# ---------- 宿主检测与执行计划 ----------
+# 「仅在有对应的工具才运行」：CLI 存在性决定宿主段是否入列，缺哪个宿主跳过哪段；
+# 步骤编号按实际将执行的段动态计算。新增宿主 = 新增 update_<host>_* 函数并挂进 PLAN。
+HAS_ZCODE=0; HAS_CLAUDE=0; HAS_CODEX=0
+resolve_zcode && HAS_ZCODE=1
+command -v claude >/dev/null 2>&1 && HAS_CLAUDE=1
+command -v codex >/dev/null 2>&1 && HAS_CODEX=1
+
+PLAN=()
+[ "$HAS_ZCODE" = 1 ] && PLAN+=(update_zcode_marketplaces update_zcode_plugins)
+[ "$HAS_CLAUDE" = 1 ] && PLAN+=(update_claude_marketplaces update_claude_plugins)
+[ "$HAS_CODEX" = 1 ] && PLAN+=(update_codex_plugins update_codex_cli)
+PLAN+=(update_openwiki update_codegraph update_ocr update_deepeval update_agent_skills)
+
 # ---------- 主流程 ----------
+TOTAL=${#PLAN[@]}
 echo "${BOLD}================================================${RESET}"
-echo "${BOLD} ZCode 工具链外部组件一键更新${RESET}"
-echo "${BOLD} （ZCode 本体不在内：桌面版经应用内更新分发新版）${RESET}"
+echo "${BOLD} 本机 AI 工具链外部组件一键更新${RESET}"
+echo "${BOLD} （宿主段按检测到的 CLI 动态编排；宿主本体更新不在此列，codex 除外）${RESET}"
 echo "${BOLD}================================================${RESET}"
 
+detected=""
+[ "$HAS_ZCODE" = 1 ] && detected+="zcode "
+[ "$HAS_CLAUDE" = 1 ] && detected+="claude "
+[ "$HAS_CODEX" = 1 ] && detected+="codex "
+[ -z "$detected" ] && detected="（无宿主 CLI，仅更新 npm/pip 组件与 agent-skills）"
+info "检测到宿主 CLI: $detected"
+
 # 代理预检（不可用则提示并退出，不继续）
-if ! preflight_proxy; then
+if ! preflight_proxy "0/$TOTAL"; then
   exit 1
 fi
 
-update_marketplaces
-update_plugins
-update_openwiki
-update_codegraph
-update_ocr
-update_deepeval
-update_agent_skills
+i=0
+for fn in "${PLAN[@]}"; do
+  i=$((i+1))
+  "$fn" "$i/$TOTAL"
+done
 
 # ---------- 汇总表 ----------
 echo ""
@@ -504,5 +643,5 @@ for line in "${SUMMARY[@]}"; do
   echo "  - $line"
 done
 echo ""
-warn "收尾提示：plugins 更新需重启 ZCode 会话生效；codegraph 进程已被终止释放文件锁，重启会话即自动恢复。"
+warn "收尾提示：zcode/claude 的 plugins 更新需重启对应宿主会话生效；codex 插件随快照即时生效（新会话读取新版）；codegraph 进程已被终止释放文件锁，重启会话即自动恢复。"
 echo "${BOLD}================================================${RESET}"
